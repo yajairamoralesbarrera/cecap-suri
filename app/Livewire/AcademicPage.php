@@ -63,7 +63,7 @@ class AcademicPage extends Component
     public string $course_description = '';
 
     public array $technical_subjects = [
-        ['code' => 'MAT-01', 'name' => '', 'hours' => 40],
+        ['code' => 'MAT-01', 'name' => '', 'hours' => 40, 'sessions_count' => 10],
     ];
 
     // Edición (autollenado desde curso)
@@ -141,7 +141,7 @@ class AcademicPage extends Component
     public function addTechnicalSubjectRow(): void
     {
         $idx = count($this->technical_subjects) + 1;
-        $this->technical_subjects[] = ['code' => sprintf('MAT-%02d', $idx), 'name' => '', 'hours' => 40];
+        $this->technical_subjects[] = ['code' => sprintf('MAT-%02d', $idx), 'name' => '', 'hours' => 40, 'sessions_count' => 10];
     }
 
     public function removeTechnicalSubjectRow(int $index): void
@@ -272,6 +272,7 @@ class AcademicPage extends Component
                     'code' => strtoupper(trim((string) ($sub['code'] ?: sprintf('MAT-%02d', $idx + 1)))),
                     'name' => trim((string) $sub['name']),
                     'hours' => max(1, (int) ($sub['hours'] ?? 20)),
+                    'sessions_count' => max(1, (int) ($sub['sessions_count'] ?? 1)),
                     'order_index' => $idx + 1,
                     'is_mandatory' => true,
                     'is_active' => true,
@@ -283,7 +284,7 @@ class AcademicPage extends Component
 
         AuditService::log('academic.course_created', 'academico', $course, null, $course->only(['code', 'name', 'program_type', 'default_max_capacity', 'required_documents']));
         $this->reset(['course_code', 'course_name', 'course_description']);
-        $this->technical_subjects = [['code' => 'MAT-01', 'name' => '', 'hours' => 40]];
+        $this->technical_subjects = [['code' => 'MAT-01', 'name' => '', 'hours' => 40, 'sessions_count' => 10]];
         $this->feedback = 'Curso registrado exitosamente.';
     }
 

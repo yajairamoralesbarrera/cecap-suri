@@ -15,6 +15,7 @@ class CourseSubject extends Model
         'code',
         'name',
         'hours',
+        'sessions_count',
         'order_index',
         'is_mandatory',
         'is_active',

@@ -144,19 +144,44 @@
 
                     @if($course_program_type === 'curso_tecnico')
                         <div class="rounded-xl border border-amber-300 bg-amber-50/70 p-4 space-y-3">
-                            <div class="flex items-center justify-between gap-2">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
                                 <div>
                                     <div class="text-sm font-bold text-amber-950">Materias Obligatorias del Curso Técnico *</div>
-                                    <div class="text-xs text-amber-800">Debe definir al menos una materia para crear un Curso Técnico.</div>
+                                    <div class="text-xs text-amber-800">Debe definir al menos una materia para crear un Curso Técnico. En Horas y Sesiones ingrese únicamente números.</div>
                                 </div>
                                 <button type="button" wire:click="addTechnicalSubjectRow" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">+ Agregar Materia</button>
                             </div>
+
+                            {{-- Encabezados claros de columnas en escritorio --}}
+                            <div class="hidden sm:grid sm:grid-cols-12 gap-2 px-1 text-[11px] font-bold uppercase tracking-wide text-amber-950">
+                                <div class="sm:col-span-2">Código</div>
+                                <div class="sm:col-span-5">Nombre de la Materia *</div>
+                                <div class="sm:col-span-2">Horas (solo #)</div>
+                                <div class="sm:col-span-2">N.° Sesiones</div>
+                                <div class="sm:col-span-1 text-center">Quitar</div>
+                            </div>
+
                             @foreach($technical_subjects as $idx => $subj)
-                                <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center" wire:key="tech-subj-{{ $idx }}">
-                                    <input wire:model="technical_subjects.{{ $idx }}.code" type="text" class="cecap-input sm:col-span-3" placeholder="MAT-01">
-                                    <input wire:model="technical_subjects.{{ $idx }}.name" type="text" class="cecap-input sm:col-span-6" placeholder="Nombre de la materia">
-                                    <input wire:model="technical_subjects.{{ $idx }}.hours" type="number" min="1" class="cecap-input sm:col-span-2" placeholder="Horas">
-                                    <button type="button" wire:click="removeTechnicalSubjectRow({{ $idx }})" class="cecap-btn-secondary !px-2 text-xs sm:col-span-1">✕</button>
+                                <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end" wire:key="tech-subj-{{ $idx }}">
+                                    <div class="sm:col-span-2">
+                                        <label class="block sm:hidden text-xs font-semibold text-amber-950 mb-1">Código</label>
+                                        <input wire:model="technical_subjects.{{ $idx }}.code" type="text" class="cecap-input" placeholder="MAT-01">
+                                    </div>
+                                    <div class="sm:col-span-5">
+                                        <label class="block sm:hidden text-xs font-semibold text-amber-950 mb-1">Nombre de la Materia *</label>
+                                        <input wire:model="technical_subjects.{{ $idx }}.name" type="text" class="cecap-input" placeholder="Ej. Contabilidad I">
+                                    </div>
+                                    <div class="sm:col-span-2">
+                                        <label class="block sm:hidden text-xs font-semibold text-amber-950 mb-1">Horas (solo número)</label>
+                                        <input wire:model="technical_subjects.{{ $idx }}.hours" type="number" min="1" step="1" class="cecap-input" placeholder="Ej. 60">
+                                    </div>
+                                    <div class="sm:col-span-2">
+                                        <label class="block sm:hidden text-xs font-semibold text-amber-950 mb-1">N.° Sesiones</label>
+                                        <input wire:model="technical_subjects.{{ $idx }}.sessions_count" type="number" min="1" step="1" class="cecap-input" placeholder="Ej. 12">
+                                    </div>
+                                    <div class="sm:col-span-1">
+                                        <button type="button" wire:click="removeTechnicalSubjectRow({{ $idx }})" title="Quitar materia" class="cecap-btn-secondary w-full !px-2 text-xs">✕</button>
+                                    </div>
                                 </div>
                             @endforeach
                         </div>
@@ -177,7 +202,7 @@
                             <th class="py-2 pr-3">Nivel Previo</th>
                             <th class="py-2 pr-3">Cap. Defecto</th>
                             <th class="py-2 pr-3">Checklist</th>
-                            <th class="py-2">Materias</th>
+                            <th class="py-2">Materias (Horas / Sesiones)</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
@@ -192,7 +217,16 @@
                                 <td class="py-2.5 pr-3 text-xs">{{ $educationLevels[$c->required_education_level] ?? $c->required_education_level }}</td>
                                 <td class="py-2.5 pr-3 font-semibold">{{ $c->default_max_capacity }}</td>
                                 <td class="py-2.5 pr-3 text-xs">{{ implode(', ', $c->required_documents ?? []) }}</td>
-                                <td class="py-2.5 text-xs">{{ $c->subjects->count() }}</td>
+                                <td class="py-2.5 text-xs">
+                                    @if($c->subjects->isNotEmpty())
+                                        <div class="font-semibold text-slate-800">{{ $c->subjects->count() }} materia(s)</div>
+                                        @foreach($c->subjects as $sub)
+                                            <div class="text-[11px] text-slate-600">{{ $sub->code }} · {{ $sub->name }} ({{ $sub->hours }} h · {{ $sub->sessions_count }} ses.)</div>
+                                        @endforeach
+                                    @else
+                                        <span class="text-slate-400">0</span>
+                                    @endif
+                                </td>
                             </tr>
                         @empty
                             <tr><td colspan="7" class="py-6 text-center text-slate-500">Sin cursos registrados.</td></tr>
