@@ -3,23 +3,42 @@
 namespace Database\Seeders;
 
 use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
     /**
-     * Seed the application's database.
+     * Arranque limpio CeCap v3.0:
+     * Solo siembra roles/permisos, catálogos oficiales CR, configuración institucional
+     * y el único usuario inicial Super Administrador (0 datos ficticios).
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+        $this->call([
+            RolesAndPermissionsSeeder::class,
+            CostaRicaCatalogSeeder::class,
         ]);
+
+        $superAdmin = User::firstOrCreate(
+            ['email' => 'superadmin@cecap.or.cr'],
+            [
+                'name' => 'Super Administrador CeCap',
+                'identification_type' => 'cedula_nacional',
+                'identification_number' => '1-0000-0001',
+                'phone' => '+506 2253-0000',
+                'gender' => 'femenino',
+                'password' => Hash::make('Y4y4&K1k3'),
+                'must_change_password' => false,
+                'password_changed_at' => now(),
+                'uses_custom_permissions' => false,
+                'is_active' => true,
+                'email_verified_at' => now(),
+            ]
+        );
+
+        if (! $superAdmin->hasRole('super_admin')) {
+            $superAdmin->assignRole('super_admin');
+        }
     }
 }
