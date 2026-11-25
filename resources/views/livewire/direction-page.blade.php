@@ -67,7 +67,10 @@
                         <input wire:model="new_user_email" type="email" required class="cecap-input" placeholder="Correo institucional *">
                         <input wire:model="new_user_id_num" type="text" required class="cecap-input" placeholder="Cédula / DIMEX *">
                         <input wire:model="new_user_phone" type="tel" required class="cecap-input" placeholder="Teléfono *">
-                        <input wire:model="new_user_password" type="password" required class="cecap-input sm:col-span-2" placeholder="Contraseña temporal inicial (mín. 8) *">
+                        <div class="relative sm:col-span-2">
+                            <input id="new_user_password" wire:model="new_user_password" type="password" required class="cecap-input pr-12" placeholder="Contraseña temporal inicial (mín. 8) *">
+                            @include('partials.password-toggle', ['target' => 'new_user_password'])
+                        </div>
                     </div>
                     <div class="space-y-1.5">
                         <div class="text-xs font-bold uppercase text-slate-600">Roles (Multirrol soportado, ej. Profesora + Alumna)</div>
@@ -115,7 +118,10 @@
                         <input wire:model="clone_email" type="email" required class="cecap-input" placeholder="Correo nuevo único *">
                         <input wire:model="clone_id_num" type="text" required class="cecap-input" placeholder="Cédula/DIMEX nueva *">
                         <input wire:model="clone_phone" type="tel" required class="cecap-input" placeholder="Teléfono nuevo *">
-                        <input wire:model="clone_temp_password" type="password" required class="cecap-input sm:col-span-2" placeholder="Contraseña temporal inicial *">
+                        <div class="relative sm:col-span-2">
+                            <input id="clone_temp_password" wire:model="clone_temp_password" type="password" required class="cecap-input pr-12" placeholder="Contraseña temporal inicial *">
+                            @include('partials.password-toggle', ['target' => 'clone_temp_password'])
+                        </div>
                     </div>
                     <button type="submit" class="cecap-btn-accent w-full">Clonar Roles y Permisos al Nuevo Usuario</button>
                 </form>

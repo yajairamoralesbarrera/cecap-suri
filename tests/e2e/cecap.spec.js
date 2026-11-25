@@ -4,6 +4,12 @@ async function loginAsSuperAdmin(page) {
     await page.goto('/login');
     await page.fill('input[name="email"]', 'superadmin@cecap.or.cr');
     await page.fill('input[name="password"]', 'Y4y4&K1k3');
+    // Verify CSP-safe eye toggle shows and hides password
+    await expect(page.locator('#password')).toHaveAttribute('type', 'password');
+    await page.click('[data-password-toggle="password"]');
+    await expect(page.locator('#password')).toHaveAttribute('type', 'text');
+    await page.click('[data-password-toggle="password"]');
+    await expect(page.locator('#password')).toHaveAttribute('type', 'password');
     await Promise.all([
         page.waitForURL('**/panel'),
         page.click('button[type="submit"]'),

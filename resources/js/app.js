@@ -150,6 +150,22 @@
 
     // Delegación global de eventos (100% CSP-safe, compatible con wire:navigate)
     document.addEventListener('click', (e) => {
+        const pwToggle = e.target.closest('[data-password-toggle]');
+        if (pwToggle) {
+            e.preventDefault();
+            const targetId = pwToggle.getAttribute('data-password-toggle');
+            const input = targetId ? document.getElementById(targetId) : pwToggle.parentElement?.querySelector('input');
+            if (input) {
+                const showing = input.type === 'text';
+                input.type = showing ? 'password' : 'text';
+                pwToggle.setAttribute('aria-pressed', showing ? 'false' : 'true');
+                pwToggle.setAttribute('aria-label', showing ? 'Mostrar contraseña' : 'Ocultar contraseña');
+                pwToggle.querySelector('[data-eye-open]')?.classList.toggle('hidden', !showing);
+                pwToggle.querySelector('[data-eye-closed]')?.classList.toggle('hidden', showing);
+            }
+            return;
+        }
+
         const toggleBtn = e.target.closest('[data-sidebar-toggle]');
         if (toggleBtn) {
             const sidebar = document.getElementById('cecap-sidebar');

@@ -52,11 +52,17 @@
             </div>
             <div>
                 <label for="password" class="block text-sm font-semibold text-slate-700 mb-1">Contraseña (mín. 8 caracteres) *</label>
-                <input id="password" name="password" type="password" required class="cecap-input">
+                <div class="relative">
+                    <input id="password" name="password" type="password" required class="cecap-input pr-12">
+                    @include('partials.password-toggle', ['target' => 'password'])
+                </div>
             </div>
             <div>
                 <label for="password_confirmation" class="block text-sm font-semibold text-slate-700 mb-1">Confirmar contraseña *</label>
-                <input id="password_confirmation" name="password_confirmation" type="password" required class="cecap-input">
+                <div class="relative">
+                    <input id="password_confirmation" name="password_confirmation" type="password" required class="cecap-input pr-12">
+                    @include('partials.password-toggle', ['target' => 'password_confirmation'])
+                </div>
             </div>
 
             <div class="sm:col-span-2 pt-2 flex flex-col sm:flex-row gap-3">

@@ -26,7 +26,10 @@
 
             <div>
                 <label for="password" class="block text-sm font-semibold text-slate-700 mb-1">Contraseña</label>
-                <input id="password" name="password" type="password" required autocomplete="current-password" class="cecap-input" placeholder="••••••••">
+                <div class="relative">
+                    <input id="password" name="password" type="password" required autocomplete="current-password" class="cecap-input pr-12" placeholder="••••••••">
+                    @include('partials.password-toggle', ['target' => 'password'])
+                </div>
             </div>
 
             <div class="flex items-center justify-between text-sm">
