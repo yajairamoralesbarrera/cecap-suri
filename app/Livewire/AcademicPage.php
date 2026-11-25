@@ -66,6 +66,17 @@ class AcademicPage extends Component
         ['code' => 'MAT-01', 'name' => '', 'hours' => 40, 'sessions_count' => 10],
     ];
 
+    // Gestión de materias en un curso ya existente
+    public ?int $managingSubjectsCourseId = null;
+
+    public string $new_sub_code = '';
+
+    public string $new_sub_name = '';
+
+    public int $new_sub_hours = 40;
+
+    public int $new_sub_sessions = 10;
+
     // Edición (autollenado desde curso)
     public ?int $ed_course_id = null;
 
@@ -288,6 +299,88 @@ class AcademicPage extends Component
         $this->feedback = 'Curso registrado exitosamente.';
     }
 
+    public function openCourseSubjects(int $courseId): void
+    {
+        $course = Course::with('subjects')->findOrFail($courseId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $course->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('course', 'No tiene autorización sobre la categoría de este curso.');
+
+            return;
+        }
+
+        $this->managingSubjectsCourseId = $course->id;
+        $nextIdx = $course->subjects->count() + 1;
+        $this->new_sub_code = sprintf('MAT-%02d', $nextIdx);
+        $this->new_sub_name = '';
+        $this->new_sub_hours = 40;
+        $this->new_sub_sessions = 10;
+        $this->resetValidation();
+    }
+
+    public function closeCourseSubjects(): void
+    {
+        $this->managingSubjectsCourseId = null;
+    }
+
+    public function addSubjectToCourse(): void
+    {
+        $this->authorizeManage();
+        if (! $this->managingSubjectsCourseId) {
+            return;
+        }
+
+        $course = Course::with('subjects')->findOrFail($this->managingSubjectsCourseId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $course->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('new_sub_name', 'No tiene autorización sobre la categoría de este curso.');
+
+            return;
+        }
+
+        $this->validate([
+            'new_sub_code' => ['required', 'string', 'max:40'],
+            'new_sub_name' => ['required', 'string', 'max:160'],
+            'new_sub_hours' => ['required', 'integer', 'min:1'],
+            'new_sub_sessions' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $code = strtoupper(trim($this->new_sub_code));
+        if (CourseSubject::where('course_id', $course->id)->where('code', $code)->exists()) {
+            $this->addError('new_sub_code', "Ya existe una materia con el código {$code} en este curso.");
+
+            return;
+        }
+
+        $subject = CourseSubject::create([
+            'course_id' => $course->id,
+            'code' => $code,
+            'name' => trim($this->new_sub_name),
+            'hours' => $this->new_sub_hours,
+            'sessions_count' => $this->new_sub_sessions,
+            'order_index' => $course->subjects->count() + 1,
+            'is_mandatory' => true,
+            'is_active' => true,
+        ]);
+
+        AuditService::log('academic.subject_added', 'academico', $subject, null, $subject->only(['course_id', 'code', 'name', 'hours', 'sessions_count']));
+
+        $nextIdx = $course->subjects()->count() + 1;
+        $this->new_sub_code = sprintf('MAT-%02d', $nextIdx);
+        $this->new_sub_name = '';
+        $this->new_sub_hours = 40;
+        $this->new_sub_sessions = 10;
+        $this->feedback = sprintf('Materia "%s" agregada al curso %s.', $subject->name, $course->name);
+    }
+
+    public function toggleSubjectActive(int $subjectId): void
+    {
+        $this->authorizeManage();
+        $subject = CourseSubject::findOrFail($subjectId);
+        $subject->update(['is_active' => ! $subject->is_active]);
+        AuditService::log('academic.subject_toggled', 'academico', $subject, null, ['is_active' => $subject->is_active]);
+    }
+
     public function createEdition(): void
     {
         $this->authorizeManage();
@@ -457,6 +550,7 @@ class AcademicPage extends Component
             'isScopedCoordinator' => $scopedIds !== null,
             'categories' => $categoriesQuery->get(),
             'courses' => $coursesQuery->get(),
+            'managingCourse' => $this->managingSubjectsCourseId ? Course::with('subjects')->find($this->managingSubjectsCourseId) : null,
             'editions' => $editionsQuery->get(),
             'schedules' => $schedulesQuery->get(),
             'shifts' => AcademicShift::where('is_active', true)->get(),
