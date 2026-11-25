@@ -83,13 +83,22 @@
                         </div>
                     </div>
                     @if(in_array('coordinador_categoria', $new_user_roles, true))
-                        <div class="rounded-xl bg-slate-50 p-3 space-y-1.5 text-xs">
-                            <div class="font-bold text-slate-700">Categorías asignadas (user_academic_categories)</div>
-                            <div class="flex flex-wrap gap-3">
-                                @foreach($categories as $cat)
-                                    <label class="inline-flex items-center gap-1.5"><input type="checkbox" wire:model="new_user_categories" value="{{ $cat->id }}" class="h-4 w-4 rounded"> {{ $cat->name }}</label>
-                                @endforeach
-                            </div>
+                        <div class="rounded-xl border border-brand-200 bg-brand-50/70 p-3 space-y-2 text-xs">
+                            <div class="font-bold text-brand-950">Categorías asignadas (Coordinador de Área / Categoría)</div>
+                            @if($categories->isEmpty())
+                                <p class="text-amber-900">Aún no hay categorías académicas creadas en la base limpia. Puede crear una aquí mismo o en <a href="{{ route('academico') }}" class="font-bold underline">Académico → Categorías</a>:</p>
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                    <input wire:model="quick_cat_code" type="text" class="cecap-input !min-h-9 !py-1 text-xs" placeholder="Código (ej. CAT-GASTRO)">
+                                    <input wire:model="quick_cat_name" type="text" class="cecap-input !min-h-9 !py-1 text-xs" placeholder="Nombre categoría">
+                                    <button type="button" wire:click="createQuickCategory" class="cecap-btn-secondary !min-h-9 !py-1 text-xs">+ Crear categoría</button>
+                                </div>
+                            @else
+                                <div class="flex flex-wrap gap-3">
+                                    @foreach($categories as $cat)
+                                        <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="checkbox" wire:model="new_user_categories" value="{{ $cat->id }}" class="h-4 w-4 rounded text-brand-900"> {{ $cat->name }}</label>
+                                    @endforeach
+                                </div>
+                            @endif
                         </div>
                     @endif
                     <button type="submit" class="cecap-btn-primary w-full">Crear Usuario</button>
@@ -122,7 +131,7 @@
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
                     @foreach($rolesCatalog as $rk => $rm)
                         @if($rk !== 'super_admin' || $isSuperAdmin)
-                            <label class="inline-flex items-center gap-2"><input type="checkbox" wire:model="edit_roles" value="{{ $rk }}" class="h-4 w-4 rounded"> {{ $rm['label'] }}</label>
+                            <label class="inline-flex items-center gap-2"><input type="checkbox" wire:model.live="edit_roles" value="{{ $rk }}" class="h-4 w-4 rounded"> {{ $rm['label'] }}</label>
                         @endif
                     @endforeach
                 </div>
@@ -139,13 +148,22 @@
                         @endforeach
                     </div>
                 @endif
-                <div class="space-y-1 text-xs">
-                    <div class="font-bold text-slate-700">Categorías asignadas (Coordinador de Categoría)</div>
-                    <div class="flex flex-wrap gap-3">
-                        @foreach($categories as $cat)
-                            <label class="inline-flex items-center gap-1.5"><input type="checkbox" wire:model="edit_categories" value="{{ $cat->id }}" class="h-4 w-4 rounded"> {{ $cat->name }}</label>
-                        @endforeach
-                    </div>
+                <div class="rounded-xl border border-brand-200 bg-white p-3 space-y-2 text-xs">
+                    <div class="font-bold text-brand-950">Categorías asignadas (Coordinador de Área / Categoría)</div>
+                    @if($categories->isEmpty())
+                        <p class="text-amber-900">Aún no existen categorías académicas. Cree una aquí mismo o desde <a href="{{ route('academico') }}" class="font-bold underline">Académico → Categorías</a>:</p>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <input wire:model="quick_cat_code" type="text" class="cecap-input !min-h-9 !py-1 text-xs" placeholder="Código (ej. CAT-GASTRO)">
+                            <input wire:model="quick_cat_name" type="text" class="cecap-input !min-h-9 !py-1 text-xs" placeholder="Nombre categoría">
+                            <button type="button" wire:click="createQuickCategory" class="cecap-btn-secondary !min-h-9 !py-1 text-xs">+ Crear categoría</button>
+                        </div>
+                    @else
+                        <div class="flex flex-wrap gap-3">
+                            @foreach($categories as $cat)
+                                <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="checkbox" wire:model="edit_categories" value="{{ $cat->id }}" class="h-4 w-4 rounded text-brand-900"> {{ $cat->name }}</label>
+                            @endforeach
+                        </div>
+                    @endif
                 </div>
                 <button type="button" wire:click="saveUserAccess" class="cecap-btn-primary">Guardar Accesos</button>
             </div>
@@ -164,6 +182,15 @@
                             <td class="py-2.5 pr-3 text-xs">
                                 <div class="font-semibold">{{ $u->role_labels }}</div>
                                 <div class="text-slate-500">{{ $u->uses_custom_permissions ? 'Permisos personalizados' : 'Permisos base del cargo' }}</div>
+                                @if($u->hasRole('coordinador_categoria'))
+                                    <div class="mt-1">
+                                        @if($u->academicCategories->isNotEmpty())
+                                            <span class="cecap-badge bg-brand-100 text-brand-950">Categorías: {{ $u->academicCategories->pluck('name')->implode(', ') }}</span>
+                                        @else
+                                            <span class="cecap-badge bg-amber-100 text-amber-900">Sin categoría asignada (pulsar Accesos)</span>
+                                        @endif
+                                    </div>
+                                @endif
                             </td>
                             <td class="py-2.5 pr-3">
                                 <span class="cecap-badge {{ $u->is_active ? 'bg-emerald-100 text-emerald-900' : 'bg-rose-100 text-rose-800' }}">{{ $u->is_active ? 'ACTIVO' : 'INACTIVO' }}</span>

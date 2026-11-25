@@ -59,6 +59,11 @@ class DirectionPage extends Component
 
     public array $edit_categories = [];
 
+    // Creación rápida de categoría desde Gobernanza si el catálogo está vacío
+    public string $quick_cat_code = '';
+
+    public string $quick_cat_name = '';
+
     // Clonación segura de permisos (exige datos personales nuevos)
     public ?int $clone_source_user_id = null;
 
@@ -192,6 +197,34 @@ class DirectionPage extends Component
         AuditService::log('governance.user_created', 'direccion', $user, null, ['email' => $user->email, 'roles' => $this->new_user_roles, 'must_change_password' => true]);
         $this->reset(['new_user_name', 'new_user_email', 'new_user_id_num', 'new_user_phone', 'new_user_password', 'new_user_categories']);
         $this->feedback = 'Usuario creado con cambio obligatorio de contraseña en su primer ingreso.';
+    }
+
+    public function createQuickCategory(): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('direccion.users.manage'), 403);
+
+        $this->validate([
+            'quick_cat_code' => ['required', 'string', 'max:40', 'unique:academic_categories,code'],
+            'quick_cat_name' => ['required', 'string', 'max:140'],
+        ]);
+
+        $cat = AcademicCategory::create([
+            'code' => strtoupper(trim($this->quick_cat_code)),
+            'name' => trim($this->quick_cat_name),
+            'is_active' => true,
+            'created_by' => Auth::id(),
+        ]);
+
+        AuditService::log('academic.category_created', 'academico', $cat, null, $cat->only(['code', 'name']));
+
+        if ($this->editingUserId) {
+            $this->edit_categories[] = $cat->id;
+        } else {
+            $this->new_user_categories[] = $cat->id;
+        }
+
+        $this->reset(['quick_cat_code', 'quick_cat_name']);
+        $this->feedback = sprintf('Categoría "%s" creada y preseleccionada para asignar.', $cat->name);
     }
 
     public function editUserAccess(int $userId): void
