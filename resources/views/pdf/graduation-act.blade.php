@@ -15,6 +15,9 @@
 </head>
 <body>
     <div class="header">
+        @if(!empty($logoDataUri))
+            <img src="{{ $logoDataUri }}" alt="SURÍ" style="height:68px; margin-bottom:6px;"><br>
+        @endif
         <div class="title">{{ $settings->institution_name }}</div>
         <div>ACTA OFICIAL DE GRADUACIÓN N.° {{ $graduation->act_number }}</div>
         <div style="font-size:10px; color:#475569;">Tomo {{ $graduation->tomo }} · Folio {{ $graduation->folio }} · Asiento {{ $graduation->asiento }}</div>

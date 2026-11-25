@@ -151,11 +151,15 @@ class DocumentPdfController extends Controller
         string $filename,
         string $orientation = 'portrait'
     ): Response|View {
+        $shared = array_merge($data, [
+            'logoDataUri' => ($data['settings'] ?? InstitutionSetting::current())->logoDataUri(),
+        ]);
+
         if ($request->query('vista') === 'html') {
-            return view($view, array_merge($data, ['isHtmlPreview' => true]));
+            return view($view, array_merge($shared, ['isHtmlPreview' => true]));
         }
 
-        $pdf = Pdf::loadView($view, array_merge($data, ['isHtmlPreview' => false]))
+        $pdf = Pdf::loadView($view, array_merge($shared, ['isHtmlPreview' => false]))
             ->setPaper('letter', $orientation);
 
         if ($request->boolean('descargar')) {

@@ -25,6 +25,9 @@
             <div class="receipt-num">{{ $receipt->receipt_number }}</div>
             <div style="font-size:9px;">{{ $receipt->paid_at?->format('d/m/Y H:i') }}</div>
         </div>
+        @if(!empty($logoDataUri))
+            <img src="{{ $logoDataUri }}" alt="SURÍ" style="float:left; height:60px; margin-right:12px;">
+        @endif
         <div class="title">{{ $settings->institution_name }}</div>
         <div class="meta">Cédula Jurídica: {{ $settings->legal_id }} · Tel: {{ $settings->phone }}</div>
         <div class="meta">{{ $settings->address }}</div>

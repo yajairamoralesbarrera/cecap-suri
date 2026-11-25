@@ -1,8 +1,8 @@
 @component('layouts.guest', ['title' => 'Iniciar Sesión'])
 <div class="mx-auto max-w-md">
     <div class="cecap-card space-y-6">
-        <div class="text-center space-y-1">
-            <img src="/icons/cecap-192.svg" alt="CeCap SURÍ" class="mx-auto h-14 w-14 rounded-2xl shadow-sm">
+        <div class="text-center space-y-2">
+            <img src="{{ \App\Models\InstitutionSetting::current()->logoUrl() }}" alt="SURÍ Proyecto Educativo" class="mx-auto h-24 w-auto object-contain">
             <h1 class="text-xl font-bold text-brand-950">Ingreso a la Plataforma</h1>
             <p class="text-sm text-slate-500">CeCap — SURÍ Proyecto Educativo, Costa Rica</p>
         </div>

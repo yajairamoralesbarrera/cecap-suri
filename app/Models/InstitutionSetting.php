@@ -62,6 +62,7 @@ class InstitutionSetting extends Model
                 'email' => 'info@cecap.or.cr',
                 'theme_color' => '#0F4C4C',
                 'accent_color' => '#C87D32',
+                'logo_path' => '/images/logo-suri.png',
                 'online_enrollment_provisional_days' => 7,
                 'online_enrollment_notice' => 'Su solicitud en línea queda en estado provisional por 7 días naturales. Debe presentarse en CeCap para cancelar la matrícula y la primera mensualidad y así confirmar su cupo.',
                 'attention_hours' => 'Lunes a Viernes de 8:00 a.m. a 4:30 p.m. · Sábados de 8:00 a.m. a 12:00 m.d.',
@@ -83,6 +84,26 @@ class InstitutionSetting extends Model
     {
         Cache::forget('cecap.institution_settings');
         Cache::forget('cecap.institution_settings_v2');
+    }
+
+    public function logoUrl(): string
+    {
+        return $this->logo_path ?: '/images/logo-suri.png';
+    }
+
+    public function logoDataUri(): ?string
+    {
+        $relative = ltrim($this->logoUrl(), '/');
+        $path = public_path($relative);
+        if (! is_file($path)) {
+            $path = public_path('images/logo-suri.png');
+        }
+        if (! is_file($path)) {
+            return null;
+        }
+        $mime = mime_content_type($path) ?: 'image/png';
+
+        return 'data:'.$mime.';base64,'.base64_encode((string) file_get_contents($path));
     }
 
     public function isModuleEnabled(string $module): bool

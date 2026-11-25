@@ -16,9 +16,13 @@
 </head>
 <body>
     <div class="header">
+        @if(!empty($logoDataUri))
+            <img src="{{ $logoDataUri }}" alt="SURÍ" style="float:left; height:58px; margin-right:12px;">
+        @endif
         <div class="title">{{ $settings->institution_name }}</div>
         <div>COMPROBANTE DE PAGO {{ $payment->voucher_number }} · {{ $payment->hiring_regime === 'planilla_laboral' ? 'PLANILLA LABORAL CR' : 'SERVICIOS PROFESIONALES CR' }}</div>
         <div style="font-size:10px; color:#475569;">Fecha de pago: {{ $payment->payment_date?->format('d/m/Y') }} · Período: {{ $payment->period_label }}</div>
+        <div style="clear:both;"></div>
     </div>
 
     <table>

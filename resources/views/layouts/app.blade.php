@@ -37,8 +37,8 @@
     <meta name="apple-mobile-web-app-title" content="{{ $settings->short_name }}">
     <title>{{ isset($title) ? $title.' · ' : '' }}{{ $settings->short_name }}</title>
     <link rel="manifest" href="/manifest.webmanifest">
-    <link rel="icon" type="image/svg+xml" href="/icons/cecap-192.svg">
-    <link rel="apple-touch-icon" href="/icons/cecap-192.svg">
+    <link rel="icon" type="image/png" href="/icons/icon-192.png">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @livewireStyles
 </head>
@@ -49,7 +49,7 @@
            class="fixed inset-y-0 left-0 z-30 hidden md:flex md:w-64 flex-col bg-brand-950 text-slate-100 transition-all duration-200 border-r border-brand-900/80">
         <div class="flex h-16 items-center justify-between px-4 border-b border-white/10">
             <a href="{{ route('panel') }}" class="flex items-center gap-3 min-w-0" title="{{ $settings->institution_name }}">
-                <img src="/icons/cecap-192.svg" alt="CeCap" class="h-9 w-9 shrink-0 rounded-xl">
+                <img src="{{ $settings->logoUrl() }}" alt="SURÍ Proyecto Educativo" class="h-10 w-10 shrink-0 rounded-xl bg-white p-0.5 object-contain shadow-xs">
                 <div class="sidebar-label truncate">
                     <div class="text-sm font-bold tracking-tight text-white truncate">{{ $settings->short_name }}</div>
                     <div class="text-[11px] text-amber-200/90 truncate">SURÍ · Costa Rica</div>
@@ -109,7 +109,7 @@
         <div class="relative flex h-full w-72 max-w-[85vw] flex-col bg-brand-950 text-white shadow-2xl">
             <div class="flex h-16 items-center justify-between px-4 border-b border-white/10">
                 <div class="flex items-center gap-2.5">
-                    <img src="/icons/cecap-192.svg" alt="CeCap" class="h-8 w-8 rounded-lg">
+                    <img src="{{ $settings->logoUrl() }}" alt="SURÍ Proyecto Educativo" class="h-9 w-9 rounded-lg bg-white p-0.5 object-contain">
                     <span class="font-bold text-sm">{{ $settings->short_name }}</span>
                 </div>
                 <button type="button" data-mobile-drawer-toggle class="inline-flex h-11 w-11 items-center justify-center rounded-lg hover:bg-white/10">

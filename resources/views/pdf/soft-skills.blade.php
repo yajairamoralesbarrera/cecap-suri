@@ -15,6 +15,9 @@
 </head>
 <body>
     <div class="header">
+        @if(!empty($logoDataUri))
+            <img src="{{ $logoDataUri }}" alt="SURÍ" style="height:68px; margin-bottom:6px;"><br>
+        @endif
         <div class="title">{{ $settings->institution_name }}</div>
         <div>{{ $settings->address }} · {{ $settings->country }}</div>
         <div class="doc-title">Constancia Permanente de Desarrollo de Habilidades Blandas</div>

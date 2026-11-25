@@ -29,6 +29,7 @@ class CostaRicaCatalogSeeder extends Seeder
                 'website' => 'https://cecap.or.cr',
                 'theme_color' => '#0F4C4C',
                 'accent_color' => '#C87D32',
+                'logo_path' => '/images/logo-suri.png',
                 'online_enrollment_provisional_days' => 7,
                 'online_enrollment_notice' => 'Su inscripción en línea es PROVISIONAL y mantiene su espacio reservado por un plazo máximo de 7 días naturales. Para formalizar la matrícula debe presentarse en las oficinas de CeCap a cancelar la matrícula y la primera mensualidad junto con sus documentos originales.',
                 'attention_hours' => 'Lunes a Viernes de 8:00 a.m. a 4:30 p.m. · Sábados de 8:00 a.m. a 12:00 m.d.',

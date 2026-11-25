@@ -15,8 +15,12 @@
 </head>
 <body>
     <div class="header">
+        @if(!empty($logoDataUri))
+            <img src="{{ $logoDataUri }}" alt="SURÍ" style="float:left; height:58px; margin-right:12px;">
+        @endif
         <div class="title">{{ $settings->institution_name }}</div>
         <div>CONTRATO N.° {{ $contract->contract_number }} — {{ $contract->hiring_regime === 'planilla_laboral' ? 'RÉGIMEN DE PLANILLA LABORAL (COSTA RICA)' : 'CONTRATO DE SERVICIOS PROFESIONALES (COSTA RICA)' }}</div>
+        <div style="clear:both;"></div>
     </div>
 
     <table>

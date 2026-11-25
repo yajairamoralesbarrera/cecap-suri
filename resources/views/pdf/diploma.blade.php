@@ -36,6 +36,9 @@
 <body>
 <div class="outer">
     <div class="inner">
+        @if(!empty($logoDataUri))
+            <img src="{{ $logoDataUri }}" alt="SURÍ Proyecto Educativo" style="height:78px; margin-bottom:6px;"><br>
+        @endif
         <div class="inst">{{ $settings->institution_name }}</div>
         <div class="sub">{{ $settings->country }} · Cédula Jurídica {{ $settings->legal_id }}</div>
 

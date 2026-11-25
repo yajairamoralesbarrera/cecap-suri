@@ -12,8 +12,8 @@
     <meta name="apple-mobile-web-app-title" content="{{ $settings->short_name }}">
     <title>{{ isset($title) ? $title.' · ' : '' }}{{ $settings->institution_name }}</title>
     <link rel="manifest" href="/manifest.webmanifest">
-    <link rel="icon" type="image/svg+xml" href="/icons/cecap-192.svg">
-    <link rel="apple-touch-icon" href="/icons/cecap-192.svg">
+    <link rel="icon" type="image/png" href="/icons/icon-192.png">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @livewireStyles
 </head>
@@ -21,7 +21,7 @@
     <header class="border-b border-slate-200/80 bg-white/90 backdrop-blur">
         <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
             <a href="{{ route('inscripcion.publica') }}" class="flex items-center gap-3">
-                <img src="/icons/cecap-192.svg" alt="CeCap" class="h-10 w-10 rounded-xl shadow-xs">
+                <img src="{{ $settings->logoUrl() }}" alt="SURÍ Proyecto Educativo" class="h-12 w-auto rounded-lg bg-white p-0.5 object-contain">
                 <div>
                     <div class="text-sm sm:text-base font-bold text-brand-950">{{ $settings->institution_name }}</div>
                     <div class="text-xs text-slate-500">Costa Rica · Plataforma Educativa PWA</div>

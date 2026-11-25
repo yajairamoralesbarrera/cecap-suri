@@ -26,15 +26,15 @@ class PwaController extends Controller
             'categories' => ['education', 'productivity'],
             'icons' => [
                 [
-                    'src' => '/icons/cecap-192.svg',
+                    'src' => '/icons/icon-192.png',
                     'sizes' => '192x192',
-                    'type' => 'image/svg+xml',
+                    'type' => 'image/png',
                     'purpose' => 'any maskable',
                 ],
                 [
-                    'src' => '/icons/cecap-512.svg',
+                    'src' => '/icons/icon-512.png',
                     'sizes' => '512x512',
-                    'type' => 'image/svg+xml',
+                    'type' => 'image/png',
                     'purpose' => 'any maskable',
                 ],
             ],
@@ -44,11 +44,12 @@ class PwaController extends Controller
     public function serviceWorker(): Response
     {
         $script = <<<'JS'
-const CACHE_NAME = 'cecap-suri-pwa-v3-0';
+const CACHE_NAME = 'cecap-suri-pwa-v3-1';
 const STATIC_ASSETS = [
   '/manifest.webmanifest',
-  '/icons/cecap-192.svg',
-  '/icons/cecap-512.svg'
+  '/images/logo-suri.png',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png'
 ];
 
 const TRANSACTIONAL_PREFIXES = [

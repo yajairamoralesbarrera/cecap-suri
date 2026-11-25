@@ -22,6 +22,9 @@
 </head>
 <body>
     <div class="header">
+        @if(!empty($logoDataUri))
+            <img src="{{ $logoDataUri }}" alt="SURÍ" style="float:left; height:64px; margin-right:14px;">
+        @endif
         <div class="title">{{ $settings->institution_name }}</div>
         <div class="subtitle">{{ $settings->address }} · Tel: {{ $settings->phone }} · {{ $settings->email }} · Cédula Jurídica: {{ $settings->legal_id }}</div>
         <div style="margin-top: 8px;">
@@ -29,6 +32,7 @@
             <span class="badge">{{ $enrollment->enrollment_code }}</span> &nbsp;
             <span class="badge">Estado: {{ strtoupper(str_replace('_', ' ', $enrollment->status)) }}</span>
         </div>
+        <div style="clear:both;"></div>
     </div>
 
     <div class="section">
