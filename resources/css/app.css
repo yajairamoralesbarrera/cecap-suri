@@ -1,9 +1,74 @@
-@import 'tailwindcss';
-
-@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
-@source '../../storage/framework/views/*.php';
+@import "tailwindcss";
 
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
+    --color-brand-950: #082B2B;
+    --color-brand-900: #0F4C4C;
+    --color-brand-800: #136F63;
+    --color-brand-700: #188677;
+    --color-brand-100: #E6F4F1;
+    --color-brand-50: #F2FAF8;
+    --color-accent-600: #B36A22;
+    --color-accent-500: #C87D32;
+    --color-accent-100: #FEF3E2;
+}
+
+@layer base {
+    html {
+        -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+        @apply bg-slate-50 text-slate-900 antialiased;
+    }
+
+    /* Inputs móviles >= 16px para evitar auto-zoom en iOS/iPadOS y cumplir accesibilidad táctil >= 44px */
+    input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+    select,
+    textarea {
+        font-size: 16px;
+        min-height: 44px;
+    }
+
+    @media (min-width: 768px) {
+        input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+        select,
+        textarea {
+            font-size: 0.9375rem;
+        }
+    }
+}
+
+.cecap-input {
+    @apply w-full min-h-11 rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-base md:text-sm text-slate-900 shadow-xs transition focus:border-brand-800 focus:outline-none focus:ring-2 focus:ring-brand-800/20 disabled:bg-slate-100;
+}
+
+.cecap-btn-primary {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-brand-900 px-4 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-brand-800 focus:outline-none focus:ring-2 focus:ring-brand-800 focus:ring-offset-2 disabled:opacity-60 cursor-pointer;
+}
+
+.cecap-btn-secondary {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 shadow-xs transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-800/30 cursor-pointer;
+}
+
+.cecap-btn-accent {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-accent-500 px-4 py-2.5 text-sm font-semibold text-white shadow-xs transition hover:bg-accent-600 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-2 cursor-pointer;
+}
+
+.cecap-card {
+    @apply rounded-2xl border border-slate-200/90 bg-white p-5 shadow-xs;
+}
+
+.cecap-badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold;
+}
+
+/* Sidebar colapsado limpio: oculta textos largos completamente (sin recortar a 2 letras) */
+[data-sidebar-collapsed="true"] .sidebar-label {
+    display: none !important;
+}
+
+[data-sidebar-collapsed="true"] .sidebar-item {
+    justify-content: center;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
 }
