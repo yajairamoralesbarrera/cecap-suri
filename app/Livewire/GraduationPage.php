@@ -45,9 +45,9 @@ class GraduationPage extends Component
 
     public string $tpl_body = 'CeCap — SURÍ Proyecto Educativo hace constar que {{student_name}} ({{student_id}}) completó y aprobó "{{course_name}}" con nota final de {{final_grade}}.';
 
-    public string $tpl_primary_color = '#0F4C4C';
+    public string $tpl_primary_color = '#107050';
 
-    public string $tpl_accent_color = '#C87D32';
+    public string $tpl_accent_color = '#68A040';
 
     public string $tpl_signatory_one_name = 'Dirección General CeCap';
 

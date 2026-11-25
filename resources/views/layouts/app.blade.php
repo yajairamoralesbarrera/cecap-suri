@@ -49,10 +49,10 @@
            class="fixed inset-y-0 left-0 z-30 hidden md:flex md:w-64 flex-col bg-brand-950 text-slate-100 transition-all duration-200 border-r border-brand-900/80">
         <div class="flex h-16 items-center justify-between px-4 border-b border-white/10">
             <a href="{{ route('panel') }}" class="flex items-center gap-3 min-w-0" title="{{ $settings->institution_name }}">
-                <img src="{{ $settings->logoUrl() }}" alt="SURÍ Proyecto Educativo" class="h-10 w-10 shrink-0 rounded-xl bg-white p-0.5 object-contain shadow-xs">
+                <img src="{{ $settings->logoUrl() }}" alt="SURÍ Proyecto Educativo" class="h-9 w-9 max-h-9 shrink-0 rounded-lg bg-white p-0.5 object-contain shadow-xs">
                 <div class="sidebar-label truncate">
                     <div class="text-sm font-bold tracking-tight text-white truncate">{{ $settings->short_name }}</div>
-                    <div class="text-[11px] text-amber-200/90 truncate">SURÍ · Costa Rica</div>
+                    <div class="text-[11px] text-accent-400 truncate">SURÍ · Costa Rica</div>
                 </div>
             </a>
             <button type="button"
@@ -85,7 +85,7 @@
             <button type="button"
                     data-pwa-install-btn
                     title="Instalar App PWA en este dispositivo"
-                    class="sidebar-item flex w-full min-h-11 items-center gap-2.5 rounded-xl bg-accent-500/90 px-3 py-2 text-xs font-semibold text-white hover:bg-accent-500 transition cursor-pointer">
+                    class="sidebar-item flex w-full min-h-11 items-center gap-2.5 rounded-xl bg-accent-500 px-3 py-2 text-xs font-semibold text-white hover:bg-accent-600 transition cursor-pointer">
                 <svg class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
                 </svg>
@@ -109,7 +109,7 @@
         <div class="relative flex h-full w-72 max-w-[85vw] flex-col bg-brand-950 text-white shadow-2xl">
             <div class="flex h-16 items-center justify-between px-4 border-b border-white/10">
                 <div class="flex items-center gap-2.5">
-                    <img src="{{ $settings->logoUrl() }}" alt="SURÍ Proyecto Educativo" class="h-9 w-9 rounded-lg bg-white p-0.5 object-contain">
+                    <img src="{{ $settings->logoUrl() }}" alt="SURÍ Proyecto Educativo" class="h-8 w-8 max-h-8 rounded-lg bg-white p-0.5 object-contain">
                     <span class="font-bold text-sm">{{ $settings->short_name }}</span>
                 </div>
                 <button type="button" data-mobile-drawer-toggle class="inline-flex h-11 w-11 items-center justify-center rounded-lg hover:bg-white/10">

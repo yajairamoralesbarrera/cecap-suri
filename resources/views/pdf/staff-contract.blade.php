@@ -5,8 +5,8 @@
 <title>Contrato {{ $contract->contract_number }}</title>
 <style>
     body { font-family: DejaVu Sans, sans-serif; font-size: 11px; color: #1e293b; margin: 28px; line-height: 1.55; }
-    .header { border-bottom: 3px solid #0F4C4C; padding-bottom: 10px; margin-bottom: 16px; }
-    .title { font-size: 15px; font-weight: bold; color: #0F4C4C; }
+    .header { border-bottom: 3px solid #107050; padding-bottom: 10px; margin-bottom: 16px; }
+    .title { font-size: 15px; font-weight: bold; color: #107050; }
     table { width: 100%; border-collapse: collapse; margin: 12px 0; }
     th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
     th { background: #f1f5f9; width: 28%; }

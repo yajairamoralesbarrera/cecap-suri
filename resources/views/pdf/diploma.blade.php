@@ -1,6 +1,6 @@
 @php
-    $primary = $template?->primary_color ?: '#0F4C4C';
-    $accent = $template?->accent_color ?: '#C87D32';
+    $primary = $template?->primary_color ?: '#107050';
+    $accent = $template?->accent_color ?: '#68A040';
     $course = $graduation->enrollment?->edition?->course;
     $body = $template?->body_template ?: 'Hace constar que {{student_name}} ({{student_id}}) aprobó satisfactoriamente "{{course_name}}".';
     $renderedBody = strtr($body, [

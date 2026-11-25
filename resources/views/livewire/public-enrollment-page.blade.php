@@ -1,13 +1,13 @@
 <div class="space-y-6">
-    <div class="rounded-2xl bg-brand-950 p-6 text-white shadow-sm">
+    <div class="rounded-2xl bg-gradient-to-r from-brand-950 via-brand-900 to-brand-800 p-6 text-white shadow-sm">
         <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
-                <span class="inline-flex rounded-full bg-accent-500/20 px-3 py-1 text-xs font-semibold text-amber-200">Inscripción en Línea Provisional · {{ $settings->online_enrollment_provisional_days }} días</span>
+                <span class="inline-flex rounded-full bg-accent-500/25 px-3 py-1 text-xs font-semibold text-accent-400">Inscripción en Línea Provisional · {{ $settings->online_enrollment_provisional_days }} días</span>
                 <h1 class="mt-2 text-2xl font-bold">{{ $settings->institution_name }}</h1>
                 <p class="mt-1 text-sm text-brand-100 max-w-3xl">{{ $settings->online_enrollment_notice }}</p>
             </div>
             <div class="rounded-xl bg-white/10 p-4 text-xs space-y-1 md:max-w-xs shrink-0">
-                <div class="font-bold text-amber-200 uppercase">Horario de Atención Presencial</div>
+                <div class="font-bold text-accent-400 uppercase">Horario de Atención Presencial</div>
                 <p class="text-slate-100">{{ $settings->attention_hours }}</p>
                 <p class="text-slate-200 pt-1">Tel: {{ $settings->phone }}</p>
             </div>

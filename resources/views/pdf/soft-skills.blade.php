@@ -5,12 +5,12 @@
 <title>Constancia Habilidades Blandas {{ $student->student_code }}</title>
 <style>
     body { font-family: DejaVu Sans, sans-serif; font-size: 11px; color: #1e293b; margin: 28px; }
-    .header { text-align: center; border-bottom: 3px solid #0F4C4C; padding-bottom: 12px; margin-bottom: 18px; }
-    .title { font-size: 16px; font-weight: bold; color: #0F4C4C; }
-    .doc-title { font-size: 14px; font-weight: bold; margin-top: 10px; text-transform: uppercase; color: #C87D32; }
+    .header { text-align: center; border-bottom: 3px solid #107050; padding-bottom: 12px; margin-bottom: 18px; }
+    .title { font-size: 16px; font-weight: bold; color: #107050; }
+    .doc-title { font-size: 14px; font-weight: bold; margin-top: 10px; text-transform: uppercase; color: #68A040; }
     table { width: 100%; border-collapse: collapse; margin-top: 14px; }
     th, td { border: 1px solid #cbd5e1; padding: 7px 8px; text-align: left; }
-    th { background: #0F4C4C; color: #fff; }
+    th { background: #107050; color: #fff; }
 </style>
 </head>
 <body>

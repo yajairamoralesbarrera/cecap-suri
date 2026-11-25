@@ -5,16 +5,16 @@
 <title>Planilla de Inscripción {{ $enrollment->enrollment_code }}</title>
 <style>
     body { font-family: DejaVu Sans, sans-serif; font-size: 11px; color: #1e293b; margin: 20px; }
-    .header { border-bottom: 3px solid #0F4C4C; padding-bottom: 10px; margin-bottom: 16px; }
-    .title { font-size: 16px; font-weight: bold; color: #0F4C4C; }
+    .header { border-bottom: 3px solid #107050; padding-bottom: 10px; margin-bottom: 16px; }
+    .title { font-size: 16px; font-weight: bold; color: #107050; }
     .subtitle { font-size: 10px; color: #475569; margin-top: 2px; }
-    .badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; background: #E6F4F1; color: #0F4C4C; }
+    .badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; background: #E6F4EC; color: #107050; }
     .section { margin-top: 14px; }
-    .section-title { background: #0F4C4C; color: #fff; padding: 5px 8px; font-size: 11px; font-weight: bold; }
+    .section-title { background: #107050; color: #fff; padding: 5px 8px; font-size: 11px; font-weight: bold; }
     table { width: 100%; border-collapse: collapse; margin-top: 6px; }
     th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; vertical-align: top; }
     th { background: #f1f5f9; width: 26%; font-weight: bold; }
-    .notice { background: #FEF3E2; border: 1px solid #C87D32; padding: 10px; margin-top: 12px; font-size: 10.5px; }
+    .notice { background: #F0F8E4; border: 1px solid #68A040; padding: 10px; margin-top: 12px; font-size: 10.5px; }
     .signatures { margin-top: 34px; width: 100%; border: none; }
     .signatures td { border: none; text-align: center; width: 50%; padding-top: 28px; }
     .sig-line { border-top: 1px solid #334155; width: 78%; margin: 0 auto 4px auto; }

@@ -5,8 +5,8 @@
 <title>Acta de Grado {{ $graduation->act_number }}</title>
 <style>
     body { font-family: DejaVu Sans, sans-serif; font-size: 11.5px; color: #1e293b; margin: 30px; line-height: 1.5; }
-    .header { text-align: center; border-bottom: 3px solid #0F4C4C; padding-bottom: 12px; margin-bottom: 18px; }
-    .title { font-size: 16px; font-weight: bold; color: #0F4C4C; }
+    .header { text-align: center; border-bottom: 3px solid #107050; padding-bottom: 12px; margin-bottom: 18px; }
+    .title { font-size: 16px; font-weight: bold; color: #107050; }
     .box { background: #f8fafc; border: 1px solid #cbd5e1; padding: 12px; margin: 14px 0; }
     table { width: 100%; border-collapse: collapse; margin-top: 12px; }
     th, td { border: 1px solid #cbd5e1; padding: 7px 8px; }

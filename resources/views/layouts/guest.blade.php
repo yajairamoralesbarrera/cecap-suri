@@ -17,14 +17,14 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     @livewireStyles
 </head>
-<body class="min-h-screen bg-gradient-to-br from-brand-50 via-slate-50 to-amber-50/40 text-slate-900">
-    <header class="border-b border-slate-200/80 bg-white/90 backdrop-blur">
+<body class="min-h-screen bg-gradient-to-br from-brand-50 via-slate-50 to-accent-100/50 text-slate-900">
+    <header class="border-b border-slate-200/80 bg-white/95 backdrop-blur">
         <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-            <a href="{{ route('inscripcion.publica') }}" class="flex items-center gap-3">
-                <img src="{{ $settings->logoUrl() }}" alt="SURÍ Proyecto Educativo" class="h-12 w-auto rounded-lg bg-white p-0.5 object-contain">
-                <div>
-                    <div class="text-sm sm:text-base font-bold text-brand-950">{{ $settings->institution_name }}</div>
-                    <div class="text-xs text-slate-500">Costa Rica · Plataforma Educativa PWA</div>
+            <a href="{{ route('inscripcion.publica') }}" class="flex items-center gap-3 min-w-0">
+                <img src="{{ $settings->logoUrl() }}" alt="SURÍ Proyecto Educativo" class="h-10 w-auto max-h-10 shrink-0 rounded-md object-contain">
+                <div class="truncate">
+                    <div class="text-sm sm:text-base font-bold text-brand-950 truncate">{{ $settings->institution_name }}</div>
+                    <div class="text-xs text-slate-500 truncate">Costa Rica · Plataforma Educativa PWA</div>
                 </div>
             </a>
             <div class="flex items-center gap-2">

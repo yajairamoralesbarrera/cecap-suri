@@ -2,7 +2,7 @@
     <div class="rounded-2xl bg-gradient-to-r from-brand-950 via-brand-900 to-brand-800 p-6 text-white shadow-sm">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-                <p class="text-xs font-semibold uppercase tracking-wider text-amber-200">CeCap — SURÍ Proyecto Educativo · Costa Rica</p>
+                <p class="text-xs font-semibold uppercase tracking-wider text-accent-400">CeCap — SURÍ Proyecto Educativo · Costa Rica</p>
                 <h2 class="mt-1 text-2xl font-bold">Bienvenida, {{ $user->name }}</h2>
                 <p class="mt-1 text-sm text-brand-100">Roles activos: {{ $user->role_labels ?: 'Usuario' }}</p>
             </div>

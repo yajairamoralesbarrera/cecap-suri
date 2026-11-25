@@ -5,16 +5,16 @@
 <title>Recibo {{ $receipt->receipt_number }}</title>
 <style>
     body { font-family: DejaVu Sans, sans-serif; font-size: 11px; color: #1e293b; margin: 22px; }
-    .header { border-bottom: 3px solid #0F4C4C; padding-bottom: 10px; margin-bottom: 14px; }
-    .title { font-size: 16px; font-weight: bold; color: #0F4C4C; }
+    .header { border-bottom: 3px solid #107050; padding-bottom: 10px; margin-bottom: 14px; }
+    .title { font-size: 16px; font-weight: bold; color: #107050; }
     .meta { font-size: 10px; color: #475569; }
-    .receipt-box { float: right; border: 2px solid #0F4C4C; padding: 6px 12px; text-align: center; }
-    .receipt-num { font-size: 14px; font-weight: bold; color: #0F4C4C; }
+    .receipt-box { float: right; border: 2px solid #107050; padding: 6px 12px; text-align: center; }
+    .receipt-num { font-size: 14px; font-weight: bold; color: #107050; }
     table { width: 100%; border-collapse: collapse; margin-top: 12px; }
     th, td { border: 1px solid #cbd5e1; padding: 7px 8px; text-align: left; }
     th { background: #f1f5f9; }
     .num { text-align: right; }
-    .total-row td { background: #E6F4F1; font-weight: bold; font-size: 12px; }
+    .total-row td { background: #E6F4EC; font-weight: bold; font-size: 12px; }
     .reversed { background: #fee2e2; border: 2px solid #dc2626; color: #991b1b; padding: 8px; margin: 10px 0; font-weight: bold; }
 </style>
 </head>

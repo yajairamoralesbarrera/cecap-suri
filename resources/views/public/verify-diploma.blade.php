@@ -2,7 +2,7 @@
 <div class="mx-auto max-w-2xl">
     <div class="cecap-card space-y-6">
         <div class="flex items-center gap-4 border-b border-slate-200 pb-4">
-            <img src="{{ $settings->logoUrl() }}" alt="SURÍ Proyecto Educativo" class="h-16 w-auto object-contain">
+            <img src="{{ $settings->logoUrl() }}" alt="SURÍ Proyecto Educativo" class="h-12 w-auto max-h-12 shrink-0 object-contain">
             <div>
                 <h1 class="text-xl font-bold text-brand-950">Verificación Pública de Diplomas y Certificados</h1>
                 <p class="text-sm text-slate-600">{{ $settings->institution_name }} · {{ $settings->country }}</p>
