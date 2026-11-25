@@ -38,6 +38,8 @@ class AcademicPage extends Component
     public string $cat_description = '';
 
     // Curso + Materias obligatorias para Técnico
+    public ?int $editingCourseId = null;
+
     public ?int $course_category_id = null;
 
     public string $course_code = '';
@@ -221,6 +223,64 @@ class AcademicPage extends Component
         $this->feedback = 'Categoría académica registrada correctamente.';
     }
 
+    public function editCourse(int $courseId): void
+    {
+        $this->authorizeManage();
+        $course = Course::findOrFail($courseId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $course->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('course_category_id', 'No tiene autorización sobre la categoría de este curso.');
+
+            return;
+        }
+
+        $this->editingCourseId = $course->id;
+        $this->course_category_id = $course->academic_category_id;
+        $this->course_code = $course->code;
+        $this->course_name = $course->name;
+        $this->course_program_type = $course->program_type;
+        $this->course_education_level = $course->required_education_level;
+        $this->course_default_max_capacity = (int) $course->default_max_capacity;
+        $this->course_duration_hours = (int) $course->duration_hours;
+        $this->course_duration_months = (int) $course->duration_months;
+        $this->course_enrollment_fee = (float) $course->base_enrollment_fee;
+        $this->course_monthly_fee = (float) $course->base_monthly_fee;
+        $this->course_required_documents = $course->required_documents ?? Course::defaultRequiredDocumentsFor($course->program_type);
+        $this->course_description = (string) ($course->description ?? '');
+        $this->resetValidation();
+        $this->feedback = null;
+    }
+
+    public function cancelEditCourse(): void
+    {
+        $this->editingCourseId = null;
+        $this->reset(['course_category_id', 'course_code', 'course_name', 'course_description']);
+        $this->course_program_type = 'curso_corto';
+        $this->course_education_level = 'primaria_completa';
+        $this->course_default_max_capacity = 25;
+        $this->course_duration_hours = 40;
+        $this->course_duration_months = 2;
+        $this->course_enrollment_fee = 15000;
+        $this->course_monthly_fee = 25000;
+        $this->course_required_documents = ['cedula_dimex'];
+        $this->technical_subjects = [['code' => 'MAT-01', 'name' => '', 'hours' => 40, 'sessions_count' => 10]];
+        $this->resetValidation();
+    }
+
+    public function toggleCourseActive(int $courseId): void
+    {
+        $this->authorizeManage();
+        $course = Course::findOrFail($courseId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $course->academic_category_id, $allowedCategoryIds, true)) {
+            return;
+        }
+        $old = ['is_active' => $course->is_active];
+        $course->update(['is_active' => ! $course->is_active]);
+        AuditService::log('academic.course_toggled', 'academico', $course, $old, ['is_active' => $course->is_active]);
+        $this->feedback = $course->is_active ? 'Curso reactivado.' : 'Curso inactivado (sin borrado físico).';
+    }
+
     public function createCourse(): void
     {
         $this->authorizeManage();
@@ -232,9 +292,13 @@ class AcademicPage extends Component
             return;
         }
 
+        $codeUniqueRule = $this->editingCourseId
+            ? 'unique:courses,code,'.$this->editingCourseId
+            : 'unique:courses,code';
+
         $this->validate([
             'course_category_id' => ['required', 'integer', 'exists:academic_categories,id'],
-            'course_code' => ['required', 'string', 'max:40', 'unique:courses,code'],
+            'course_code' => ['required', 'string', 'max:40', $codeUniqueRule],
             'course_name' => ['required', 'string', 'max:180'],
             'course_program_type' => ['required', 'in:curso_corto,programa,curso_tecnico'],
             'course_education_level' => ['required', 'string', 'max:80'],
@@ -244,6 +308,47 @@ class AcademicPage extends Component
             'course_enrollment_fee' => ['required', 'numeric', 'min:0'],
             'course_monthly_fee' => ['required', 'numeric', 'min:0'],
         ]);
+
+        $docs = ! empty($this->course_required_documents)
+            ? array_values(array_unique($this->course_required_documents))
+            : Course::defaultRequiredDocumentsFor($this->course_program_type);
+
+        if ($this->editingCourseId) {
+            $course = Course::findOrFail($this->editingCourseId);
+            if ($allowedCategoryIds !== null && ! in_array((int) $course->academic_category_id, $allowedCategoryIds, true)) {
+                $this->addError('course_category_id', 'No tiene autorización sobre la categoría de este curso.');
+
+                return;
+            }
+            $old = $course->only(['academic_category_id', 'code', 'name', 'program_type', 'description', 'required_education_level', 'default_max_capacity', 'duration_hours', 'duration_months', 'base_enrollment_fee', 'base_monthly_fee', 'required_documents']);
+
+            if ($this->course_program_type === 'curso_tecnico' && $course->subjects()->count() === 0) {
+                $this->addError('course_program_type', 'Para cambiar este curso a Curso Técnico debe agregar al menos una materia usando "+ Materias".');
+
+                return;
+            }
+
+            $course->update([
+                'academic_category_id' => $this->course_category_id,
+                'code' => strtoupper(trim($this->course_code)),
+                'name' => trim($this->course_name),
+                'program_type' => $this->course_program_type,
+                'description' => $this->course_description ?: null,
+                'required_education_level' => $this->course_education_level,
+                'default_max_capacity' => $this->course_default_max_capacity,
+                'duration_hours' => $this->course_duration_hours,
+                'duration_months' => $this->course_duration_months,
+                'base_enrollment_fee' => $this->course_enrollment_fee,
+                'base_monthly_fee' => $this->course_monthly_fee,
+                'required_documents' => $docs,
+            ]);
+
+            AuditService::log('academic.course_updated', 'academico', $course, $old, $course->only(array_keys($old)));
+            $this->cancelEditCourse();
+            $this->feedback = sprintf('Curso %s actualizado correctamente (cambio auditado).', $course->code);
+
+            return;
+        }
 
         // Materias obligatorias al crear Cursos Técnicos
         $cleanSubjects = collect($this->technical_subjects)
@@ -255,10 +360,6 @@ class AcademicPage extends Component
 
             return;
         }
-
-        $docs = ! empty($this->course_required_documents)
-            ? array_values(array_unique($this->course_required_documents))
-            : Course::defaultRequiredDocumentsFor($this->course_program_type);
 
         $course = DB::transaction(function () use ($docs, $cleanSubjects): Course {
             $course = Course::create([

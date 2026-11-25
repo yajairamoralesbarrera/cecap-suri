@@ -147,3 +147,68 @@ it('strictly scopes coordinador_categoria to assigned user_academic_categories',
         ->call('createCourse')
         ->assertHasErrors('course_category_id');
 });
+
+it('allows audited editing of course attributes, adding subjects with sessions, and toggling active status', function () {
+    $admin = User::where('email', 'superadmin@cecap.or.cr')->firstOrFail();
+    $cat = AcademicCategory::create(['code' => 'CAT-ADM', 'name' => 'Administración', 'created_by' => $admin->id]);
+    $course = Course::create([
+        'academic_category_id' => $cat->id,
+        'code' => 'CUR-EDIT-01',
+        'name' => 'Ofimática Básica',
+        'program_type' => 'curso_corto',
+        'required_education_level' => 'primaria_completa',
+        'default_max_capacity' => 20,
+        'duration_hours' => 30,
+        'duration_months' => 1,
+        'base_enrollment_fee' => 10000,
+        'base_monthly_fee' => 20000,
+        'required_documents' => ['cedula_dimex'],
+        'created_by' => $admin->id,
+    ]);
+
+    // No debe permitir cambiar a curso_tecnico si tiene 0 materias
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->call('editCourse', $course->id)
+        ->set('course_program_type', 'curso_tecnico')
+        ->call('createCourse')
+        ->assertHasErrors('course_program_type');
+
+    // Editar características del curso y auditar
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->call('editCourse', $course->id)
+        ->assertSet('editingCourseId', $course->id)
+        ->set('course_name', 'Ofimática Intermedia')
+        ->set('course_default_max_capacity', 28)
+        ->set('course_duration_hours', 48)
+        ->set('course_description', 'Perfil actualizado del curso')
+        ->call('createCourse')
+        ->assertHasNoErrors()
+        ->assertSet('editingCourseId', null);
+
+    $course->refresh();
+    expect($course->name)->toBe('Ofimática Intermedia');
+    expect($course->default_max_capacity)->toBe(28);
+    expect($course->duration_hours)->toBe(48);
+    expect($course->description)->toBe('Perfil actualizado del curso');
+    expect(\App\Models\AuditLog::where('event', 'academic.course_updated')->where('auditable_id', (string) $course->id)->exists())->toBeTrue();
+
+    // Agregar materia con sesiones y luego inactivar curso sin borrado físico
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->call('openCourseSubjects', $course->id)
+        ->set('new_sub_code', 'MAT-01')
+        ->set('new_sub_name', 'Hojas de Cálculo')
+        ->set('new_sub_hours', 24)
+        ->set('new_sub_sessions', 8)
+        ->call('addSubjectToCourse')
+        ->assertHasNoErrors()
+        ->call('toggleCourseActive', $course->id);
+
+    $course->refresh();
+    expect($course->subjects()->where('code', 'MAT-01')->firstOrFail()->sessions_count)->toBe(8);
+    expect($course->is_active)->toBeFalse();
+    expect(\App\Models\AuditLog::where('event', 'academic.course_toggled')->where('auditable_id', (string) $course->id)->exists())->toBeTrue();
+});
+

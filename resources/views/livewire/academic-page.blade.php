@@ -74,8 +74,15 @@
     @if($tab === 'courses')
         <div class="space-y-6">
             @if(auth()->user()->hasEffectivePermission('academico.manage'))
-                <form wire:submit="createCourse" class="cecap-card space-y-4">
-                    <h2 class="text-base font-bold text-brand-950">Registrar Curso Corto / Programa / Curso Técnico</h2>
+                <form wire:submit="createCourse" class="cecap-card space-y-4 {{ $editingCourseId ? 'border-brand-700 bg-brand-50/30' : '' }}">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <h2 class="text-base font-bold text-brand-950">
+                            {{ $editingCourseId ? 'Editar Características del Curso (Cambio Auditado)' : 'Registrar Curso Corto / Programa / Curso Técnico' }}
+                        </h2>
+                        @if($editingCourseId)
+                            <button type="button" wire:click="cancelEditCourse" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar Edición</button>
+                        @endif
+                    </div>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Categoría *</label>
@@ -128,6 +135,10 @@
                                 <input wire:model="course_monthly_fee" type="number" step="0.01" min="0" class="cecap-input" placeholder="Mensualidad">
                             </div>
                         </div>
+                        <div class="md:col-span-3">
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Descripción / Perfil del Curso</label>
+                            <textarea wire:model="course_description" rows="2" class="cecap-input" placeholder="Descripción opcional del curso o programa"></textarea>
+                        </div>
                     </div>
 
                     <div class="rounded-xl bg-slate-50 p-4 space-y-2">
@@ -142,7 +153,7 @@
                         </div>
                     </div>
 
-                    @if($course_program_type === 'curso_tecnico')
+                    @if($course_program_type === 'curso_tecnico' && ! $editingCourseId)
                         <div class="rounded-xl border border-amber-300 bg-amber-50/70 p-4 space-y-3">
                             <div class="flex flex-wrap items-center justify-between gap-2">
                                 <div>
@@ -187,7 +198,12 @@
                         </div>
                     @endif
 
-                    <button type="submit" class="cecap-btn-primary">Guardar Curso</button>
+                    <div class="flex flex-wrap gap-2">
+                        <button type="submit" class="cecap-btn-primary">{{ $editingCourseId ? 'Guardar Cambios del Curso' : 'Guardar Curso' }}</button>
+                        @if($editingCourseId)
+                            <button type="button" wire:click="cancelEditCourse" class="cecap-btn-secondary">Cancelar</button>
+                        @endif
+                    </div>
                 </form>
             @endif
 
@@ -300,7 +316,11 @@
                                 </td>
                                 <td class="py-2.5">
                                     @if(auth()->user()->hasEffectivePermission('academico.manage'))
-                                        <button type="button" wire:click="openCourseSubjects({{ $c->id }})" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">+ Materias</button>
+                                        <div class="flex flex-wrap gap-1.5">
+                                            <button type="button" wire:click="editCourse({{ $c->id }})" class="cecap-btn-secondary !min-h-9 !px-2.5 text-xs">Editar</button>
+                                            <button type="button" wire:click="openCourseSubjects({{ $c->id }})" class="cecap-btn-secondary !min-h-9 !px-2.5 text-xs">+ Materias</button>
+                                            <button type="button" wire:click="toggleCourseActive({{ $c->id }})" class="cecap-badge cursor-pointer {{ $c->is_active ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-200 text-slate-600' }}">{{ $c->is_active ? 'Activo' : 'Inactivo' }}</button>
+                                        </div>
                                     @endif
                                 </td>
                             </tr>
