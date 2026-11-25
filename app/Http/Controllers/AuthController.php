@@ -135,7 +135,7 @@ class AuthController extends Controller
                     'student_code' => Student::nextCode(),
                     'first_name' => trim($data['first_name']),
                     'last_name' => trim($data['last_name']),
-                    'second_last_name' => $data['second_last_name'] ? trim($data['second_last_name']) : null,
+                    'second_last_name' => ! empty($data['second_last_name']) ? trim($data['second_last_name']) : null,
                     'identification_type' => $data['identification_type'],
                     'identification_number' => trim($data['identification_number']),
                     'email' => $email,

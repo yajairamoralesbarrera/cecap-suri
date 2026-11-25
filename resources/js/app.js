@@ -47,6 +47,7 @@
         if (!sidebar) return;
 
         sidebar.setAttribute('data-sidebar-collapsed', collapsed ? 'true' : 'false');
+        document.body.setAttribute('data-sidebar-collapsed', collapsed ? 'true' : 'false');
         if (collapsed) {
             sidebar.classList.remove('md:w-64');
             sidebar.classList.add('md:w-20');

@@ -62,7 +62,17 @@
     @apply inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold;
 }
 
-/* Sidebar colapsado limpio: oculta textos largos completamente (sin recortar a 2 letras) */
+/* Sidebar colapsado limpio: reduce a 5rem (w-20) y oculta textos largos completamente (sin recortar a 2 letras) */
+@media (min-width: 768px) {
+    #cecap-sidebar[data-sidebar-collapsed="true"] {
+        width: 5rem !important;
+    }
+
+    body[data-sidebar-collapsed="true"] #cecap-main-wrap {
+        padding-left: 5rem !important;
+    }
+}
+
 [data-sidebar-collapsed="true"] .sidebar-label {
     display: none !important;
 }

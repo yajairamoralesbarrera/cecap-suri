@@ -46,8 +46,14 @@ class InstitutionSetting extends Model
 
     public static function current(): self
     {
-        return Cache::remember('cecap.institution_settings', 300, function (): self {
-            return static::query()->first() ?? new static([
+        $attributes = Cache::remember('cecap.institution_settings_v2', 300, function (): array {
+            $record = static::query()->first();
+
+            if ($record) {
+                return $record->getAttributes();
+            }
+
+            return [
                 'institution_name' => 'CeCap — SURÍ Proyecto Educativo',
                 'short_name' => 'CeCap SURÍ',
                 'legal_id' => '3-002-000000',
@@ -61,15 +67,22 @@ class InstitutionSetting extends Model
                 'attention_hours' => 'Lunes a Viernes de 8:00 a.m. a 4:30 p.m. · Sábados de 8:00 a.m. a 12:00 m.d.',
                 'gender_policy_message' => 'Actualmente nuestros programas de formación técnica y capacitación están dirigidos exclusivamente a mujeres, por lo que esta solicitud no cumple con los parámetros de ingreso de la institución.',
                 'require_financial_solvency_for_graduation' => true,
-                'enabled_modules' => array_fill_keys(array_keys(config('cecap.modules', [])), true),
+                'enabled_modules' => json_encode(array_fill_keys(array_keys(config('cecap.modules', [])), true)),
                 'receipt_prefix' => 'REC',
-            ]);
+            ];
         });
+
+        $instance = new static;
+        $instance->setRawAttributes($attributes, true);
+        $instance->exists = isset($attributes['id']);
+
+        return $instance;
     }
 
     public static function clearCache(): void
     {
         Cache::forget('cecap.institution_settings');
+        Cache::forget('cecap.institution_settings_v2');
     }
 
     public function isModuleEnabled(string $module): bool

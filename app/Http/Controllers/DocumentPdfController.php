@@ -19,7 +19,7 @@ class DocumentPdfController extends Controller
 {
     public function publicEnrollmentForm(Request $request, Enrollment $enrollment): Response|View
     {
-        abort_unless($request->hasValidSignature(), 403, 'El enlace de descarga de su Planilla de Inscripción ha expirado o no es válido.');
+        abort_unless($request->hasValidSignatureWhileIgnoring(['vista', 'descargar']), 403, 'El enlace de descarga de su Planilla de Inscripción ha expirado o no es válido.');
 
         return $this->renderEnrollmentForm($request, $enrollment);
     }

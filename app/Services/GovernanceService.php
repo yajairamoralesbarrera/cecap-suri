@@ -85,7 +85,7 @@ class GovernanceService
             'gender' => $newUserData['gender'] ?? 'femenino',
             'password' => Hash::make($temporaryPassword),
             'must_change_password' => true,
-            'uses_custom_permissions' => $sourceUser->uses_custom_permissions,
+            'uses_custom_permissions' => (bool) $sourceUser->uses_custom_permissions,
             'is_active' => true,
             'created_by' => $actor->id,
             'updated_by' => $actor->id,
