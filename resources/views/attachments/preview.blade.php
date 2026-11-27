@@ -29,6 +29,12 @@
             flex-wrap: wrap;
             justify-content: space-between;
             align-items: center;
+            gap: 10px;
+        }
+        .header-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
             gap: 8px;
         }
         .title {
@@ -42,13 +48,39 @@
         }
         .badge {
             display: inline-block;
-            padding: 3px 10px;
+            padding: 4px 10px;
             border-radius: 999px;
             font-size: 11px;
             font-weight: 700;
             background: rgba(255,255,255,0.2);
             color: #ffffff;
             text-transform: uppercase;
+        }
+        .btn-download {
+            display: inline-block;
+            padding: 8px 14px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 700;
+            background: #ffffff;
+            color: #065f46;
+            text-decoration: none;
+            border: 1px solid rgba(255,255,255,0.4);
+            cursor: pointer;
+        }
+        .btn-download:hover {
+            background: #ecfdf5;
+        }
+        .btn-download-primary {
+            display: inline-block;
+            padding: 10px 18px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 700;
+            background: #107050;
+            color: #ffffff;
+            text-decoration: none;
+            margin-top: 12px;
         }
         .body {
             padding: 18px;
@@ -57,12 +89,30 @@
         }
         .preview-img {
             max-width: 100%;
-            max-height: 76vh;
             height: auto;
             border-radius: 10px;
             border: 1px solid #cbd5e1;
             background: #ffffff;
             box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+        }
+        .pdf-pages {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            align-items: center;
+        }
+        .pdf-page-wrap {
+            width: 100%;
+            max-width: 860px;
+        }
+        .pdf-page-label {
+            text-align: left;
+            font-size: 11px;
+            font-weight: 700;
+            color: #475569;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
         }
         .pdf-box {
             width: 100%;
@@ -99,7 +149,14 @@
                     Versión v{{ $attachment->version }} · {{ number_format(($attachment->size_bytes ?? 0) / 1024, 1) }} KB · Subido el {{ $attachment->created_at?->format('d/m/Y H:i') }}
                 </div>
             </div>
-            <span class="badge">{{ strtoupper($attachment->status) }}</span>
+            <div class="header-actions">
+                <span class="badge">{{ strtoupper($attachment->status) }}</span>
+                <a href="data:{{ $attachment->mime_type }};base64,{{ $base64 }}"
+                   download="{{ $attachment->original_name }}"
+                   class="btn-download">
+                    Descargar Archivo
+                </a>
+            </div>
         </div>
 
         <div class="body">
@@ -107,19 +164,44 @@
                 <img src="data:{{ $attachment->mime_type }};base64,{{ $base64 }}"
                      alt="{{ $attachment->original_name }}"
                      class="preview-img">
+            @elseif($isPdf && ! empty($pdfPages))
+                <div class="pdf-pages">
+                    @foreach($pdfPages as $idx => $pageB64)
+                        <div class="pdf-page-wrap">
+                            <div class="pdf-page-label">Página {{ $idx + 1 }} de {{ count($pdfPages) }}</div>
+                            <img src="data:image/png;base64,{{ $pageB64 }}"
+                                 alt="Página {{ $idx + 1 }} de {{ $attachment->original_name }}"
+                                 class="preview-img">
+                        </div>
+                    @endforeach
+                </div>
+                @if(count($pdfPages) >= 8)
+                    <p style="font-size:12px; color:#475569; margin-top:14px;">
+                        Mostrando las primeras 8 páginas. Use <strong>Descargar Archivo</strong> arriba para ver el PDF completo.
+                    </p>
+                @endif
             @elseif($isPdf)
                 <object data="data:application/pdf;base64,{{ $base64 }}"
                         type="application/pdf"
                         class="pdf-box">
                     <div class="fallback">
-                        <p><strong>Vista previa de PDF no disponible directamente en este visor.</strong></p>
-                        <p>Haga clic en el botón <strong>Descargar</strong> en la parte superior para abrir el archivo PDF completo ({{ $attachment->original_name }}).</p>
+                        <p><strong>El archivo PDF está listo para descarga.</strong></p>
+                        <p>Haga clic en el siguiente botón para abrir o guardar <strong>{{ $attachment->original_name }}</strong>:</p>
+                        <a href="data:{{ $attachment->mime_type }};base64,{{ $base64 }}"
+                           download="{{ $attachment->original_name }}"
+                           class="btn-download-primary">
+                            Descargar {{ $attachment->original_name }}
+                        </a>
                     </div>
                 </object>
             @else
                 <div class="fallback">
                     <p>Archivo adjunto listo para descarga: <strong>{{ $attachment->original_name }}</strong> ({{ $attachment->mime_type }}).</p>
-                    <p>Utilice el botón <strong>Descargar</strong> en la barra superior.</p>
+                    <a href="data:{{ $attachment->mime_type }};base64,{{ $base64 }}"
+                       download="{{ $attachment->original_name }}"
+                       class="btn-download-primary">
+                        Descargar {{ $attachment->original_name }}
+                    </a>
                 </div>
             @endif
         </div>
