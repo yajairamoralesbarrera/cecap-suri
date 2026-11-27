@@ -143,6 +143,18 @@
                     <td>Motivo: {{ $enrollment->exception_reason }} · Fecha compromiso: {{ $enrollment->exception_commitment_date?->format('d/m/Y') }}</td>
                 </tr>
             @endif
+            @if($enrollment->reenrollment_authorized || filled($enrollment->reenrollment_reason))
+                <tr>
+                    <th>Re-inscripción</th>
+                    <td>
+                        @if($enrollment->reenrollment_authorized)
+                            Autorizada · Motivo: {{ $enrollment->reenrollment_reason }}
+                        @else
+                            Pendiente de autorización · Motivo: {{ $enrollment->reenrollment_reason }}
+                        @endif
+                    </td>
+                </tr>
+            @endif
         </table>
     </div>
 

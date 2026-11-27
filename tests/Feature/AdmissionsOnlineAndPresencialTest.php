@@ -1024,6 +1024,180 @@ it('validates identification_number format according to identification_type and 
         ->assertHasErrors('identification_type');
 });
 
+it('allows re-enrollment in the same course/program/subject when previously unapproved, requiring authorization with reason Curso anteriormente sin aprobar', function () {
+    $admin = User::where('email', 'superadmin@cecap.or.cr')->firstOrFail();
+    $edition1 = createSampleEdition('curso_corto');
+    $course = $edition1->course;
+
+    // Segunda cohorte del MISMO curso
+    $edition2 = CourseEdition::create([
+        'course_id' => $course->id,
+        'code' => 'ED-REINS-2',
+        'name' => 'Cohorte Re-inscripción 2',
+        'shift_id' => $edition1->shift_id,
+        'modality_id' => $edition1->modality_id,
+        'start_date' => '2026-10-01',
+        'end_date' => '2026-12-15',
+        'max_capacity' => 20,
+        'enrollment_fee' => 15000,
+        'monthly_fee' => 25000,
+        'installments_count' => 2,
+        'status' => 'abierta',
+        'is_public_enrollment_open' => true,
+        'created_by' => $admin->id,
+    ]);
+
+    // 1. Inscribir y confirmar a Sofía en Cohorte 1, luego marcarla como Sin Aprobar en Seguimiento
+    $sofia = Student::create([
+        'student_code' => Student::nextCode(),
+        'first_name' => 'Sofía',
+        'last_name' => 'Vargas',
+        'identification_type' => 'cedula_nacional',
+        'identification_number' => '1-9600-0001',
+        'email' => 'sofia.vargas@correo.com',
+        'phone' => '8800-9601',
+        'gender' => 'femenino',
+        'birth_date' => '1994-05-20',
+        'education_level' => 'bachillerato_secundaria',
+    ]);
+
+    $this->actingAs($admin);
+    $priorEnr = app(EnrollmentService::class)->createPresencialEnrollment($sofia, $edition1, ['cedula_dimex'], true);
+
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\TrackingPage::class)
+        ->call('markEnrollmentUnapproved', $priorEnr->id)
+        ->assertHasNoErrors();
+
+    expect($priorEnr->fresh()->status)->toBe('reprobada');
+
+    // 2. Matrícula Presencial en Cohorte 2 del mismo curso:
+    // Sin marcar autorización -> bloqueada exigiendo autorización y motivo
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->set('tab', 'enroll')
+        ->set('course_edition_id', $edition2->id)
+        ->set('identification_number', '1-9600-0001')
+        ->assertSet('duplicateCourseBlocked', false)
+        ->assertSet('priorUnapprovedDetected', true)
+        ->set('first_name', 'Sofía')
+        ->set('last_name', 'Vargas')
+        ->set('email', 'sofia.vargas@correo.com')
+        ->set('phone', '8800-9601')
+        ->set('birth_date', '1994-05-20')
+        ->call('createPresencialEnrollment')
+        ->assertHasErrors('reenrollment_reason')
+        // Con autorización marcada y motivo "Curso anteriormente sin aprobar" -> permitida y auditada
+        ->set('authorize_reenrollment', true)
+        ->set('reenrollment_reason', 'Curso anteriormente sin aprobar')
+        ->call('createPresencialEnrollment')
+        ->assertHasNoErrors();
+
+    $newPresencial = Enrollment::where('student_id', $sofia->id)
+        ->where('course_edition_id', $edition2->id)
+        ->firstOrFail();
+    expect($newPresencial->status)->toBe('confirmada');
+    expect($newPresencial->reenrollment_authorized)->toBeTrue();
+    expect($newPresencial->reenrollment_reason)->toBe('Curso anteriormente sin aprobar');
+    expect(AuditLog::where('event', 'enrollment.reenrollment_authorized')->where('auditable_id', (string) $newPresencial->id)->exists())->toBeTrue();
+
+    // 3. Caso por MATERIA sin aprobar en programa técnico + Inscripción en Línea -> requiere autorización al Confirmar
+    $techEd1 = createSampleEdition('curso_tecnico');
+    $techCourse = $techEd1->course;
+    $subject = \App\Models\CourseSubject::create([
+        'course_id' => $techCourse->id,
+        'code' => 'MAT-101',
+        'name' => 'Contabilidad Básica',
+        'credits_or_hours' => 40,
+        'order_index' => 1,
+        'is_active' => true,
+    ]);
+    $techEd2 = CourseEdition::create([
+        'course_id' => $techCourse->id,
+        'code' => 'ED-TECH-REINS-2',
+        'name' => 'Cohorte Técnica 2',
+        'shift_id' => $techEd1->shift_id,
+        'modality_id' => $techEd1->modality_id,
+        'start_date' => '2026-10-01',
+        'end_date' => '2026-12-20',
+        'max_capacity' => 20,
+        'enrollment_fee' => 20000,
+        'monthly_fee' => 30000,
+        'installments_count' => 3,
+        'status' => 'abierta',
+        'is_public_enrollment_open' => true,
+        'created_by' => $admin->id,
+    ]);
+
+    $diana = Student::create([
+        'student_code' => Student::nextCode(),
+        'first_name' => 'Diana',
+        'last_name' => 'Salas',
+        'identification_type' => 'cedula_nacional',
+        'identification_number' => '1-9600-0002',
+        'email' => 'diana.salas@correo.com',
+        'phone' => '8800-9602',
+        'gender' => 'femenino',
+        'birth_date' => '1993-08-12',
+        'education_level' => 'bachillerato_secundaria',
+    ]);
+    $dianaPrior = app(EnrollmentService::class)->createPresencialEnrollment($diana, $techEd1, ['cedula_dimex', 'atestado_academico'], true);
+
+    // Registrar nota reprobada (50 < 70) en la materia Contabilidad Básica
+    \App\Models\GradeRecord::create([
+        'enrollment_id' => $dianaPrior->id,
+        'student_id' => $diana->id,
+        'course_subject_id' => $subject->id,
+        'evaluation_name' => 'Examen Final',
+        'score' => 50,
+        'weight_percent' => 100,
+        'version' => 1,
+        'is_current' => true,
+        'recorded_by' => $admin->id,
+    ]);
+
+    // Inscripción en línea en Cohorte Técnica 2 -> permitida (no bloquea como duplicado) y muestra aviso de autorización pendiente
+    Livewire::test(PublicEnrollmentPage::class)
+        ->set('course_edition_id', $techEd2->id)
+        ->set('identification_type', 'cedula_nacional')
+        ->set('identification_number', '1-9600-0002')
+        ->assertSet('duplicateCourseBlocked', false)
+        ->assertSee('Curso anteriormente sin aprobar')
+        ->set('first_name', 'Diana')
+        ->set('last_name', 'Salas')
+        ->set('email', 'diana.salas@correo.com')
+        ->set('phone', '8800-9602')
+        ->set('birth_date', '1993-08-12')
+        ->set('education_level', 'bachillerato_secundaria')
+        ->call('submit')
+        ->assertHasNoErrors();
+
+    $dianaOnline = Enrollment::where('student_id', $diana->id)
+        ->where('course_edition_id', $techEd2->id)
+        ->firstOrFail();
+    expect($dianaOnline->reenrollment_authorized)->toBeFalse();
+    expect($dianaOnline->reenrollment_reason)->toBe('Curso anteriormente sin aprobar');
+
+    // En Cola de Admisiones -> Confirmar exige autorización explícita antes de confirmar
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->call('startConfirmEnrollment', $dianaOnline->id)
+        ->assertSet('confirm_needs_reenrollment', true)
+        ->set('confirm_docs', ['cedula_dimex', 'atestado_academico'])
+        ->call('submitConfirmation')
+        ->assertHasErrors('confirm_reenrollment_reason')
+        ->set('confirm_authorize_reenrollment', true)
+        ->set('confirm_reenrollment_reason', 'Curso anteriormente sin aprobar — Materia Contabilidad Básica')
+        ->call('submitConfirmation')
+        ->assertHasNoErrors();
+
+    $dianaOnline->refresh();
+    expect($dianaOnline->status)->toBe('confirmada');
+    expect($dianaOnline->reenrollment_authorized)->toBeTrue();
+    expect($dianaOnline->reenrollment_reason)->toBe('Curso anteriormente sin aprobar — Materia Contabilidad Básica');
+});
+
+
 
 
 

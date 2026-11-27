@@ -191,6 +191,46 @@ class TrackingPage extends Component
         $this->feedback = 'Calificación registrada correctamente.';
     }
 
+    public function markEnrollmentUnapproved(int $enrollmentId): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('seguimiento.grades.manage'), 403);
+
+        $enr = Enrollment::with(['student', 'edition.course'])->findOrFail($enrollmentId);
+        if ($enr->status === 'graduada') {
+            $this->addError('grade_enrollment_id', 'No se puede marcar como sin aprobar una matrícula ya graduada.');
+
+            return;
+        }
+
+        $oldStatus = $enr->status;
+        $enr->update([
+            'status' => 'reprobada',
+            'updated_by' => Auth::id(),
+        ]);
+
+        \App\Models\StudentLifecycleEvent::create([
+            'student_id' => $enr->student_id,
+            'enrollment_id' => $enr->id,
+            'event_type' => 'curso_sin_aprobar',
+            'from_status' => $oldStatus,
+            'to_status' => 'reprobada',
+            'description' => sprintf('Matrícula %s marcada como Sin Aprobar (Reprobada) en %s. Podrá re-inscribirse posteriormente con autorización.', $enr->enrollment_code, $enr->edition?->course?->name ?? 'el curso'),
+            'recorded_by' => Auth::id(),
+            'created_at' => now(),
+        ]);
+
+        AuditService::log(
+            event: 'tracking.enrollment_marked_unapproved',
+            module: 'seguimiento',
+            auditable: $enr,
+            oldValues: ['status' => $oldStatus],
+            newValues: ['status' => 'reprobada'],
+            reason: Enrollment::DEFAULT_REENROLLMENT_REASON
+        );
+
+        $this->feedback = sprintf('Matrícula %s (%s) marcada como Sin Aprobar (Reprobada). La alumna podrá inscribirse nuevamente con autorización.', $enr->enrollment_code, $enr->student?->full_name);
+    }
+
     public function startRectifyGrade(int $gradeId): void
     {
         $grade = GradeRecord::findOrFail($gradeId);
@@ -294,8 +334,8 @@ class TrackingPage extends Component
 
         $editionEnrollments = $this->selected_edition_id
             ? Enrollment::where('course_edition_id', $this->selected_edition_id)
-                ->whereIn('status', ['confirmada', 'en_curso', 'finalizada'])
-                ->with(['student', 'gradeRecords.subject'])
+                ->whereIn('status', ['confirmada', 'en_curso', 'finalizada', 'reprobada'])
+                ->with(['student', 'gradeRecords.subject', 'attendanceRecords', 'edition.course'])
                 ->get()
             : collect();
 

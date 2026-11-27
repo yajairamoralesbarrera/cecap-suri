@@ -336,6 +336,10 @@
                     <div role="alert" class="rounded-xl border-2 border-rose-400 bg-rose-50 p-4 text-sm font-semibold text-rose-900">
                         {{ $duplicateCourseMessage }}
                     </div>
+                @elseif($priorUnapprovedNotice !== '')
+                    <div role="status" class="rounded-xl border-2 border-amber-400 bg-amber-50 p-4 text-sm font-medium text-amber-950">
+                        {{ $priorUnapprovedNotice }}
+                    </div>
                 @endif
 
                 @if($genderBlocked)

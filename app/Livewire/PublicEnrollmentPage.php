@@ -93,6 +93,8 @@ class PublicEnrollmentPage extends Component
 
     public string $duplicateCourseMessage = '';
 
+    public string $priorUnapprovedNotice = '';
+
     public bool $isWaitlistMode = false;
 
     public string $waitlistNotice = '';
@@ -214,6 +216,7 @@ class PublicEnrollmentPage extends Component
     {
         $this->duplicateCourseBlocked = false;
         $this->duplicateCourseMessage = '';
+        $this->priorUnapprovedNotice = '';
 
         if (! $this->course_edition_id || trim($this->identification_number) === '') {
             return;
@@ -230,20 +233,31 @@ class PublicEnrollmentPage extends Component
         }
 
         $existing = $student->activeEnrollmentInCourse((int) $edition->course_id);
-        if (! $existing) {
+        if ($existing) {
+            $this->duplicateCourseBlocked = true;
+            $this->duplicateCourseMessage = sprintf(
+                'La cédula %s (%s) ya tiene una inscripción activa en el curso "%s" (cohorte %s, solicitud %s, estado: %s). No se permite duplicar la inscripción en el mismo curso.',
+                $student->identification_number,
+                $student->full_name,
+                $edition->course?->name ?? 'este curso',
+                $existing->edition?->name ?? 'cohorte vigente',
+                $existing->enrollment_code,
+                strtoupper(str_replace('_', ' ', (string) $existing->status))
+            );
+
             return;
         }
 
-        $this->duplicateCourseBlocked = true;
-        $this->duplicateCourseMessage = sprintf(
-            'La cédula %s (%s) ya tiene una inscripción activa en el curso "%s" (cohorte %s, solicitud %s, estado: %s). No se permite duplicar la inscripción en el mismo curso.',
-            $student->identification_number,
-            $student->full_name,
-            $edition->course?->name ?? 'este curso',
-            $existing->edition?->name ?? 'cohorte vigente',
-            $existing->enrollment_code,
-            strtoupper(str_replace('_', ' ', (string) $existing->status))
-        );
+        $priorUnapproved = $student->priorUnapprovedEnrollmentInCourse((int) $edition->course_id);
+        if ($priorUnapproved) {
+            $this->priorUnapprovedNotice = sprintf(
+                'Se detectó un registro previo sin aprobar en "%s" (solicitud %s: %s). Puede enviar esta nueva inscripción; quedará registrada para autorización en Admisiones con el motivo: "%s".',
+                $edition->course?->name ?? 'este curso',
+                $priorUnapproved->enrollment_code,
+                $priorUnapproved->unapprovedSummary(),
+                Enrollment::DEFAULT_REENROLLMENT_REASON
+            );
+        }
     }
 
     protected function evaluateCapacityRequirement(): void

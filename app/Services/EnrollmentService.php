@@ -47,7 +47,9 @@ class EnrollmentService
 
         $this->scheduleConflicts->assertStudentHasNoScheduleConflict($student, $edition);
 
-        return DB::transaction(function () use ($student, $edition, $submittedDocuments, $notes, $settings): Enrollment {
+        $priorUnapproved = $student->priorUnapprovedEnrollmentInCourse((int) $edition->course_id);
+
+        return DB::transaction(function () use ($student, $edition, $submittedDocuments, $notes, $settings, $priorUnapproved): Enrollment {
             $lockedEdition = CourseEdition::with('course')->whereKey($edition->id)->lockForUpdate()->firstOrFail();
             $isWaitlist = $lockedEdition->availableSeats() <= 0;
 
@@ -69,11 +71,23 @@ class EnrollmentService
                 'required_documents_snapshot' => array_values($requiredDocs),
                 'submitted_documents' => $submitted,
                 'documents_complete' => $docsComplete,
+                'reenrollment_authorized' => false,
+                'reenrollment_reason' => $priorUnapproved ? Enrollment::DEFAULT_REENROLLMENT_REASON : null,
                 'capacity_decision_code' => $isWaitlist ? 'lista_espera' : null,
                 'notes' => $notes,
                 'created_by' => Auth::id(),
                 'updated_by' => Auth::id(),
             ]);
+
+            $baseDesc = $isWaitlist
+                ? sprintf('Cupo máximo alcanzado (%d/%d). Solicitud en línea registrada en Lista de Espera para %s.', $lockedEdition->activeEnrollmentsCount(), (int) $lockedEdition->max_capacity, $edition->name)
+                : ($docsComplete
+                    ? sprintf('Preinscripción en línea provisional (plazo %d días) para %s.', $settings->online_enrollment_provisional_days, $edition->name)
+                    : sprintf('Preinscripción en línea registrada en estado Documentación Pendiente para %s.', $edition->name));
+
+            if ($priorUnapproved) {
+                $baseDesc .= sprintf(' Re-inscripción sujeta a autorización (%s — antecedente %s: %s).', Enrollment::DEFAULT_REENROLLMENT_REASON, $priorUnapproved->enrollment_code, $priorUnapproved->unapprovedSummary());
+            }
 
             StudentLifecycleEvent::create([
                 'student_id' => $student->id,
@@ -81,14 +95,12 @@ class EnrollmentService
                 'event_type' => $isWaitlist ? 'lista_espera_en_linea' : 'preinscripcion_en_linea',
                 'from_status' => null,
                 'to_status' => $status,
-                'description' => $isWaitlist
-                    ? sprintf('Cupo máximo alcanzado (%d/%d). Solicitud en línea registrada en Lista de Espera para %s.', $lockedEdition->activeEnrollmentsCount(), (int) $lockedEdition->max_capacity, $edition->name)
-                    : ($docsComplete
-                        ? sprintf('Preinscripción en línea provisional (plazo %d días) para %s.', $settings->online_enrollment_provisional_days, $edition->name)
-                        : sprintf('Preinscripción en línea registrada en estado Documentación Pendiente para %s.', $edition->name)),
+                'description' => $baseDesc,
                 'metadata' => [
                     'missing_documents' => array_values($missing),
                     'waitlist' => $isWaitlist,
+                    'prior_unapproved_enrollment_id' => $priorUnapproved?->id,
+                    'requires_reenrollment_authorization' => $priorUnapproved !== null,
                 ],
                 'recorded_by' => Auth::id(),
                 'created_at' => now(),
@@ -98,7 +110,7 @@ class EnrollmentService
                 event: $isWaitlist ? 'enrollment.waitlisted_online' : 'enrollment.online_created',
                 module: 'admisiones',
                 auditable: $enrollment,
-                newValues: $enrollment->only(['enrollment_code', 'student_id', 'course_edition_id', 'status', 'documents_complete', 'capacity_decision_code'])
+                newValues: $enrollment->only(['enrollment_code', 'student_id', 'course_edition_id', 'status', 'documents_complete', 'capacity_decision_code', 'reenrollment_reason'])
             );
 
             return $enrollment;
@@ -185,7 +197,9 @@ class EnrollmentService
         ?string $capacityDecisionNotes = null,
         string $presencialAction = 'inscribir',
         ?string $rejectionReasonCode = null,
-        ?string $rejectionNotes = null
+        ?string $rejectionNotes = null,
+        bool $authorizeReenrollment = false,
+        ?string $reenrollmentReason = null
     ): Enrollment {
         $edition->loadMissing('course');
         $this->assertNotAlreadyEnrolledInCourse($student, $edition);
@@ -195,6 +209,22 @@ class EnrollmentService
             || ($isFull && $capacityDecisionCode === 'rechazar_cupo_lleno');
         $isDirectWaitlist = (! $isFull && $presencialAction === 'lista_espera')
             || ($isFull && $capacityDecisionCode === 'lista_espera');
+
+        $priorUnapproved = $student->priorUnapprovedEnrollmentInCourse((int) $edition->course_id);
+        $cleanReenrollmentReason = filled($reenrollmentReason) ? trim((string) $reenrollmentReason) : null;
+        if (! $isDirectRejection && $priorUnapproved !== null) {
+            if (! $authorizeReenrollment || ! $cleanReenrollmentReason) {
+                throw ValidationException::withMessages([
+                    'reenrollment_reason' => sprintf(
+                        'La alumna tiene una inscripción previa sin aprobar en "%s" (solicitud %s: %s). Para permitir nuevamente su inscripción debe marcar la autorización e indicar el motivo (ej. "%s").',
+                        $edition->course?->name ?? 'este curso',
+                        $priorUnapproved->enrollment_code,
+                        $priorUnapproved->unapprovedSummary(),
+                        Enrollment::DEFAULT_REENROLLMENT_REASON
+                    ),
+                ]);
+            }
+        }
 
         if (! $isDirectRejection && ! $authorizeException && ($eduError = $edition->course?->educationLevelRequirementError($student->education_level))) {
             throw ValidationException::withMessages([
@@ -306,7 +336,10 @@ class EnrollmentService
             $presencialAction,
             $rejectionReasonCode,
             $cleanRejectionNotes,
-            $rejectionPicklistRecord
+            $rejectionPicklistRecord,
+            $priorUnapproved,
+            $authorizeReenrollment,
+            $cleanReenrollmentReason
         ): Enrollment {
             $lockedEdition = CourseEdition::whereKey($edition->id)->lockForUpdate()->firstOrFail();
             $lockedIsFull = $lockedEdition->availableSeats() <= 0;
@@ -357,6 +390,8 @@ class EnrollmentService
                 $rejectedBy = Auth::id();
             }
 
+            $isReenrollmentGranted = $status !== 'rechazada' && $priorUnapproved !== null && $authorizeReenrollment && $cleanReenrollmentReason !== null;
+
             $enrollment = Enrollment::create([
                 'enrollment_code' => Enrollment::nextCode(),
                 'student_id' => $student->id,
@@ -373,6 +408,10 @@ class EnrollmentService
                 'exception_commitment_date' => ($effectiveConfirm && $authorizeException) ? $exceptionCommitmentDate : null,
                 'exception_authorized_by' => ($effectiveConfirm && $authorizeException) ? Auth::id() : null,
                 'exception_authorized_at' => ($effectiveConfirm && $authorizeException) ? now() : null,
+                'reenrollment_authorized' => $isReenrollmentGranted,
+                'reenrollment_reason' => $isReenrollmentGranted ? $cleanReenrollmentReason : null,
+                'reenrollment_authorized_by' => $isReenrollmentGranted ? Auth::id() : null,
+                'reenrollment_authorized_at' => $isReenrollmentGranted ? now() : null,
                 'rejection_reason_code' => $finalRejectionReasonCode,
                 'rejection_notes' => $finalRejectionNotes,
                 'rejected_at' => $rejectedAt,
@@ -391,6 +430,7 @@ class EnrollmentService
                 $status === 'lista_espera' => 'lista_espera_presencial',
                 $status === 'rechazada' => 'solicitud_rechazada',
                 $lockedIsFull && $capacityDecisionCode === 'autorizar_sobrecupo' => 'sobrecupo_autorizado',
+                $isReenrollmentGranted => 'reinscripcion_autorizada_sin_aprobar',
                 $effectiveConfirm => 'matricula_confirmada',
                 default => 'solicitud_presencial',
             };
@@ -399,6 +439,7 @@ class EnrollmentService
                 $lockedIsFull && $decisionRecord !== null => sprintf('Decisión presencial por cupo lleno (%s)%s', $decisionRecord->label, $cleanCapacityNotes ? ': '.$cleanCapacityNotes : '.'),
                 $status === 'rechazada' && $rejectionPicklistRecord !== null => sprintf('Solicitud presencial rechazada (%s)%s', $rejectionPicklistRecord->label, $cleanRejectionNotes ? ': '.$cleanRejectionNotes : '.'),
                 $status === 'lista_espera' => sprintf('Solicitante registrada presencialmente en Lista de Espera para %s.', $edition->name),
+                $isReenrollmentGranted => sprintf('Re-inscripción autorizada para %s (antecedente %s). Motivo: %s', $edition->name, $priorUnapproved->enrollment_code, $cleanReenrollmentReason),
                 $effectiveConfirm && $authorizeException => sprintf('Matrícula confirmada por excepción documental (compromiso: %s). Motivo: %s', $exceptionCommitmentDate, $exceptionReason),
                 default => sprintf('Matrícula presencial registrada en estado %s para %s.', $status, $edition->name),
             };
@@ -412,6 +453,9 @@ class EnrollmentService
                 'description' => $lifecycleDesc,
                 'metadata' => [
                     'exception_authorized' => $effectiveConfirm && $authorizeException,
+                    'reenrollment_authorized' => $isReenrollmentGranted,
+                    'reenrollment_reason' => $isReenrollmentGranted ? $cleanReenrollmentReason : null,
+                    'prior_unapproved_enrollment_id' => $priorUnapproved?->id,
                     'capacity_decision_code' => $finalCapacityDecision,
                     'rejection_reason_code' => $finalRejectionReasonCode,
                 ],
@@ -423,6 +467,7 @@ class EnrollmentService
                 $status === 'lista_espera' => 'enrollment.presencial_waitlisted',
                 $lockedIsFull && $capacityDecisionCode === 'autorizar_sobrecupo' => 'enrollment.presencial_overcapacity_authorized',
                 $status === 'rechazada' => 'enrollment.rejected',
+                $isReenrollmentGranted => 'enrollment.reenrollment_authorized',
                 $effectiveConfirm && $authorizeException => 'enrollment.confirmed_with_exception',
                 default => 'enrollment.presencial_created',
             };
@@ -431,8 +476,8 @@ class EnrollmentService
                 event: $auditEvent,
                 module: 'admisiones',
                 auditable: $enrollment,
-                newValues: $enrollment->only(['enrollment_code', 'status', 'documents_complete', 'exception_authorized', 'exception_commitment_date', 'capacity_decision_code', 'rejection_reason_code']),
-                reason: $finalRejectionNotes ?: ($cleanCapacityNotes ?: ($authorizeException ? $exceptionReason : ($rejectionPicklistRecord?->label ?: $decisionRecord?->label)))
+                newValues: $enrollment->only(['enrollment_code', 'status', 'documents_complete', 'exception_authorized', 'exception_commitment_date', 'reenrollment_authorized', 'reenrollment_reason', 'capacity_decision_code', 'rejection_reason_code']),
+                reason: $finalRejectionNotes ?: ($cleanCapacityNotes ?: ($isReenrollmentGranted ? $cleanReenrollmentReason : ($authorizeException ? $exceptionReason : ($rejectionPicklistRecord?->label ?: $decisionRecord?->label))))
             );
 
             return $enrollment->fresh(['student', 'edition.course']);
@@ -464,15 +509,36 @@ class EnrollmentService
         array $submittedDocuments,
         bool $authorizeException = false,
         ?string $exceptionReason = null,
-        ?string $exceptionCommitmentDate = null
+        ?string $exceptionCommitmentDate = null,
+        bool $authorizeReenrollment = false,
+        ?string $reenrollmentReason = null
     ): Enrollment {
-        $enrollment->loadMissing('edition');
+        $enrollment->loadMissing(['edition.course', 'student']);
         if ($enrollment->status === 'lista_espera' && $enrollment->edition && $enrollment->edition->availableSeats() <= 0 && ! $authorizeException) {
             throw ValidationException::withMessages([
                 'documents' => sprintf(
                     'No hay cupos disponibles en esta cohorte (%d / %d) para promover desde Lista de Espera. Libere un cupo, amplíe la capacidad de la cohorte o autorice una excepción con motivo y fecha compromiso.',
                     $enrollment->edition->activeEnrollmentsCount(),
                     (int) $enrollment->edition->max_capacity
+                ),
+            ]);
+        }
+
+        $priorUnapproved = ($enrollment->student && $enrollment->edition)
+            ? $enrollment->student->priorUnapprovedEnrollmentInCourse((int) $enrollment->edition->course_id, $enrollment->id)
+            : null;
+        $needsReenrollmentAuth = ! $enrollment->reenrollment_authorized
+            && ($priorUnapproved !== null || filled($enrollment->reenrollment_reason));
+        $cleanReenrollmentReason = filled($reenrollmentReason)
+            ? trim((string) $reenrollmentReason)
+            : (filled($enrollment->reenrollment_reason) ? trim((string) $enrollment->reenrollment_reason) : null);
+
+        if ($needsReenrollmentAuth && (! $authorizeReenrollment || ! $cleanReenrollmentReason)) {
+            throw ValidationException::withMessages([
+                'confirm_reenrollment_reason' => sprintf(
+                    'Esta solicitud corresponde a una alumna con un curso/programa/materia anteriormente sin aprobar%s. Debe marcar la autorización e indicar el motivo (ej. "%s") para confirmar.',
+                    $priorUnapproved ? ' ('.$priorUnapproved->enrollment_code.': '.$priorUnapproved->unapprovedSummary().')' : '',
+                    Enrollment::DEFAULT_REENROLLMENT_REASON
                 ),
             ]);
         }
@@ -505,9 +571,14 @@ class EnrollmentService
             $docsComplete,
             $authorizeException,
             $exceptionReason,
-            $exceptionCommitmentDate
+            $exceptionCommitmentDate,
+            $needsReenrollmentAuth,
+            $authorizeReenrollment,
+            $cleanReenrollmentReason,
+            $priorUnapproved
         ): Enrollment {
             $oldStatus = $enrollment->status;
+            $grantReenrollment = $needsReenrollmentAuth && $authorizeReenrollment && $cleanReenrollmentReason !== null;
 
             $enrollment->update([
                 'status' => 'confirmada',
@@ -520,6 +591,10 @@ class EnrollmentService
                 'exception_commitment_date' => $authorizeException ? $exceptionCommitmentDate : $enrollment->exception_commitment_date,
                 'exception_authorized_by' => $authorizeException ? Auth::id() : $enrollment->exception_authorized_by,
                 'exception_authorized_at' => $authorizeException ? now() : $enrollment->exception_authorized_at,
+                'reenrollment_authorized' => $grantReenrollment ? true : $enrollment->reenrollment_authorized,
+                'reenrollment_reason' => $grantReenrollment ? $cleanReenrollmentReason : $enrollment->reenrollment_reason,
+                'reenrollment_authorized_by' => $grantReenrollment ? Auth::id() : $enrollment->reenrollment_authorized_by,
+                'reenrollment_authorized_at' => $grantReenrollment ? now() : $enrollment->reenrollment_authorized_at,
                 'updated_by' => Auth::id(),
             ]);
 
@@ -527,26 +602,42 @@ class EnrollmentService
                 $this->financeService->generateFeePlanForEnrollment($enrollment);
             }
 
+            $desc = $authorizeException
+                ? sprintf('Matrícula confirmada con excepción documental hasta %s. Motivo: %s', $exceptionCommitmentDate, $exceptionReason)
+                : 'Matrícula presencial confirmada con documentación verificada.';
+            if ($grantReenrollment) {
+                $desc .= sprintf(' Re-inscripción autorizada (motivo: %s).', $cleanReenrollmentReason);
+            }
+
             StudentLifecycleEvent::create([
                 'student_id' => $enrollment->student_id,
                 'enrollment_id' => $enrollment->id,
-                'event_type' => 'matricula_confirmada',
+                'event_type' => $grantReenrollment ? 'reinscripcion_autorizada_sin_aprobar' : 'matricula_confirmada',
                 'from_status' => $oldStatus,
                 'to_status' => 'confirmada',
-                'description' => $authorizeException
-                    ? sprintf('Matrícula confirmada con excepción documental hasta %s. Motivo: %s', $exceptionCommitmentDate, $exceptionReason)
-                    : 'Matrícula presencial confirmada con documentación verificada.',
+                'description' => $desc,
+                'metadata' => $grantReenrollment ? [
+                    'reenrollment_authorized' => true,
+                    'reenrollment_reason' => $cleanReenrollmentReason,
+                    'prior_unapproved_enrollment_id' => $priorUnapproved?->id,
+                ] : null,
                 'recorded_by' => Auth::id(),
                 'created_at' => now(),
             ]);
 
             AuditService::log(
-                event: $authorizeException ? 'enrollment.confirmed_with_exception' : 'enrollment.confirmed',
+                event: $grantReenrollment ? 'enrollment.reenrollment_authorized' : ($authorizeException ? 'enrollment.confirmed_with_exception' : 'enrollment.confirmed'),
                 module: 'admisiones',
                 auditable: $enrollment,
                 oldValues: ['status' => $oldStatus],
-                newValues: ['status' => 'confirmada', 'documents_complete' => $docsComplete, 'exception_authorized' => $authorizeException],
-                reason: $exceptionReason
+                newValues: [
+                    'status' => 'confirmada',
+                    'documents_complete' => $docsComplete,
+                    'exception_authorized' => $authorizeException,
+                    'reenrollment_authorized' => $grantReenrollment || $enrollment->reenrollment_authorized,
+                    'reenrollment_reason' => $grantReenrollment ? $cleanReenrollmentReason : $enrollment->reenrollment_reason,
+                ],
+                reason: $grantReenrollment ? $cleanReenrollmentReason : $exceptionReason
             );
 
             return $enrollment->fresh();

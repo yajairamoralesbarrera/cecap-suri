@@ -62,6 +62,11 @@
                                 <div>
                                     <div class="font-bold text-slate-900">{{ $enr->enrollment_code }} — {{ $enr->edition?->course?->name }}</div>
                                     <div class="text-slate-600">Estado: {{ strtoupper($enr->status) }} · Nota: {{ number_format($enr->calculateFinalGrade(), 1) }} · Asistencia: {{ number_format($enr->calculateAttendancePercent(), 0) }}%</div>
+                                    @if($enr->reenrollment_authorized)
+                                        <div class="text-[11px] font-semibold text-emerald-800">Re-inscripción autorizada: {{ $enr->reenrollment_reason }}</div>
+                                    @elseif(filled($enr->reenrollment_reason))
+                                        <div class="text-[11px] font-semibold text-amber-800">Pendiente autorización: {{ $enr->reenrollment_reason }}</div>
+                                    @endif
                                 </div>
                                 <button type="button" data-pdf-modal-url="{{ route('pdf.planilla', $enr) }}" data-pdf-modal-title="Planilla {{ $enr->enrollment_code }}" class="cecap-btn-primary !min-h-9 !px-3 text-xs">Planilla PDF</button>
                             </div>

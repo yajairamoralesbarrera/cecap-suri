@@ -115,6 +115,34 @@
                     </div>
                     <button type="submit" class="cecap-btn-primary">Guardar Calificación</button>
                 </form>
+
+                @if($selected_edition_id && $editionEnrollments->isNotEmpty())
+                    <div class="cecap-card space-y-2.5">
+                        <h2 class="text-sm font-bold text-slate-900">Estado Académico del Grupo (Aprobación / Reprobación)</h2>
+                        <div class="divide-y divide-slate-100">
+                            @foreach($editionEnrollments as $enr)
+                                <div wire:key="grade-enr-status-{{ $enr->id }}" class="py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                                    <div>
+                                        <span class="font-semibold text-slate-900">{{ $enr->student?->full_name }}</span>
+                                        <span class="text-slate-500">({{ $enr->enrollment_code }})</span>
+                                        · Nota: <strong>{{ number_format($enr->calculateFinalGrade(), 1) }}</strong>
+                                        · Asistencia: <strong>{{ number_format($enr->calculateAttendancePercent(), 0) }}%</strong>
+                                        @if($enr->status === 'reprobada')
+                                            <span class="cecap-badge bg-rose-100 text-rose-900 ml-1">SIN APROBAR (REPROBADA)</span>
+                                        @elseif($enr->isUnapproved())
+                                            <span class="cecap-badge bg-amber-100 text-amber-900 ml-1">Bajo mínimo ({{ $enr->unapprovedSummary() }})</span>
+                                        @endif
+                                    </div>
+                                    @if($enr->status !== 'reprobada' && $enr->status !== 'graduada')
+                                        <button type="button" wire:click="markEnrollmentUnapproved({{ $enr->id }})" class="inline-flex min-h-8 items-center justify-center rounded-xl border border-rose-300 bg-white px-2.5 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 cursor-pointer">
+                                            Marcar Sin Aprobar
+                                        </button>
+                                    @endif
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
             @endif
 
             <div class="cecap-card overflow-x-auto">

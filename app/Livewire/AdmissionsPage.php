@@ -82,6 +82,14 @@ class AdmissionsPage extends Component
 
     public string $duplicateCourseMessage = '';
 
+    public bool $priorUnapprovedDetected = false;
+
+    public string $priorUnapprovedMessage = '';
+
+    public bool $authorize_reenrollment = false;
+
+    public string $reenrollment_reason = Enrollment::DEFAULT_REENROLLMENT_REASON;
+
     public ?int $course_edition_id = null;
 
     public array $submitted_documents = ['cedula_dimex'];
@@ -108,6 +116,14 @@ class AdmissionsPage extends Component
     public string $confirm_exception_reason = '';
 
     public string $confirm_exception_date = '';
+
+    public bool $confirm_needs_reenrollment = false;
+
+    public string $confirm_reenrollment_info = '';
+
+    public bool $confirm_authorize_reenrollment = false;
+
+    public string $confirm_reenrollment_reason = Enrollment::DEFAULT_REENROLLMENT_REASON;
 
     // Rechazo auditado con motivo de picklist y notificación por correo
     public ?int $rejectingEnrollmentId = null;
@@ -255,6 +271,8 @@ class AdmissionsPage extends Component
     {
         $this->duplicateCourseBlocked = false;
         $this->duplicateCourseMessage = '';
+        $this->priorUnapprovedDetected = false;
+        $this->priorUnapprovedMessage = '';
 
         if (! $this->course_edition_id || trim($this->identification_number) === '') {
             return;
@@ -271,20 +289,37 @@ class AdmissionsPage extends Component
         }
 
         $existing = $student->activeEnrollmentInCourse((int) $edition->course_id);
-        if (! $existing) {
+        if ($existing) {
+            $this->duplicateCourseBlocked = true;
+            $this->duplicateCourseMessage = sprintf(
+                'La cédula %s (%s) ya tiene una inscripción activa en el curso "%s" (cohorte %s, solicitud %s, estado: %s). No se permite duplicar la inscripción en el mismo curso.',
+                $student->identification_number,
+                $student->full_name,
+                $edition->course?->name ?? 'este curso',
+                $existing->edition?->name ?? 'cohorte vigente',
+                $existing->enrollment_code,
+                strtoupper(str_replace('_', ' ', (string) $existing->status))
+            );
+
             return;
         }
 
-        $this->duplicateCourseBlocked = true;
-        $this->duplicateCourseMessage = sprintf(
-            'La cédula %s (%s) ya tiene una inscripción activa en el curso "%s" (cohorte %s, solicitud %s, estado: %s). No se permite duplicar la inscripción en el mismo curso.',
-            $student->identification_number,
-            $student->full_name,
-            $edition->course?->name ?? 'este curso',
-            $existing->edition?->name ?? 'cohorte vigente',
-            $existing->enrollment_code,
-            strtoupper(str_replace('_', ' ', (string) $existing->status))
-        );
+        $priorUnapproved = $student->priorUnapprovedEnrollmentInCourse((int) $edition->course_id);
+        if ($priorUnapproved) {
+            $this->priorUnapprovedDetected = true;
+            $this->priorUnapprovedMessage = sprintf(
+                'La alumna %s (%s) tiene una inscripción previa sin aprobar en "%s" (cohorte %s, solicitud %s: %s). Puede inscribirla nuevamente marcando la autorización con el motivo correspondiente.',
+                $student->full_name,
+                $student->identification_number,
+                $edition->course?->name ?? 'este curso',
+                $priorUnapproved->edition?->name ?? 'cohorte anterior',
+                $priorUnapproved->enrollment_code,
+                $priorUnapproved->unapprovedSummary()
+            );
+            if (trim($this->reenrollment_reason) === '') {
+                $this->reenrollment_reason = Enrollment::DEFAULT_REENROLLMENT_REASON;
+            }
+        }
     }
 
     public function updatedProvinceId(): void
@@ -548,6 +583,12 @@ class AdmissionsPage extends Component
             }
         }
 
+        if ($this->authorize_reenrollment && ! Auth::user()->hasEffectivePermission('admisiones.exceptions.authorize')) {
+            $this->addError('reenrollment_reason', 'No tiene permiso para autorizar re-inscripciones por curso anteriormente sin aprobar.');
+
+            return;
+        }
+
         try {
             $enrollment = $enrollmentService->createPresencialEnrollment(
                 student: $student,
@@ -561,7 +602,9 @@ class AdmissionsPage extends Component
                 capacityDecisionNotes: $this->full_capacity_notes ?: null,
                 presencialAction: $this->presencial_action ?: 'inscribir',
                 rejectionReasonCode: $this->presencial_rejection_reason_code ?: null,
-                rejectionNotes: $this->presencial_rejection_notes ?: null
+                rejectionNotes: $this->presencial_rejection_notes ?: null,
+                authorizeReenrollment: $this->authorize_reenrollment,
+                reenrollmentReason: $this->reenrollment_reason ?: null
             );
         } catch (ValidationException $e) {
             foreach ($e->errors() as $k => $msgs) {
@@ -591,6 +634,9 @@ class AdmissionsPage extends Component
             'guardian_email',
             'duplicateCourseBlocked',
             'duplicateCourseMessage',
+            'priorUnapprovedDetected',
+            'priorUnapprovedMessage',
+            'authorize_reenrollment',
             'course_edition_id',
             'attachment_file',
             'authorize_exception',
@@ -611,6 +657,7 @@ class AdmissionsPage extends Component
         $this->attachment_doc_type = 'cedula_dimex';
         $this->confirm_immediately = true;
         $this->presencial_action = 'inscribir';
+        $this->reenrollment_reason = Enrollment::DEFAULT_REENROLLMENT_REASON;
         $this->resetValidation();
 
         $this->feedback = match ($enrollment->status) {
@@ -630,7 +677,7 @@ class AdmissionsPage extends Component
 
     public function startConfirmEnrollment(int $enrollmentId): void
     {
-        $enr = Enrollment::with('student.attachments')->findOrFail($enrollmentId);
+        $enr = Enrollment::with(['student.attachments', 'edition.course'])->findOrFail($enrollmentId);
         $this->rejectingEnrollmentId = null;
         $this->attachingEnrollmentId = null;
         $this->reopeningEnrollmentId = null;
@@ -640,6 +687,20 @@ class AdmissionsPage extends Component
         $this->confirm_exception = false;
         $this->confirm_exception_reason = '';
         $this->confirm_exception_date = now()->addDays(15)->toDateString();
+
+        $priorUnapproved = ($enr->student && $enr->edition)
+            ? $enr->student->priorUnapprovedEnrollmentInCourse((int) $enr->edition->course_id, $enr->id)
+            : null;
+        $this->confirm_needs_reenrollment = ! $enr->reenrollment_authorized
+            && ($priorUnapproved !== null || filled($enr->reenrollment_reason));
+        $this->confirm_reenrollment_info = $priorUnapproved
+            ? sprintf('Antecedente sin aprobar: %s (%s).', $priorUnapproved->enrollment_code, $priorUnapproved->unapprovedSummary())
+            : (filled($enr->reenrollment_reason) ? 'Solicitud marcada para autorización de re-inscripción.' : '');
+        $this->confirm_authorize_reenrollment = false;
+        $this->confirm_reenrollment_reason = filled($enr->reenrollment_reason)
+            ? (string) $enr->reenrollment_reason
+            : Enrollment::DEFAULT_REENROLLMENT_REASON;
+
         $this->resetValidation();
     }
 
@@ -714,8 +775,16 @@ class AdmissionsPage extends Component
             return;
         }
 
+        $this->resetValidation();
+
         if ($this->confirm_exception && ! Auth::user()->hasEffectivePermission('admisiones.exceptions.authorize')) {
             $this->addError('confirm_exception', 'No tiene permiso para autorizar excepciones documentales.');
+
+            return;
+        }
+
+        if ($this->confirm_authorize_reenrollment && ! Auth::user()->hasEffectivePermission('admisiones.exceptions.authorize')) {
+            $this->addError('confirm_reenrollment_reason', 'No tiene permiso para autorizar re-inscripciones por curso anteriormente sin aprobar.');
 
             return;
         }
@@ -728,7 +797,9 @@ class AdmissionsPage extends Component
                 submittedDocuments: $this->confirm_docs,
                 authorizeException: $this->confirm_exception,
                 exceptionReason: $this->confirm_exception_reason ?: null,
-                exceptionCommitmentDate: $this->confirm_exception_date ?: null
+                exceptionCommitmentDate: $this->confirm_exception_date ?: null,
+                authorizeReenrollment: $this->confirm_authorize_reenrollment,
+                reenrollmentReason: $this->confirm_reenrollment_reason ?: null
             );
         } catch (ValidationException $e) {
             foreach ($e->errors() as $k => $msgs) {

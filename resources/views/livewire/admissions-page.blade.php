@@ -57,6 +57,11 @@
                                 @if($enr->capacity_decision_label && $enr->status !== 'rechazada')
                                     <div class="text-[11px] text-indigo-700 font-medium mt-0.5">Cupo: {{ $enr->capacity_decision_label }}</div>
                                 @endif
+                                @if($enr->reenrollment_authorized)
+                                    <div class="text-[11px] text-emerald-800 font-semibold mt-0.5">Re-inscripción autorizada: {{ $enr->reenrollment_reason }}</div>
+                                @elseif(filled($enr->reenrollment_reason))
+                                    <div class="text-[11px] text-amber-800 font-semibold mt-0.5">Pendiente autorización: {{ $enr->reenrollment_reason }}</div>
+                                @endif
                             </td>
                             <td class="py-2.5 pr-3 text-xs">
                                 @if($enr->documents_complete)
@@ -150,6 +155,28 @@
                                                             <input wire:model="confirm_exception_date" type="date" class="cecap-input">
                                                         </div>
                                                     </div>
+                                                @endif
+                                            </div>
+                                        @endif
+
+                                        @if($confirm_needs_reenrollment)
+                                            <div class="rounded-xl border-2 border-amber-400 bg-amber-50 p-4 space-y-3">
+                                                <div class="text-xs font-bold text-amber-950">Autorización requerida — Curso / Programa / Materia anteriormente sin aprobar</div>
+                                                @if($confirm_reenrollment_info !== '')
+                                                    <div class="text-xs text-amber-900">{{ $confirm_reenrollment_info }}</div>
+                                                @endif
+                                                @if(auth()->user()->hasEffectivePermission('admisiones.exceptions.authorize'))
+                                                    <label class="inline-flex items-center gap-2 text-sm font-semibold text-amber-950 cursor-pointer">
+                                                        <input type="checkbox" wire:model.live="confirm_authorize_reenrollment" class="h-4 w-4 rounded text-accent-600">
+                                                        <span>Autorizar nueva inscripción por curso / programa / materia anteriormente sin aprobar</span>
+                                                    </label>
+                                                    <div>
+                                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Motivo de autorización *</label>
+                                                        <input wire:model="confirm_reenrollment_reason" type="text" class="cecap-input" placeholder="Curso anteriormente sin aprobar">
+                                                        @error('confirm_reenrollment_reason') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                                                    </div>
+                                                @else
+                                                    <div class="text-xs font-semibold text-rose-800">Su usuario no tiene permiso para autorizar re-inscripciones. Solicite autorización a Secretaría o Dirección.</div>
                                                 @endif
                                             </div>
                                         @endif
@@ -534,6 +561,23 @@
                 @if($duplicateCourseBlocked)
                     <div role="alert" class="rounded-xl border-2 border-rose-400 bg-rose-50 p-4 text-sm font-semibold text-rose-900">
                         {{ $duplicateCourseMessage }}
+                    </div>
+                @elseif($priorUnapprovedDetected)
+                    <div role="status" class="rounded-xl border-2 border-amber-400 bg-amber-50 p-4 space-y-3">
+                        <div class="text-sm font-semibold text-amber-950">{{ $priorUnapprovedMessage }}</div>
+                        @if(auth()->user()->hasEffectivePermission('admisiones.exceptions.authorize'))
+                            <label class="inline-flex items-center gap-2 text-sm font-semibold text-amber-950 cursor-pointer">
+                                <input type="checkbox" wire:model.live="authorize_reenrollment" class="h-4 w-4 rounded text-accent-600">
+                                <span>Autorizar nueva inscripción (Curso anteriormente sin aprobar)</span>
+                            </label>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Motivo de autorización *</label>
+                                <input wire:model="reenrollment_reason" type="text" class="cecap-input" placeholder="Curso anteriormente sin aprobar">
+                                @error('reenrollment_reason') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                            </div>
+                        @else
+                            <div class="text-xs font-semibold text-rose-800">Su usuario no tiene permiso para autorizar re-inscripciones. Solicite autorización a Secretaría o Dirección.</div>
+                        @endif
                     </div>
                 @endif
 

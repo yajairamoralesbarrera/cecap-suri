@@ -123,7 +123,7 @@ class Student extends Model
     }
 
     /** @var list<string> */
-    public const CONFIRMED_ENROLLMENT_STATUSES = ['confirmada', 'en_curso', 'egresada', 'graduada'];
+    public const CONFIRMED_ENROLLMENT_STATUSES = ['confirmada', 'en_curso', 'egresada', 'graduada', 'reprobada'];
 
     /** @var list<string> */
     public const ACTIVE_COURSE_ENROLLMENT_STATUSES = [
@@ -186,13 +186,40 @@ class Student extends Model
             ->first();
     }
 
-    public function activeEnrollmentInCourse(int $courseId): ?Enrollment
+    public function activeEnrollmentInCourse(int $courseId, ?int $ignoreEnrollmentId = null): ?Enrollment
     {
-        return $this->enrollments()
+        $candidates = $this->enrollments()
             ->whereIn('status', self::ACTIVE_COURSE_ENROLLMENT_STATUSES)
+            ->when($ignoreEnrollmentId, fn ($q) => $q->where('id', '!=', $ignoreEnrollmentId))
             ->whereHas('edition', fn ($q) => $q->where('course_id', $courseId))
-            ->with('edition.course')
-            ->first();
+            ->with(['edition.course', 'gradeRecords.subject', 'attendanceRecords'])
+            ->get();
+
+        foreach ($candidates as $enr) {
+            if (! $enr->isUnapproved()) {
+                return $enr;
+            }
+        }
+
+        return null;
+    }
+
+    public function priorUnapprovedEnrollmentInCourse(int $courseId, ?int $ignoreEnrollmentId = null): ?Enrollment
+    {
+        $candidates = $this->enrollments()
+            ->whereNotIn('status', ['graduada', 'rechazada'])
+            ->when($ignoreEnrollmentId, fn ($q) => $q->where('id', '!=', $ignoreEnrollmentId))
+            ->whereHas('edition', fn ($q) => $q->where('course_id', $courseId))
+            ->with(['edition.course', 'gradeRecords.subject', 'attendanceRecords'])
+            ->get();
+
+        foreach ($candidates as $enr) {
+            if ($enr->isUnapproved()) {
+                return $enr;
+            }
+        }
+
+        return null;
     }
 
     public static function nextCode(): string
