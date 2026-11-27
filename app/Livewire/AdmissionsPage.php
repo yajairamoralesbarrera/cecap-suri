@@ -221,6 +221,7 @@ class AdmissionsPage extends Component
             'email' => ['required', 'email', 'max:255'],
             'phone' => ['required', 'string', 'max:30'],
             'gender' => ['required', 'string', 'max:30'],
+            'education_level' => ['required', 'string', 'max:80'],
             'course_edition_id' => ['required', 'integer', 'exists:course_editions,id'],
             'attachment_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
         ], [
@@ -251,6 +252,7 @@ class AdmissionsPage extends Component
             $student->update([
                 'email' => strtolower(trim($this->email)),
                 'phone' => trim($this->phone),
+                'education_level' => $this->education_level,
                 'updated_by' => Auth::id(),
             ]);
         }

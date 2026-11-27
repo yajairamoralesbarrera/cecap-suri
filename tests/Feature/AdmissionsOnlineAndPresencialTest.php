@@ -127,6 +127,44 @@ it('registers incomplete online pre-enrollment as documentacion_pendiente and se
         ->assertHeader('content-type', 'application/pdf');
 });
 
+it('blocks online pre-enrollment when applicant education level is below course required_education_level', function () {
+    $edition = createSampleEdition('curso_tecnico'); // requires noveno_aprobado (40)
+
+    // Nivel inferior (primaria_completa = 30) debe bloquear en vivo y al enviar
+    Livewire::test(PublicEnrollmentPage::class)
+        ->set('course_edition_id', $edition->id)
+        ->set('gender', 'femenino')
+        ->set('identification_number', '1-4111-9999')
+        ->set('first_name', 'Sofía')
+        ->set('last_name', 'Vargas')
+        ->set('email', 'sofia.vargas@correo.cr')
+        ->set('phone', '8811-9999')
+        ->set('education_level', 'primaria_completa')
+        ->assertSet('educationBlocked', true)
+        ->assertSee('Nivel académico insuficiente para este curso')
+        ->assertSee('Tercer Ciclo aprobado (IX año)')
+        ->call('submit')
+        ->assertHasErrors('education_level');
+
+    expect(Enrollment::count())->toBe(0);
+
+    // Nivel igual al mínimo requerido (noveno_aprobado = 40) debe permitirse
+    Livewire::test(PublicEnrollmentPage::class)
+        ->set('course_edition_id', $edition->id)
+        ->set('gender', 'femenino')
+        ->set('identification_number', '1-4111-9999')
+        ->set('first_name', 'Sofía')
+        ->set('last_name', 'Vargas')
+        ->set('email', 'sofia.vargas@correo.cr')
+        ->set('phone', '8811-9999')
+        ->set('education_level', 'noveno_aprobado')
+        ->assertSet('educationBlocked', false)
+        ->call('submit')
+        ->assertHasNoErrors();
+
+    expect(Enrollment::count())->toBe(1);
+});
+
 it('blocks presencial confirmation when required docs are missing unless audited exception is authorized', function () {
     $admin = User::where('email', 'superadmin@cecap.or.cr')->firstOrFail();
     $this->actingAs($admin);
@@ -141,6 +179,7 @@ it('blocks presencial confirmation when required docs are missing unless audited
         'email' => 'paola.diaz@correo.cr',
         'phone' => '8822-5566',
         'gender' => 'femenino',
+        'education_level' => 'bachillerato_secundaria',
     ]);
 
     $service = app(EnrollmentService::class);

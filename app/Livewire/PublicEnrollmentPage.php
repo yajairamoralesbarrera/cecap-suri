@@ -68,6 +68,10 @@ class PublicEnrollmentPage extends Component
 
     public string $genderBlockedMessage = '';
 
+    public bool $educationBlocked = false;
+
+    public string $educationBlockedMessage = '';
+
     public ?string $successCode = null;
 
     public ?string $successStatus = null;
@@ -89,6 +93,32 @@ class PublicEnrollmentPage extends Component
             $this->genderBlocked = false;
             $this->genderBlockedMessage = '';
         }
+    }
+
+    public function updatedCourseEditionId(): void
+    {
+        $this->evaluateEducationRequirement();
+    }
+
+    public function updatedEducationLevel(): void
+    {
+        $this->evaluateEducationRequirement();
+    }
+
+    protected function evaluateEducationRequirement(): void
+    {
+        if (! $this->course_edition_id) {
+            $this->educationBlocked = false;
+            $this->educationBlockedMessage = '';
+
+            return;
+        }
+
+        $edition = CourseEdition::with('course')->find($this->course_edition_id);
+        $error = $edition?->course?->educationLevelRequirementError($this->education_level);
+
+        $this->educationBlocked = $error !== null;
+        $this->educationBlockedMessage = (string) ($error ?? '');
     }
 
     public function updatedProvinceId(): void
@@ -124,6 +154,7 @@ class PublicEnrollmentPage extends Component
         $this->canton_id = $student->canton_id;
         $this->district_id = $student->district_id;
         $this->address_detail = (string) ($student->address_detail ?? '');
+        $this->evaluateEducationRequirement();
     }
 
     public function submit(EnrollmentService $enrollmentService, AttachmentService $attachmentService): void
@@ -161,6 +192,14 @@ class PublicEnrollmentPage extends Component
         ]);
 
         $edition = CourseEdition::with('course')->findOrFail($this->course_edition_id);
+
+        if ($eduError = $edition->course?->educationLevelRequirementError($this->education_level)) {
+            $this->educationBlocked = true;
+            $this->educationBlockedMessage = $eduError;
+            $this->addError('education_level', $eduError);
+
+            return;
+        }
 
         $student = Student::where('identification_number', trim($this->identification_number))->first();
         if ($student) {
@@ -250,6 +289,8 @@ class PublicEnrollmentPage extends Component
         ]);
         $this->gender = 'femenino';
         $this->genderBlocked = false;
+        $this->educationBlocked = false;
+        $this->educationBlockedMessage = '';
     }
 
     public function render()

@@ -67,6 +67,7 @@ it('prevents a student from enrolling in two overlapping course editions', funct
         'student_code' => Student::nextCode(), 'first_name' => 'Natalia', 'last_name' => 'Gómez',
         'identification_type' => 'cedula_nacional', 'identification_number' => '1-9900-1122',
         'email' => 'natalia.gomez@correo.cr', 'phone' => '8877-6655', 'gender' => 'femenino',
+        'education_level' => 'bachillerato_secundaria',
     ]);
 
     $service = app(EnrollmentService::class);

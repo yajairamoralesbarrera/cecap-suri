@@ -45,4 +45,30 @@ class Picklist extends Model
             ->pluck('label', 'code')
             ->all();
     }
+
+    public static function rankFor(string $groupKey, ?string $code): ?int
+    {
+        if (! filled($code)) {
+            return null;
+        }
+
+        $rank = static::query()
+            ->where('group_key', $groupKey)
+            ->where('code', $code)
+            ->value('sort_order');
+
+        return $rank !== null ? (int) $rank : null;
+    }
+
+    public static function labelFor(string $groupKey, ?string $code): string
+    {
+        if (! filled($code)) {
+            return 'No indicado';
+        }
+
+        return (string) (static::query()
+            ->where('group_key', $groupKey)
+            ->where('code', $code)
+            ->value('label') ?? $code);
+    }
 }

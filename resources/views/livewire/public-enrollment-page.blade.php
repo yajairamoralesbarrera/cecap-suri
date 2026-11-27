@@ -175,7 +175,7 @@
                     </div>
                     <div>
                         <label for="pub_edu" class="block text-sm font-semibold text-slate-700 mb-1">Nivel académico alcanzado *</label>
-                        <select id="pub_edu" wire:model="education_level" class="cecap-input">
+                        <select id="pub_edu" wire:model.live="education_level" class="cecap-input">
                             @foreach($educationLevels as $code => $label)
                                 <option value="{{ $code }}">{{ $label }}</option>
                             @endforeach
@@ -209,6 +209,12 @@
                         </select>
                     </div>
                 </div>
+
+                @if($educationBlocked)
+                    <div role="alert" class="rounded-xl border-2 border-rose-300 bg-rose-50 p-4 text-sm font-semibold text-rose-900">
+                        {{ $educationBlockedMessage }}
+                    </div>
+                @endif
             </div>
 
             {{-- 3. Adjuntos Privados (PDF/JPG/PNG/WebP máx 10MB) --}}
@@ -231,7 +237,7 @@
 
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-slate-200 pt-4">
                 <p class="text-xs text-slate-500">Al enviar, se generará su Planilla de Inscripción PDF descargable e imprimible (enlace seguro válido por {{ $settings->online_enrollment_provisional_days }} días).</p>
-                <button type="submit" @disabled($genderBlocked) class="cecap-btn-primary shrink-0">
+                <button type="submit" @disabled($genderBlocked || $educationBlocked) class="cecap-btn-primary shrink-0">
                     Enviar Preinscripción Provisional
                 </button>
             </div>

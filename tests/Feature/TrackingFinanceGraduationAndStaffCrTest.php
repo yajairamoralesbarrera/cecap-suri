@@ -60,6 +60,7 @@ it('handles finance scholarships preserving gross amount, REC receipts, audited 
         'student_code' => Student::nextCode(), 'first_name' => 'Sofía', 'last_name' => 'Salas',
         'identification_type' => 'cedula_nacional', 'identification_number' => '1-5000-6000',
         'email' => 'sofia.salas@correo.cr', 'phone' => '8855-6677', 'gender' => 'femenino',
+        'education_level' => 'bachillerato_secundaria',
     ]);
 
     $enrollment = app(EnrollmentService::class)->createPresencialEnrollment($student, $edition, ['cedula_dimex'], true);

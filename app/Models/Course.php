@@ -70,4 +70,40 @@ class Course extends Model
     {
         return config('cecap.program_types.'.$this->program_type, $this->program_type);
     }
+
+    public function meetsRequiredEducationLevel(?string $studentEducationLevel): bool
+    {
+        $required = (string) ($this->required_education_level ?? 'sin_requisito');
+        if ($required === '' || $required === 'sin_requisito') {
+            return true;
+        }
+
+        $requiredRank = Picklist::rankFor('education_level', $required);
+        if ($requiredRank === null) {
+            return true;
+        }
+
+        $studentRank = Picklist::rankFor('education_level', $studentEducationLevel);
+        if ($studentRank === null) {
+            return false;
+        }
+
+        return $studentRank >= $requiredRank;
+    }
+
+    public function educationLevelRequirementError(?string $studentEducationLevel): ?string
+    {
+        if ($this->meetsRequiredEducationLevel($studentEducationLevel)) {
+            return null;
+        }
+
+        $requiredLabel = Picklist::labelFor('education_level', $this->required_education_level);
+        $studentLabel = Picklist::labelFor('education_level', $studentEducationLevel);
+
+        return sprintf(
+            'Nivel académico insuficiente para este curso: se requiere como mínimo «%s» y el nivel indicado es «%s».',
+            $requiredLabel,
+            $studentLabel
+        );
+    }
 }

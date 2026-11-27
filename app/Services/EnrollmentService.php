@@ -32,6 +32,13 @@ class EnrollmentService
             ]);
         }
 
+        $edition->loadMissing('course');
+        if ($eduError = $edition->course?->educationLevelRequirementError($student->education_level)) {
+            throw ValidationException::withMessages([
+                'education_level' => $eduError,
+            ]);
+        }
+
         if ($edition->availableSeats() <= 0) {
             throw ValidationException::withMessages([
                 'course_edition_id' => 'Esta edición no cuenta con cupos disponibles.',
@@ -97,6 +104,13 @@ class EnrollmentService
         ?string $exceptionCommitmentDate = null,
         ?string $notes = null
     ): Enrollment {
+        $edition->loadMissing('course');
+        if (! $authorizeException && ($eduError = $edition->course?->educationLevelRequirementError($student->education_level))) {
+            throw ValidationException::withMessages([
+                'education_level' => $eduError.' Si Dirección autoriza una excepción, marque la casilla de excepción e indique motivo y fecha compromiso.',
+            ]);
+        }
+
         if ($edition->availableSeats() <= 0) {
             throw ValidationException::withMessages([
                 'course_edition_id' => 'Esta edición no cuenta con cupos disponibles.',
