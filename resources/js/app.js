@@ -102,8 +102,11 @@
         pdfUrl.searchParams.delete('vista');
 
         if (titleEl) titleEl.textContent = title || 'Documento Oficial CeCap';
-        if (downloadBtn) downloadBtn.setAttribute('href', dlUrl.toString());
-        if (openTabBtn) openTabBtn.setAttribute('href', pdfUrl.toString());
+        if (downloadBtn) {
+            downloadBtn.setAttribute('href', dlUrl.toString());
+            downloadBtn.dataset.pdfFilename = ((title || 'Documento-CeCap').replace(/[^\w\-]+/g, '-')) + '.pdf';
+        }
+        if (openTabBtn) openTabBtn.setAttribute('href', htmlUrl.toString());
         modal.dataset.currentUrl = pdfUrl.toString();
         modal.dataset.currentHtmlUrl = htmlUrl.toString();
 
@@ -114,6 +117,70 @@
 
         modal.classList.remove('hidden');
         modal.classList.add('flex');
+    }
+
+    function extractFilename(contentDisposition, fallback) {
+        if (contentDisposition) {
+            const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;\n]+)/i);
+            if (utf8Match && utf8Match[1]) {
+                try {
+                    return decodeURIComponent(utf8Match[1].trim());
+                } catch {
+                    return utf8Match[1].trim();
+                }
+            }
+            const asciiMatch = contentDisposition.match(/filename="?([^";\n]+)"?/i);
+            if (asciiMatch && asciiMatch[1]) {
+                return asciiMatch[1].trim();
+            }
+        }
+        return fallback || 'documento-cecap.pdf';
+    }
+
+    async function downloadViaBlob(url, fallbackFilename, triggerEl) {
+        if (!url || url === '#') return;
+        const rawParsed = new URL(url, window.location.origin);
+        const normalized = new URL(rawParsed.pathname + rawParsed.search + rawParsed.hash, window.location.origin);
+
+        const prevText = triggerEl ? triggerEl.textContent : null;
+        if (triggerEl) {
+            triggerEl.setAttribute('aria-busy', 'true');
+            triggerEl.textContent = 'Descargando...';
+        }
+
+        try {
+            const resp = await fetch(normalized.toString(), {
+                credentials: 'same-origin',
+            });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+            const contentType = resp.headers.get('Content-Type') || 'application/octet-stream';
+            const filename = extractFilename(resp.headers.get('Content-Disposition'), fallbackFilename);
+            const buffer = await resp.arrayBuffer();
+            const blob = new Blob([buffer], { type: contentType });
+            const blobUrl = URL.createObjectURL(blob);
+
+            const tempLink = document.createElement('a');
+            tempLink.href = blobUrl;
+            tempLink.download = filename;
+            tempLink.style.display = 'none';
+            document.body.appendChild(tempLink);
+            tempLink.click();
+            document.body.removeChild(tempLink);
+
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+        } catch {
+            // Fallback seguro: abrir vista HTML imprimible si la descarga directa falla
+            const fallbackUrl = new URL(normalized.toString());
+            fallbackUrl.searchParams.delete('descargar');
+            fallbackUrl.searchParams.set('vista', 'html');
+            window.open(fallbackUrl.toString(), '_blank', 'noopener');
+        } finally {
+            if (triggerEl && prevText !== null) {
+                triggerEl.removeAttribute('aria-busy');
+                triggerEl.textContent = prevText;
+            }
+        }
     }
 
     async function switchPdfModalToBlob() {
@@ -129,7 +196,8 @@
                 credentials: 'same-origin',
             });
             if (!resp.ok) throw new Error('PDF fetch failed');
-            const blob = await resp.blob();
+            const buffer = await resp.arrayBuffer();
+            const blob = new Blob([buffer], { type: 'application/pdf' });
             if (activeBlobUrl) URL.revokeObjectURL(activeBlobUrl);
             activeBlobUrl = URL.createObjectURL(blob);
             frame.src = activeBlobUrl;
@@ -214,6 +282,21 @@
             return;
         }
 
+        const pdfDownloadTrigger = e.target.closest('#cecap-pdf-download, [data-pdf-download-url]');
+        if (pdfDownloadTrigger) {
+            e.preventDefault();
+            const targetUrl = pdfDownloadTrigger.dataset.pdfDownloadUrl || pdfDownloadTrigger.getAttribute('href');
+            downloadViaBlob(targetUrl, pdfDownloadTrigger.dataset.pdfFilename || 'documento-cecap.pdf', pdfDownloadTrigger);
+            return;
+        }
+
+        const binaryLink = e.target.closest('a[href*="/adjuntos/"], a[href*="/direccion/exportar/"]');
+        if (binaryLink) {
+            e.preventDefault();
+            downloadViaBlob(binaryLink.getAttribute('href'), '', binaryLink);
+            return;
+        }
+
         if (e.target.closest('[data-pdf-modal-close]')) {
             closePdfModal();
             return;
@@ -222,8 +305,12 @@
         if (e.target.closest('#cecap-pdf-mode-html')) {
             const modal = document.getElementById('cecap-pdf-modal');
             const frame = document.getElementById('cecap-pdf-frame');
+            const modeHtmlBtn = document.getElementById('cecap-pdf-mode-html');
+            const modeBlobBtn = document.getElementById('cecap-pdf-mode-blob');
             if (modal && frame && modal.dataset.currentHtmlUrl) {
                 frame.src = modal.dataset.currentHtmlUrl;
+                if (modeHtmlBtn) modeHtmlBtn.setAttribute('aria-pressed', 'true');
+                if (modeBlobBtn) modeBlobBtn.setAttribute('aria-pressed', 'false');
             }
             return;
         }

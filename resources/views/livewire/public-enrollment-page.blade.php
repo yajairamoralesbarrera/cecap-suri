@@ -53,7 +53,10 @@
                             class="cecap-btn-primary">
                         Ver / Imprimir Planilla de Inscripción PDF
                     </button>
-                    <a href="{{ $signedPlanillaUrl }}&descargar=1" class="cecap-btn-secondary">
+                    <a href="{{ $signedPlanillaUrl }}&descargar=1"
+                       data-pdf-download-url="{{ $signedPlanillaUrl }}&descargar=1"
+                       data-pdf-filename="Planilla-{{ $successCode }}.pdf"
+                       class="cecap-btn-secondary">
                         Descargar Planilla PDF
                     </a>
                 @endif
