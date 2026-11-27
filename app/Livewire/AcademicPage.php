@@ -245,14 +245,22 @@ class AcademicPage extends Component
 
     public function updatedCourseProgramType(string $value): void
     {
-        // Atestados requeridos por defecto SOLO en Cursos Técnicos
+        // Atestados requeridos por defecto SOLO en Cursos Técnicos (en Programa es opcional)
         $this->course_required_documents = Course::defaultRequiredDocumentsFor($value);
+
+        // Ajustar prefijo sugerido (MOD-01 para Programa, MAT-01 para Curso Técnico) si aún está vacío
+        if (count($this->technical_subjects) === 1 && trim((string) ($this->technical_subjects[0]['name'] ?? '')) === '') {
+            $this->technical_subjects[0]['code'] = $value === 'programa' ? 'MOD-01' : 'MAT-01';
+        }
     }
 
     public function addTechnicalSubjectRow(): void
     {
-        $idx = count($this->technical_subjects) + 1;
-        $this->technical_subjects[] = ['code' => sprintf('MAT-%02d', $idx), 'name' => '', 'hours' => 40, 'sessions_count' => 10];
+        $prefix = $this->course_program_type === 'programa' ? 'MOD-' : 'MAT-';
+        $usedCodes = array_column($this->technical_subjects, 'code');
+        $lastCode = ! empty($usedCodes) ? (string) end($usedCodes) : $prefix.'00';
+        $nextCode = CourseSubject::nextIncrementalCode(null, $lastCode, $usedCodes);
+        $this->technical_subjects[] = ['code' => $nextCode, 'name' => '', 'hours' => 40, 'sessions_count' => 10];
     }
 
     public function removeTechnicalSubjectRow(int $index): void
@@ -430,6 +438,12 @@ class AcademicPage extends Component
                 return;
             }
 
+            if ($this->course_program_type === 'programa' && $course->subjects()->count() === 0) {
+                $this->addError('course_program_type', 'Para cambiar este registro a Programa debe agregar al menos un módulo usando "+ Módulos".');
+
+                return;
+            }
+
             // El código del curso se mantiene inmutable al editar para conservar integridad y evitar duplicados
             $course->update([
                 'academic_category_id' => $this->course_category_id,
@@ -466,7 +480,7 @@ class AcademicPage extends Component
             return;
         }
 
-        // Materias obligatorias al crear Cursos Técnicos
+        // Materias obligatorias al crear Cursos Técnicos y Módulos obligatorios al crear Programas
         $cleanSubjects = collect($this->technical_subjects)
             ->filter(fn ($row) => trim((string) ($row['name'] ?? '')) !== '')
             ->values();
@@ -477,7 +491,15 @@ class AcademicPage extends Component
             return;
         }
 
-        $course = DB::transaction(function () use ($docs, $cleanSubjects): Course {
+        if ($this->course_program_type === 'programa' && $cleanSubjects->isEmpty()) {
+            $this->addError('technical_subjects', 'Los Programas son por módulo y requieren registrar al menos un módulo obligatorio al momento de creación.');
+
+            return;
+        }
+
+        $unitPrefix = $this->course_program_type === 'programa' ? 'MOD-' : 'MAT-';
+
+        $course = DB::transaction(function () use ($docs, $cleanSubjects, $unitPrefix): Course {
             $course = Course::create([
                 'academic_category_id' => $this->course_category_id,
                 'code' => strtoupper(trim($this->course_code)),
@@ -497,7 +519,7 @@ class AcademicPage extends Component
             foreach ($cleanSubjects as $idx => $sub) {
                 CourseSubject::create([
                     'course_id' => $course->id,
-                    'code' => strtoupper(trim((string) ($sub['code'] ?: sprintf('MAT-%02d', $idx + 1)))),
+                    'code' => strtoupper(trim((string) ($sub['code'] ?: sprintf('%s%02d', $unitPrefix, $idx + 1)))),
                     'name' => trim((string) $sub['name']),
                     'hours' => max(1, (int) ($sub['hours'] ?? 20)),
                     'sessions_count' => max(1, (int) ($sub['sessions_count'] ?? 1)),
@@ -511,9 +533,12 @@ class AcademicPage extends Component
         });
 
         AuditService::log('academic.course_created', 'academico', $course, null, $course->only(['code', 'name', 'program_type', 'default_max_capacity', 'required_documents']));
+        $createdType = $this->course_program_type;
         $this->reset(['course_code', 'course_name', 'course_description']);
-        $this->technical_subjects = [['code' => 'MAT-01', 'name' => '', 'hours' => 40, 'sessions_count' => 10]];
-        $this->feedback = 'Curso registrado exitosamente.';
+        $this->technical_subjects = [['code' => $createdType === 'programa' ? 'MOD-01' : 'MAT-01', 'name' => '', 'hours' => 40, 'sessions_count' => 10]];
+        $this->feedback = $createdType === 'programa'
+            ? 'Programa por módulos registrado exitosamente.'
+            : 'Curso registrado exitosamente.';
     }
 
     public function startDuplicateCourse(int $courseId): void
@@ -565,15 +590,16 @@ class AcademicPage extends Component
     public function updatedDupProgramType(string $value): void
     {
         $this->dup_required_documents = Course::defaultRequiredDocumentsFor($value);
-        if ($value === 'curso_tecnico' && empty($this->dup_subjects)) {
-            $this->dup_subjects = [['code' => 'MAT-01', 'name' => '', 'hours' => 40, 'sessions_count' => 10]];
+        if (in_array($value, ['curso_tecnico', 'programa'], true) && empty($this->dup_subjects)) {
+            $this->dup_subjects = [['code' => $value === 'programa' ? 'MOD-01' : 'MAT-01', 'name' => '', 'hours' => 40, 'sessions_count' => 10]];
         }
     }
 
     public function addDupSubjectRow(): void
     {
+        $prefix = $this->dup_program_type === 'programa' ? 'MOD-' : 'MAT-';
         $usedCodes = array_column($this->dup_subjects, 'code');
-        $lastCode = ! empty($usedCodes) ? (string) end($usedCodes) : 'MAT-00';
+        $lastCode = ! empty($usedCodes) ? (string) end($usedCodes) : $prefix.'00';
         $nextCode = CourseSubject::nextIncrementalCode(null, $lastCode, $usedCodes);
         $this->dup_subjects[] = [
             'code' => $nextCode,
@@ -590,7 +616,8 @@ class AcademicPage extends Component
         }
         $source = $this->dup_subjects[$index];
         $usedCodes = array_column($this->dup_subjects, 'code');
-        $nextCode = CourseSubject::nextIncrementalCode(null, (string) ($source['code'] ?? 'MAT-01'), $usedCodes);
+        $fallback = $this->dup_program_type === 'programa' ? 'MOD-01' : 'MAT-01';
+        $nextCode = CourseSubject::nextIncrementalCode(null, (string) ($source['code'] ?? $fallback), $usedCodes);
         $clone = [
             'code' => $nextCode,
             'name' => (string) ($source['name'] ?? ''),
@@ -651,15 +678,23 @@ class AcademicPage extends Component
             return;
         }
 
-        // Verificar que no haya códigos de materia repetidos dentro del curso duplicado
+        if ($this->dup_program_type === 'programa' && $cleanSubjects->isEmpty()) {
+            $this->addError('dup_subjects', 'Los Programas son por módulo y requieren al menos un módulo registrado.');
+
+            return;
+        }
+
+        $defaultBase = $this->dup_program_type === 'programa' ? 'MOD-00' : 'MAT-00';
+
+        // Verificar que no haya códigos repetidos dentro del curso/programa duplicado
         $seenSubjectCodes = [];
         foreach ($cleanSubjects as $idx => $sub) {
             $subCode = strtoupper(trim((string) ($sub['code'] ?? '')));
             if ($subCode === '') {
-                $subCode = CourseSubject::nextIncrementalCode(null, 'MAT-00', $seenSubjectCodes);
+                $subCode = CourseSubject::nextIncrementalCode(null, $defaultBase, $seenSubjectCodes);
             }
             if (in_array($subCode, $seenSubjectCodes, true)) {
-                $this->addError('dup_subjects', "El código de materia {$subCode} está repetido en la lista. Ajuste o incremente el código antes de guardar.");
+                $this->addError('dup_subjects', "El código {$subCode} está repetido en la lista. Ajuste o incremente el código antes de guardar.");
 
                 return;
             }
@@ -1038,7 +1073,8 @@ class AcademicPage extends Component
         $this->editingSubjectId = null;
         $this->duplicatingSubjectId = null;
         $this->managingSubjectsCourseId = $course->id;
-        $lastCode = $course->subjects->last()?->code ?? 'MAT-00';
+        $defaultBase = $course->program_type === 'programa' ? 'MOD-00' : 'MAT-00';
+        $lastCode = $course->subjects->last()?->code ?? $defaultBase;
         $this->new_sub_code = CourseSubject::nextIncrementalCode($course->id, $lastCode);
         $this->new_sub_name = '';
         $this->new_sub_hours = 40;

@@ -96,8 +96,8 @@
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Tipo de Programa *</label>
                             <select wire:model.live="course_program_type" class="cecap-input">
                                 <option value="curso_corto">Curso Corto</option>
-                                <option value="programa">Programa</option>
-                                <option value="curso_tecnico">Curso Técnico (exige materias + atestados)</option>
+                                <option value="programa">Programa (por módulos)</option>
+                                <option value="curso_tecnico">Curso Técnico (por materias + atestados)</option>
                             </select>
                         </div>
                         <div class="md:col-span-2">
@@ -131,13 +131,13 @@
                             </div>
                         </div>
                         <div class="md:col-span-3">
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Descripción / Perfil del Curso</label>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Descripción / Perfil del Curso o Programa</label>
                             <textarea wire:model="course_description" rows="2" class="cecap-input" placeholder="Descripción opcional del curso o programa"></textarea>
                         </div>
                     </div>
 
                     <div class="rounded-xl bg-slate-50 p-4 space-y-2">
-                        <div class="text-sm font-semibold text-slate-800">Checklist Mínimo de Documentos Requeridos (Configurable por Curso)</div>
+                        <div class="text-sm font-semibold text-slate-800">Checklist Mínimo de Documentos Requeridos (Configurable por Curso o Programa)</div>
                         <div class="flex flex-wrap gap-4 text-sm">
                             @foreach(['cedula_dimex', 'atestado_academico'] as $docKey)
                                 <label class="inline-flex items-center gap-2 cursor-pointer">
@@ -148,20 +148,27 @@
                         </div>
                     </div>
 
-                    @if($course_program_type === 'curso_tecnico')
-                        <div class="rounded-xl border border-amber-300 bg-amber-50/70 p-4 space-y-3">
+                    @if(in_array($course_program_type, ['curso_tecnico', 'programa'], true))
+                        @php $isPrograma = $course_program_type === 'programa'; @endphp
+                        <div class="rounded-xl border {{ $isPrograma ? 'border-brand-300 bg-brand-50/70' : 'border-amber-300 bg-amber-50/70' }} p-4 space-y-3">
                             <div class="flex flex-wrap items-center justify-between gap-2">
                                 <div>
-                                    <div class="text-sm font-bold text-amber-950">Materias Obligatorias del Curso Técnico *</div>
-                                    <div class="text-xs text-amber-800">Debe definir al menos una materia para crear un Curso Técnico. En Horas y Sesiones ingrese únicamente números.</div>
+                                    <div class="text-sm font-bold {{ $isPrograma ? 'text-brand-950' : 'text-amber-950' }}">
+                                        {{ $isPrograma ? 'Módulos del Programa *' : 'Materias Obligatorias del Curso Técnico *' }}
+                                    </div>
+                                    <div class="text-xs {{ $isPrograma ? 'text-brand-800' : 'text-amber-800' }}">
+                                        {{ $isPrograma ? 'Los Programas son por módulo: defina al menos un módulo (MOD-01, MOD-02...). En Horas y Sesiones ingrese únicamente números.' : 'Debe definir al menos una materia para crear un Curso Técnico. En Horas y Sesiones ingrese únicamente números.' }}
+                                    </div>
                                 </div>
-                                <button type="button" wire:click="addTechnicalSubjectRow" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">+ Agregar Materia</button>
+                                <button type="button" wire:click="addTechnicalSubjectRow" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">
+                                    {{ $isPrograma ? '+ Agregar Módulo' : '+ Agregar Materia' }}
+                                </button>
                             </div>
 
                             {{-- Encabezados claros de columnas en escritorio --}}
-                            <div class="hidden sm:grid sm:grid-cols-12 gap-2 px-1 text-[11px] font-bold uppercase tracking-wide text-amber-950">
+                            <div class="hidden sm:grid sm:grid-cols-12 gap-2 px-1 text-[11px] font-bold uppercase tracking-wide {{ $isPrograma ? 'text-brand-950' : 'text-amber-950' }}">
                                 <div class="sm:col-span-2">Código</div>
-                                <div class="sm:col-span-5">Nombre de la Materia *</div>
+                                <div class="sm:col-span-5">{{ $isPrograma ? 'Nombre del Módulo *' : 'Nombre de la Materia *' }}</div>
                                 <div class="sm:col-span-2">Horas (solo #)</div>
                                 <div class="sm:col-span-2">N.° Sesiones</div>
                                 <div class="sm:col-span-1 text-center">Quitar</div>
@@ -170,23 +177,23 @@
                             @foreach($technical_subjects as $idx => $subj)
                                 <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end" wire:key="tech-subj-{{ $idx }}">
                                     <div class="sm:col-span-2">
-                                        <label class="block sm:hidden text-xs font-semibold text-amber-950 mb-1">Código</label>
-                                        <input wire:model="technical_subjects.{{ $idx }}.code" type="text" class="cecap-input" placeholder="MAT-01">
+                                        <label class="block sm:hidden text-xs font-semibold text-slate-800 mb-1">Código</label>
+                                        <input wire:model="technical_subjects.{{ $idx }}.code" type="text" class="cecap-input" placeholder="{{ $isPrograma ? 'MOD-01' : 'MAT-01' }}">
                                     </div>
                                     <div class="sm:col-span-5">
-                                        <label class="block sm:hidden text-xs font-semibold text-amber-950 mb-1">Nombre de la Materia *</label>
-                                        <input wire:model="technical_subjects.{{ $idx }}.name" type="text" class="cecap-input" placeholder="Ej. Contabilidad I">
+                                        <label class="block sm:hidden text-xs font-semibold text-slate-800 mb-1">{{ $isPrograma ? 'Nombre del Módulo *' : 'Nombre de la Materia *' }}</label>
+                                        <input wire:model="technical_subjects.{{ $idx }}.name" type="text" class="cecap-input" placeholder="{{ $isPrograma ? 'Ej. Módulo I: Bases de Emprendimiento' : 'Ej. Contabilidad I' }}">
                                     </div>
                                     <div class="sm:col-span-2">
-                                        <label class="block sm:hidden text-xs font-semibold text-amber-950 mb-1">Horas (solo número)</label>
+                                        <label class="block sm:hidden text-xs font-semibold text-slate-800 mb-1">Horas (solo número)</label>
                                         <input wire:model="technical_subjects.{{ $idx }}.hours" type="number" min="1" step="1" class="cecap-input" placeholder="Ej. 60">
                                     </div>
                                     <div class="sm:col-span-2">
-                                        <label class="block sm:hidden text-xs font-semibold text-amber-950 mb-1">N.° Sesiones</label>
+                                        <label class="block sm:hidden text-xs font-semibold text-slate-800 mb-1">N.° Sesiones</label>
                                         <input wire:model="technical_subjects.{{ $idx }}.sessions_count" type="number" min="1" step="1" class="cecap-input" placeholder="Ej. 12">
                                     </div>
                                     <div class="sm:col-span-1">
-                                        <button type="button" wire:click="removeTechnicalSubjectRow({{ $idx }})" title="Quitar materia" class="cecap-btn-secondary w-full !px-2 text-xs">✕</button>
+                                        <button type="button" wire:click="removeTechnicalSubjectRow({{ $idx }})" title="{{ $isPrograma ? 'Quitar módulo' : 'Quitar materia' }}" class="cecap-btn-secondary w-full !px-2 text-xs">✕</button>
                                     </div>
                                 </div>
                             @endforeach
@@ -194,7 +201,9 @@
                     @endif
 
                     <div class="flex flex-wrap gap-2">
-                        <button type="submit" class="cecap-btn-primary">Guardar Curso</button>
+                        <button type="submit" class="cecap-btn-primary">
+                            {{ $course_program_type === 'programa' ? 'Guardar Programa' : 'Guardar Curso' }}
+                        </button>
                     </div>
                 </form>
             @endif
@@ -205,12 +214,12 @@
                     <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
                         <tr>
                             <th class="py-2 pr-3">Código</th>
-                            <th class="py-2 pr-3">Curso</th>
+                            <th class="py-2 pr-3">Curso / Programa</th>
                             <th class="py-2 pr-3">Tipo</th>
                             <th class="py-2 pr-3">Nivel Previo</th>
                             <th class="py-2 pr-3">Cap. Defecto</th>
                             <th class="py-2 pr-3">Checklist</th>
-                            <th class="py-2 pr-3">Materias (Horas / Sesiones)</th>
+                            <th class="py-2 pr-3">Materias / Módulos</th>
                             <th class="py-2">Acciones</th>
                         </tr>
                     </thead>
@@ -219,6 +228,7 @@
                             @php
                                 $courseEnrolledCount = $c->totalEnrollmentsCount();
                                 $courseActiveCount = $c->activeEnrollmentsCount();
+                                $cIsPrograma = $c->program_type === 'programa';
                             @endphp
                             <tr wire:key="course-row-{{ $c->id }}" class="{{ ($editingCourseId === $c->id || $duplicatingCourseId === $c->id || $closingCourseId === $c->id || $deletingCourseId === $c->id || ($managingCourse && $managingCourse->id === $c->id)) ? 'bg-slate-50/80' : '' }}">
                                 <td class="py-2.5 pr-3 font-mono text-xs font-bold">
@@ -242,7 +252,7 @@
                                 </td>
                                 <td class="py-2.5 pr-3 text-xs">
                                     @if($c->subjects->isNotEmpty())
-                                        <div class="font-semibold text-slate-800">{{ $c->subjects->count() }} materia(s)</div>
+                                        <div class="font-semibold text-slate-800">{{ $c->subjects->count() }} {{ $cIsPrograma ? 'módulo(s)' : 'materia(s)' }}</div>
                                         @foreach($c->subjects as $sub)
                                             <div class="text-[11px] text-slate-600">{{ $sub->code }} · {{ $sub->name }} ({{ $sub->hours }} h · {{ $sub->sessions_count }} ses.)</div>
                                         @endforeach
@@ -255,7 +265,7 @@
                                         <div class="flex flex-wrap gap-1.5">
                                             <button type="button" wire:click="editCourse({{ $c->id }})" class="cecap-btn-secondary !min-h-9 !px-2.5 text-xs">Editar</button>
                                             <button type="button" wire:click="startDuplicateCourse({{ $c->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-indigo-300 bg-indigo-50 px-2.5 text-xs font-semibold text-indigo-800 hover:bg-indigo-100 cursor-pointer">Duplicar</button>
-                                            <button type="button" wire:click="openCourseSubjects({{ $c->id }})" class="cecap-btn-secondary !min-h-9 !px-2.5 text-xs">+ Materias</button>
+                                            <button type="button" wire:click="openCourseSubjects({{ $c->id }})" class="cecap-btn-secondary !min-h-9 !px-2.5 text-xs">{{ $cIsPrograma ? '+ Módulos' : '+ Materias' }}</button>
                                             @if($c->isClosed())
                                                 <button type="button" wire:click="reopenClosedCourse({{ $c->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-emerald-400 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 cursor-pointer">Reabrir</button>
                                             @else

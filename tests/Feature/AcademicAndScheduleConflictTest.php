@@ -58,6 +58,29 @@ it('requires mandatory subjects when creating a Technical course and sets Atesta
         ->test(AcademicPage::class)
         ->set('ed_course_id', $course->id)
         ->assertSet('ed_max_capacity', 22);
+
+    // Programa es por módulo: bloquea si no tiene módulos, sugiere MOD-01, pide solo cédula por defecto (con atestados opcional)
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->set('course_category_id', $cat->id)
+        ->set('course_code', 'PROG-01')
+        ->set('course_name', 'Programa de Emprendimiento')
+        ->set('course_program_type', 'programa')
+        ->assertSet('technical_subjects.0.code', 'MOD-01')
+        ->assertSet('course_required_documents', ['cedula_dimex'])
+        ->call('createCourse')
+        ->assertHasErrors('technical_subjects')
+        ->set('technical_subjects', [
+            ['code' => 'MOD-01', 'name' => 'Módulo I: Modelo de Negocio', 'hours' => 24, 'sessions_count' => 6],
+            ['code' => 'MOD-02', 'name' => 'Módulo II: Costos y Ventas', 'hours' => 24, 'sessions_count' => 6],
+        ])
+        ->call('createCourse')
+        ->assertHasNoErrors();
+
+    $programa = Course::where('code', 'PROG-01')->firstOrFail();
+    expect($programa->program_type)->toBe('programa');
+    expect($programa->required_documents)->toBe(['cedula_dimex']);
+    expect($programa->subjects()->pluck('code')->all())->toBe(['MOD-01', 'MOD-02']);
 });
 
 it('blocks overlapping classroom and teacher schedules at PostgreSQL GiST level', function () {
