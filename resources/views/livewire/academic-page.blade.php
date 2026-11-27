@@ -1129,7 +1129,7 @@
                         <select wire:model.live="sch_edition_id" required class="cecap-input">
                             <option value="">-- Seleccione --</option>
                             @foreach($editions as $ed)
-                                <option value="{{ $ed->id }}">{{ $ed->name }}</option>
+                                <option value="{{ $ed->id }}">{{ $ed->name }} ({{ $ed->shift?->name }} · {{ $ed->modality?->name }})</option>
                             @endforeach
                         </select>
                     </div>
@@ -1174,12 +1174,16 @@
             @endif
 
             <div class="cecap-card lg:col-span-2 overflow-x-auto">
-                <h2 class="text-base font-bold text-slate-900 mb-3">Horarios Vigentes Protegidos</h2>
+                <div class="mb-3">
+                    <h2 class="text-base font-bold text-slate-900">Horarios Vigentes Protegidos</h2>
+                    <p class="text-xs text-slate-500 mt-0.5">El bloqueo anti-choque valida coincidencia simultánea de <strong>Turno / Mod. (Tur/Mod)</strong> y <strong>Horario</strong> (día, fechas y horas). Si ambos coinciden se bloquea; si el Tur/Mod o el horario difieren, no hay choque.</p>
+                </div>
                 <table class="w-full text-sm text-left">
                     <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
                         <tr>
                             <th class="py-2 pr-3">Horario</th>
                             <th class="py-2 pr-3">Cohorte</th>
+                            <th class="py-2 pr-3">Tur/Mod</th>
                             <th class="py-2 pr-3">Aula</th>
                             <th class="py-2 pr-3">Profesora</th>
                             @if(auth()->user()->hasEffectivePermission('academico.schedules.manage'))
@@ -1197,6 +1201,7 @@
                                     <div>{{ $sch->edition?->name }}</div>
                                     <div class="text-[11px] text-slate-500">{{ $sch->edition?->course?->name }}</div>
                                 </td>
+                                <td class="py-2.5 pr-3 text-xs">{{ $sch->edition?->shift?->name }} · {{ $sch->edition?->modality?->name }}</td>
                                 <td class="py-2.5 pr-3 text-xs">{{ $sch->classroom?->name ?? 'Virtual' }}</td>
                                 <td class="py-2.5 pr-3 text-xs">{{ $sch->teacher?->name ?? '—' }}</td>
                                 @if($canManageSchedules)
@@ -1210,7 +1215,7 @@
                             </tr>
                             @if($editingScheduleId === $sch->id)
                                 <tr wire:key="schedule-edit-{{ $sch->id }}">
-                                    <td colspan="{{ $canManageSchedules ? 5 : 4 }}" class="py-3 px-1">
+                                    <td colspan="{{ $canManageSchedules ? 6 : 5 }}" class="py-3 px-1">
                                         <form wire:submit="saveScheduleEdit" class="rounded-2xl border-2 border-brand-700 bg-brand-50/60 p-4 space-y-4">
                                             <div class="flex flex-wrap items-center justify-between gap-2">
                                                 <h3 class="text-sm font-bold text-brand-950">Modificar Horario — {{ $sch->formatted_slot }}</h3>
@@ -1230,7 +1235,7 @@
                                                     <label class="block text-xs font-semibold text-slate-700 mb-1">Cohorte *</label>
                                                     <select wire:model="edit_sch_edition_id" required class="cecap-input">
                                                         @foreach($editions as $ed)
-                                                            <option value="{{ $ed->id }}">{{ $ed->name }}</option>
+                                                            <option value="{{ $ed->id }}">{{ $ed->name }} ({{ $ed->shift?->name }} · {{ $ed->modality?->name }})</option>
                                                         @endforeach
                                                     </select>
                                                 </div>
@@ -1279,7 +1284,7 @@
                             @endif
                             @if($deletingScheduleId === $sch->id)
                                 <tr wire:key="schedule-delete-{{ $sch->id }}">
-                                    <td colspan="{{ $canManageSchedules ? 5 : 4 }}" class="py-3 px-1">
+                                    <td colspan="{{ $canManageSchedules ? 6 : 5 }}" class="py-3 px-1">
                                         <form wire:submit="confirmDeleteSchedule" class="rounded-2xl border-2 border-rose-400 bg-rose-50/80 p-4 space-y-3">
                                             <div class="flex flex-wrap items-center justify-between gap-2">
                                                 <div>
@@ -1301,7 +1306,7 @@
                                 </tr>
                             @endif
                         @empty
-                            <tr><td colspan="{{ $canManageSchedules ? 5 : 4 }}" class="py-6 text-center text-slate-500">Sin horarios asignados.</td></tr>
+                            <tr><td colspan="{{ $canManageSchedules ? 6 : 5 }}" class="py-6 text-center text-slate-500">Sin horarios asignados.</td></tr>
                         @endforelse
                     </tbody>
                 </table>

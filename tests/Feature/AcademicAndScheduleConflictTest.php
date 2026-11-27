@@ -653,6 +653,117 @@ it('allows inline editing of schedules with conflict protection and logical dele
         ->assertHasNoErrors();
 });
 
+it('validates both Tur/Mod and Horario for anti-conflict: blocks only when both coincide', function () {
+    $admin = User::where('email', 'superadmin@cecap.or.cr')->firstOrFail();
+    $teacher = User::create([
+        'name' => 'Profa TurMod',
+        'email' => 'turmod.profa@cecap.or.cr',
+        'identification_number' => '1-5888-7777',
+        'phone' => '8888-7777',
+        'password' => Hash::make('ProfaPass2026!'),
+        'must_change_password' => false,
+    ]);
+    $teacher->assignRole('profesora');
+
+    $cat = AcademicCategory::create(['code' => 'CAT-TM', 'name' => 'Área TurMod', 'created_by' => $admin->id]);
+    $course = Course::create([
+        'academic_category_id' => $cat->id, 'code' => 'CUR-TM', 'name' => 'Curso TurMod',
+        'program_type' => 'curso_corto', 'required_education_level' => 'primaria_completa',
+        'default_max_capacity' => 20, 'required_documents' => ['cedula_dimex'], 'created_by' => $admin->id,
+    ]);
+
+    $shifts = AcademicShift::orderBy('id')->get();
+    $shiftA = $shifts->first();
+    $shiftB = $shifts->skip(1)->first() ?? AcademicShift::create(['code' => 'SHIFT-B', 'name' => 'Nocturno B', 'is_active' => true]);
+    $mods = AcademicModality::orderBy('id')->get();
+    $modA = $mods->first();
+    $modB = $mods->skip(1)->first() ?? AcademicModality::create(['code' => 'MOD-B', 'name' => 'Virtual B', 'is_active' => true]);
+
+    $room = Classroom::create(['code' => 'A-TM', 'name' => 'Aula TurMod', 'capacity' => 20]);
+
+    $edBase = CourseEdition::create([
+        'course_id' => $course->id, 'code' => 'ED-TM-1', 'name' => 'Cohorte Matutino Presencial',
+        'shift_id' => $shiftA->id, 'modality_id' => $modA->id, 'classroom_id' => $room->id,
+        'teacher_id' => $teacher->id, 'start_date' => '2026-09-01', 'end_date' => '2026-11-30',
+        'max_capacity' => 20, 'created_by' => $admin->id,
+    ]);
+    $edSameTurMod = CourseEdition::create([
+        'course_id' => $course->id, 'code' => 'ED-TM-2', 'name' => 'Cohorte 2 Matutino Presencial',
+        'shift_id' => $shiftA->id, 'modality_id' => $modA->id, 'classroom_id' => $room->id,
+        'teacher_id' => $teacher->id, 'start_date' => '2026-09-01', 'end_date' => '2026-11-30',
+        'max_capacity' => 20, 'created_by' => $admin->id,
+    ]);
+    $edDiffShift = CourseEdition::create([
+        'course_id' => $course->id, 'code' => 'ED-TM-3', 'name' => 'Cohorte Otro Turno Presencial',
+        'shift_id' => $shiftB->id, 'modality_id' => $modA->id, 'classroom_id' => $room->id,
+        'teacher_id' => $teacher->id, 'start_date' => '2026-09-01', 'end_date' => '2026-11-30',
+        'max_capacity' => 20, 'created_by' => $admin->id,
+    ]);
+    $edDiffMod = CourseEdition::create([
+        'course_id' => $course->id, 'code' => 'ED-TM-4', 'name' => 'Cohorte Matutino Otra Mod',
+        'shift_id' => $shiftA->id, 'modality_id' => $modB->id, 'classroom_id' => $room->id,
+        'teacher_id' => $teacher->id, 'start_date' => '2026-09-01', 'end_date' => '2026-11-30',
+        'max_capacity' => 20, 'created_by' => $admin->id,
+    ]);
+
+    // 1. Crear horario base: Lunes 08:00-11:00 en shiftA + modA
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->set('sch_edition_id', $edBase->id)
+        ->set('sch_classroom_id', $room->id)
+        ->set('sch_teacher_id', $teacher->id)
+        ->set('sch_day_of_week', 1)
+        ->set('sch_start_time', '08:00')
+        ->set('sch_end_time', '11:00')
+        ->call('createSchedule')
+        ->assertHasNoErrors();
+
+    // 2. Mismo Tur/Mod + Horario coincidente -> BLOQUEADO
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->set('sch_edition_id', $edSameTurMod->id)
+        ->set('sch_classroom_id', $room->id)
+        ->set('sch_teacher_id', $teacher->id)
+        ->set('sch_day_of_week', 1)
+        ->set('sch_start_time', '09:00')
+        ->set('sch_end_time', '12:00')
+        ->call('createSchedule')
+        ->assertHasErrors('schedule');
+
+    // 3. Distinto Turno (mismo horario, misma aula, misma profesora) -> PERMITIDO (sin choque)
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->set('sch_edition_id', $edDiffShift->id)
+        ->set('sch_classroom_id', $room->id)
+        ->set('sch_teacher_id', $teacher->id)
+        ->set('sch_day_of_week', 1)
+        ->set('sch_start_time', '08:00')
+        ->set('sch_end_time', '11:00')
+        ->call('createSchedule')
+        ->assertHasNoErrors();
+
+    // 4. Distinta Modalidad (mismo horario, misma aula, misma profesora) -> PERMITIDO (sin choque)
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->set('sch_edition_id', $edDiffMod->id)
+        ->set('sch_classroom_id', $room->id)
+        ->set('sch_teacher_id', $teacher->id)
+        ->set('sch_day_of_week', 1)
+        ->set('sch_start_time', '08:00')
+        ->set('sch_end_time', '11:00')
+        ->call('createSchedule')
+        ->assertHasNoErrors();
+
+    // 5. Intentar cambiar el Turno de edDiffShift para igualarlo a edBase -> BLOQUEADO porque ahora coincidirían Tur/Mod y Horario
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->call('editEdition', $edDiffShift->id)
+        ->set('edit_ed_shift_id', $shiftA->id)
+        ->call('saveEditionEdit')
+        ->assertHasErrors('edit_ed_shift_id');
+});
+
+
 
 
 

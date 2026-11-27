@@ -12,6 +12,8 @@ class EditionSchedule extends Model
 
     protected $fillable = [
         'course_edition_id',
+        'shift_id',
+        'modality_id',
         'classroom_id',
         'teacher_id',
         'day_of_week',
@@ -21,6 +23,22 @@ class EditionSchedule extends Model
         'end_date',
         'is_active',
     ];
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $schedule): void {
+            if ($schedule->course_edition_id && ($schedule->shift_id === null || $schedule->modality_id === null || $schedule->isDirty('course_edition_id'))) {
+                $edition = $schedule->relationLoaded('edition') && (int) $schedule->edition?->id === (int) $schedule->course_edition_id
+                    ? $schedule->edition
+                    : CourseEdition::query()->select(['id', 'shift_id', 'modality_id'])->find($schedule->course_edition_id);
+
+                if ($edition) {
+                    $schedule->shift_id = $edition->shift_id;
+                    $schedule->modality_id = $edition->modality_id;
+                }
+            }
+        });
+    }
 
     protected function casts(): array
     {
@@ -34,6 +52,16 @@ class EditionSchedule extends Model
     public function edition(): BelongsTo
     {
         return $this->belongsTo(CourseEdition::class, 'course_edition_id');
+    }
+
+    public function shift(): BelongsTo
+    {
+        return $this->belongsTo(AcademicShift::class, 'shift_id');
+    }
+
+    public function modality(): BelongsTo
+    {
+        return $this->belongsTo(AcademicModality::class, 'modality_id');
     }
 
     public function classroom(): BelongsTo

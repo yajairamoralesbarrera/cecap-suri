@@ -25,30 +25,53 @@ beforeEach(function () {
     Storage::fake('local');
 });
 
-it('prevents a student from enrolling in two overlapping course editions', function () {
+it('prevents a student from enrolling in two overlapping course editions only when both Tur/Mod and Horario coincide', function () {
     $admin = User::where('email', 'superadmin@cecap.or.cr')->firstOrFail();
     $this->actingAs($admin);
 
     $cat = AcademicCategory::create(['code' => 'CAT-SCH', 'name' => 'Horarios', 'created_by' => $admin->id]);
-    $course = Course::create([
+    $courseA = Course::create([
         'academic_category_id' => $cat->id, 'code' => 'SCH-01', 'name' => 'Curso A',
         'program_type' => 'curso_corto', 'required_education_level' => 'primaria_completa',
         'default_max_capacity' => 20, 'required_documents' => ['cedula_dimex'], 'created_by' => $admin->id,
     ]);
+    $courseB = Course::create([
+        'academic_category_id' => $cat->id, 'code' => 'SCH-02', 'name' => 'Curso B',
+        'program_type' => 'curso_corto', 'required_education_level' => 'primaria_completa',
+        'default_max_capacity' => 20, 'required_documents' => ['cedula_dimex'], 'created_by' => $admin->id,
+    ]);
+    $courseC = Course::create([
+        'academic_category_id' => $cat->id, 'code' => 'SCH-03', 'name' => 'Curso C',
+        'program_type' => 'curso_corto', 'required_education_level' => 'primaria_completa',
+        'default_max_capacity' => 20, 'required_documents' => ['cedula_dimex'], 'created_by' => $admin->id,
+    ]);
+
+    $shifts = AcademicShift::orderBy('id')->get();
+    $shift1 = $shifts->first();
+    $shift2 = $shifts->skip(1)->first() ?? AcademicShift::create(['code' => 'NOC-T', 'name' => 'Nocturno Test', 'is_active' => true]);
+    $mod1 = AcademicModality::orderBy('id')->firstOrFail();
 
     $room1 = Classroom::create(['code' => 'R1', 'name' => 'Aula R1', 'capacity' => 20]);
     $room2 = Classroom::create(['code' => 'R2', 'name' => 'Aula R2', 'capacity' => 20]);
 
     $ed1 = CourseEdition::create([
-        'course_id' => $course->id, 'code' => 'ED-S1', 'name' => 'Edición S1',
-        'shift_id' => AcademicShift::firstOrFail()->id, 'modality_id' => AcademicModality::firstOrFail()->id,
+        'course_id' => $courseA->id, 'code' => 'ED-S1', 'name' => 'Cohorte S1',
+        'shift_id' => $shift1->id, 'modality_id' => $mod1->id,
         'classroom_id' => $room1->id, 'start_date' => '2026-07-01', 'end_date' => '2026-09-30',
         'max_capacity' => 20, 'created_by' => $admin->id,
     ]);
-    $ed2 = CourseEdition::create([
-        'course_id' => $course->id, 'code' => 'ED-S2', 'name' => 'Edición S2',
-        'shift_id' => AcademicShift::firstOrFail()->id, 'modality_id' => AcademicModality::firstOrFail()->id,
+    // Mismo Tur/Mod + Horario superpuesto -> SÍ hay choque
+    $ed2SameTurMod = CourseEdition::create([
+        'course_id' => $courseB->id, 'code' => 'ED-S2', 'name' => 'Cohorte S2',
+        'shift_id' => $shift1->id, 'modality_id' => $mod1->id,
         'classroom_id' => $room2->id, 'start_date' => '2026-07-15', 'end_date' => '2026-09-30',
+        'max_capacity' => 20, 'created_by' => $admin->id,
+    ]);
+    // Distinto Tur/Mod + mismo Horario -> NO hay choque
+    $ed3DiffTurMod = CourseEdition::create([
+        'course_id' => $courseC->id, 'code' => 'ED-S3', 'name' => 'Cohorte S3',
+        'shift_id' => $shift2->id, 'modality_id' => $mod1->id,
+        'classroom_id' => $room1->id, 'start_date' => '2026-07-15', 'end_date' => '2026-09-30',
         'max_capacity' => 20, 'created_by' => $admin->id,
     ]);
 
@@ -58,8 +81,13 @@ it('prevents a student from enrolling in two overlapping course editions', funct
         'start_date' => '2026-07-01', 'end_date' => '2026-09-30', 'is_active' => true,
     ]);
     EditionSchedule::create([
-        'course_edition_id' => $ed2->id, 'classroom_id' => $room2->id,
+        'course_edition_id' => $ed2SameTurMod->id, 'classroom_id' => $room2->id,
         'day_of_week' => 4, 'start_minute' => 600, 'end_minute' => 720,
+        'start_date' => '2026-07-15', 'end_date' => '2026-09-30', 'is_active' => true,
+    ]);
+    EditionSchedule::create([
+        'course_edition_id' => $ed3DiffTurMod->id, 'classroom_id' => $room1->id,
+        'day_of_week' => 4, 'start_minute' => 540, 'end_minute' => 660,
         'start_date' => '2026-07-15', 'end_date' => '2026-09-30', 'is_active' => true,
     ]);
 
@@ -73,8 +101,13 @@ it('prevents a student from enrolling in two overlapping course editions', funct
     $service = app(EnrollmentService::class);
     $service->createPresencialEnrollment($student, $ed1, ['cedula_dimex'], true);
 
-    expect(fn () => $service->createPresencialEnrollment($student, $ed2, ['cedula_dimex'], true))
+    // Mismo Tur/Mod + Horario superpuesto -> bloqueado
+    expect(fn () => $service->createPresencialEnrollment($student, $ed2SameTurMod, ['cedula_dimex'], true))
         ->toThrow(ValidationException::class);
+
+    // Distinto Tur/Mod aunque coincida el horario -> permitido
+    $enr3 = $service->createPresencialEnrollment($student, $ed3DiffTurMod, ['cedula_dimex'], true);
+    expect($enr3->status)->toBe('confirmada');
 });
 
 it('integrates StaffPage editable & uploaded PDF contracts, CR payroll vouchers, and CSV BOM export', function () {

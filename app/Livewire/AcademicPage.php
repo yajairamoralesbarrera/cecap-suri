@@ -1364,14 +1364,14 @@ class AcademicPage extends Component
         $this->resetValidation();
     }
 
-    public function saveEditionEdit(): void
+    public function saveEditionEdit(ScheduleConflictService $conflictService): void
     {
         $this->authorizeManage();
         if (! $this->editingEditionId) {
             return;
         }
 
-        $edition = CourseEdition::with('course')->findOrFail($this->editingEditionId);
+        $edition = CourseEdition::with(['course', 'schedules'])->findOrFail($this->editingEditionId);
         $allowedCategoryIds = $this->scopedCategoryIds();
         if ($allowedCategoryIds !== null && ! in_array((int) $edition->course->academic_category_id, $allowedCategoryIds, true)) {
             $this->addError('edit_ed_name', 'No tiene autorización sobre la categoría de esta cohorte.');
@@ -1401,23 +1401,70 @@ class AcademicPage extends Component
             return;
         }
 
+        $scheduleSyncNeeded = (int) $edition->shift_id !== (int) $this->edit_ed_shift_id
+            || (int) $edition->modality_id !== (int) $this->edit_ed_modality_id
+            || $edition->start_date?->toDateString() !== $this->edit_ed_start_date
+            || $edition->end_date?->toDateString() !== $this->edit_ed_end_date;
+
+        if ($scheduleSyncNeeded && $edition->schedules->isNotEmpty()) {
+            try {
+                foreach ($edition->schedules as $sch) {
+                    $conflictService->assertScheduleHasNoConflicts(
+                        dayOfWeek: (int) $sch->day_of_week,
+                        startMinute: (int) $sch->start_minute,
+                        endMinute: (int) $sch->end_minute,
+                        startDate: $this->edit_ed_start_date,
+                        endDate: $this->edit_ed_end_date,
+                        classroomId: $sch->classroom_id,
+                        teacherId: $sch->teacher_id,
+                        ignoreScheduleId: $sch->id,
+                        shiftId: (int) $this->edit_ed_shift_id,
+                        modalityId: (int) $this->edit_ed_modality_id
+                    );
+                }
+            } catch (ValidationException $e) {
+                $this->addError('edit_ed_shift_id', collect($e->errors())->flatten()->first());
+
+                return;
+            }
+        }
+
         $old = $edition->only(['code', 'name', 'shift_id', 'modality_id', 'classroom_id', 'teacher_id', 'start_date', 'end_date', 'max_capacity', 'enrollment_fee', 'monthly_fee', 'installments_count', 'is_public_enrollment_open']);
 
-        // El código de la cohorte permanece inmutable al editar
-        $edition->update([
-            'name' => trim($this->edit_ed_name),
-            'shift_id' => $this->edit_ed_shift_id,
-            'modality_id' => $this->edit_ed_modality_id,
-            'classroom_id' => $this->edit_ed_classroom_id ?: null,
-            'teacher_id' => $this->edit_ed_teacher_id ?: null,
-            'start_date' => $this->edit_ed_start_date,
-            'end_date' => $this->edit_ed_end_date,
-            'max_capacity' => $this->edit_ed_max_capacity,
-            'enrollment_fee' => $this->edit_ed_enrollment_fee,
-            'monthly_fee' => $this->edit_ed_monthly_fee,
-            'installments_count' => $this->edit_ed_installments_count,
-            'is_public_enrollment_open' => $this->edit_ed_public_open,
-        ]);
+        try {
+            DB::transaction(function () use ($edition, $scheduleSyncNeeded): void {
+                // El código de la cohorte permanece inmutable al editar
+                $edition->update([
+                    'name' => trim($this->edit_ed_name),
+                    'shift_id' => $this->edit_ed_shift_id,
+                    'modality_id' => $this->edit_ed_modality_id,
+                    'classroom_id' => $this->edit_ed_classroom_id ?: null,
+                    'teacher_id' => $this->edit_ed_teacher_id ?: null,
+                    'start_date' => $this->edit_ed_start_date,
+                    'end_date' => $this->edit_ed_end_date,
+                    'max_capacity' => $this->edit_ed_max_capacity,
+                    'enrollment_fee' => $this->edit_ed_enrollment_fee,
+                    'monthly_fee' => $this->edit_ed_monthly_fee,
+                    'installments_count' => $this->edit_ed_installments_count,
+                    'is_public_enrollment_open' => $this->edit_ed_public_open,
+                ]);
+
+                if ($scheduleSyncNeeded) {
+                    foreach ($edition->schedules as $sch) {
+                        $sch->update([
+                            'shift_id' => $this->edit_ed_shift_id,
+                            'modality_id' => $this->edit_ed_modality_id,
+                            'start_date' => $this->edit_ed_start_date,
+                            'end_date' => $this->edit_ed_end_date,
+                        ]);
+                    }
+                }
+            });
+        } catch (QueryException $e) {
+            $this->addError('edit_ed_shift_id', 'Bloqueo PostgreSQL GiST anti-choque: el cambio de Turno/Modalidad o fechas genera un choque de aula o profesora.');
+
+            return;
+        }
 
         AuditService::log('academic.edition_updated', 'academico', $edition, $old, $edition->only(array_keys($old)));
         $this->editingEditionId = null;
@@ -1690,11 +1737,15 @@ class AcademicPage extends Component
                 startDate: $edition->start_date->toDateString(),
                 endDate: $edition->end_date->toDateString(),
                 classroomId: $this->sch_classroom_id ?: null,
-                teacherId: $this->sch_teacher_id ?: null
+                teacherId: $this->sch_teacher_id ?: null,
+                shiftId: (int) $edition->shift_id,
+                modalityId: (int) $edition->modality_id
             );
 
             $schedule = EditionSchedule::create([
                 'course_edition_id' => $edition->id,
+                'shift_id' => $edition->shift_id,
+                'modality_id' => $edition->modality_id,
                 'classroom_id' => $this->sch_classroom_id ?: null,
                 'teacher_id' => $this->sch_teacher_id ?: null,
                 'day_of_week' => $this->sch_day_of_week,
@@ -1709,7 +1760,7 @@ class AcademicPage extends Component
 
             return;
         } catch (QueryException $e) {
-            $this->addError('schedule', 'Bloqueo PostgreSQL GiST anti-choque: el aula o profesora ya tiene un horario superpuesto.');
+            $this->addError('schedule', 'Bloqueo PostgreSQL GiST anti-choque: el aula o profesora ya tiene un horario superpuesto en el mismo Turno/Modalidad.');
 
             return;
         }
@@ -1804,11 +1855,15 @@ class AcademicPage extends Component
                 endDate: $targetEdition->end_date->toDateString(),
                 classroomId: $this->edit_sch_classroom_id ?: null,
                 teacherId: $this->edit_sch_teacher_id ?: null,
-                ignoreScheduleId: $schedule->id
+                ignoreScheduleId: $schedule->id,
+                shiftId: (int) $targetEdition->shift_id,
+                modalityId: (int) $targetEdition->modality_id
             );
 
             $schedule->update([
                 'course_edition_id' => $targetEdition->id,
+                'shift_id' => $targetEdition->shift_id,
+                'modality_id' => $targetEdition->modality_id,
                 'classroom_id' => $this->edit_sch_classroom_id ?: null,
                 'teacher_id' => $this->edit_sch_teacher_id ?: null,
                 'day_of_week' => $this->edit_sch_day_of_week,
@@ -1822,7 +1877,7 @@ class AcademicPage extends Component
 
             return;
         } catch (QueryException $e) {
-            $this->addError('schedule', 'Bloqueo PostgreSQL GiST anti-choque: el aula o profesora ya tiene un horario superpuesto.');
+            $this->addError('schedule', 'Bloqueo PostgreSQL GiST anti-choque: el aula o profesora ya tiene un horario superpuesto en el mismo Turno/Modalidad.');
 
             return;
         }
@@ -1967,7 +2022,7 @@ class AcademicPage extends Component
         $schedulesQuery = EditionSchedule::query()
             ->where('is_active', true)
             ->whereHas('edition.course', fn ($q) => $q->whereNull('archived_at'))
-            ->with(['edition.course', 'classroom', 'teacher'])
+            ->with(['edition.course', 'edition.shift', 'edition.modality', 'classroom', 'teacher'])
             ->orderBy('day_of_week')
             ->orderBy('start_minute');
 
