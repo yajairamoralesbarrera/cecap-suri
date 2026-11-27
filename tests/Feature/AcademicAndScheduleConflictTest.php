@@ -548,6 +548,112 @@ it('allows logical deletion of courses only when 0 students are enrolled, and su
     expect($edition->fresh()->closed_at)->toBeNull();
 });
 
+it('allows inline editing of schedules with conflict protection and logical deletion that releases GiST slots', function () {
+    $admin = User::where('email', 'superadmin@cecap.or.cr')->firstOrFail();
+    $teacher = User::create([
+        'name' => 'Profe Horarios',
+        'email' => 'profehorarios@cecap.or.cr',
+        'identification_number' => '1-6200-0001',
+        'phone' => '8800-7711',
+        'password' => Hash::make('ProfePass2026!'),
+        'must_change_password' => false,
+    ]);
+    $teacher->assignRole('profesora');
+
+    $cat = AcademicCategory::create(['code' => 'CAT-HOR', 'name' => 'Horarios', 'created_by' => $admin->id]);
+    $course = Course::create([
+        'academic_category_id' => $cat->id,
+        'code' => 'CUR-HOR-01',
+        'name' => 'Excel Aplicado',
+        'program_type' => 'curso_corto',
+        'required_education_level' => 'primaria_completa',
+        'default_max_capacity' => 20,
+        'required_documents' => ['cedula_dimex'],
+        'created_by' => $admin->id,
+    ]);
+    $shift = AcademicShift::firstOrFail();
+    $mod = AcademicModality::firstOrFail();
+    $room = Classroom::create(['code' => 'A-HOR', 'name' => 'Aula Horarios', 'capacity' => 20]);
+
+    $ed1 = CourseEdition::create([
+        'course_id' => $course->id, 'code' => 'COH-H1', 'name' => 'Cohorte Mañana',
+        'shift_id' => $shift->id, 'modality_id' => $mod->id, 'classroom_id' => $room->id,
+        'teacher_id' => $teacher->id, 'start_date' => '2026-06-01', 'end_date' => '2026-08-31',
+        'max_capacity' => 20, 'created_by' => $admin->id,
+    ]);
+    $ed2 = CourseEdition::create([
+        'course_id' => $course->id, 'code' => 'COH-H2', 'name' => 'Cohorte Tarde',
+        'shift_id' => $shift->id, 'modality_id' => $mod->id, 'classroom_id' => $room->id,
+        'teacher_id' => $teacher->id, 'start_date' => '2026-06-01', 'end_date' => '2026-08-31',
+        'max_capacity' => 20, 'created_by' => $admin->id,
+    ]);
+
+    $sch1 = EditionSchedule::create([
+        'course_edition_id' => $ed1->id, 'classroom_id' => $room->id, 'teacher_id' => $teacher->id,
+        'day_of_week' => 1, 'start_minute' => 480, 'end_minute' => 600,
+        'start_date' => '2026-06-01', 'end_date' => '2026-08-31', 'is_active' => true,
+    ]);
+    $sch2 = EditionSchedule::create([
+        'course_edition_id' => $ed2->id, 'classroom_id' => $room->id, 'teacher_id' => $teacher->id,
+        'day_of_week' => 2, 'start_minute' => 480, 'end_minute' => 600,
+        'start_date' => '2026-06-01', 'end_date' => '2026-08-31', 'is_active' => true,
+    ]);
+
+    // 1. Intentar modificar sch2 para chocar con sch1 (Lunes 08:30-10:30) debe bloquearse
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->call('startEditSchedule', $sch2->id)
+        ->assertSet('editingScheduleId', $sch2->id)
+        ->set('edit_sch_day_of_week', 1)
+        ->set('edit_sch_start_time', '08:30')
+        ->set('edit_sch_end_time', '10:30')
+        ->call('saveScheduleEdit')
+        ->assertHasErrors('schedule');
+
+    // 2. Modificar sch2 a un horario libre (Miércoles 14:00-16:00) funciona y se audita
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->call('startEditSchedule', $sch2->id)
+        ->set('edit_sch_day_of_week', 3)
+        ->set('edit_sch_start_time', '14:00')
+        ->set('edit_sch_end_time', '16:00')
+        ->call('saveScheduleEdit')
+        ->assertHasNoErrors()
+        ->assertSet('editingScheduleId', null);
+
+    $sch2->refresh();
+    expect($sch2->day_of_week)->toBe(3);
+    expect($sch2->start_minute)->toBe(840);
+    expect($sch2->end_minute)->toBe(960);
+    expect(\App\Models\AuditLog::where('event', 'academic.schedule_updated')->where('auditable_id', (string) $sch2->id)->exists())->toBeTrue();
+
+    // 3. Eliminar lógicamente sch1 lo retira (is_active=false), se audita y libera inmediatamente el bloque en GiST
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->call('startDeleteSchedule', $sch1->id)
+        ->assertSet('deletingScheduleId', $sch1->id)
+        ->set('schedule_delete_reason', 'Reacomodo de horario del grupo')
+        ->call('confirmDeleteSchedule')
+        ->assertHasNoErrors()
+        ->assertSet('deletingScheduleId', null);
+
+    expect($sch1->fresh()->is_active)->toBeFalse();
+    expect(\App\Models\AuditLog::where('event', 'academic.schedule_deleted')->where('auditable_id', (string) $sch1->id)->exists())->toBeTrue();
+
+    // 4. Comprobar que el bloque Lunes 08:00-10:00 quedó libre en PostgreSQL GiST y puede volver a asignarse
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->set('sch_edition_id', $ed2->id)
+        ->set('sch_classroom_id', $room->id)
+        ->set('sch_teacher_id', $teacher->id)
+        ->set('sch_day_of_week', 1)
+        ->set('sch_start_time', '08:00')
+        ->set('sch_end_time', '10:00')
+        ->call('createSchedule')
+        ->assertHasNoErrors();
+});
+
+
 
 
 

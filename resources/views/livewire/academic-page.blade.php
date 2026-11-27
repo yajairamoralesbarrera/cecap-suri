@@ -1177,18 +1177,131 @@
                 <h2 class="text-base font-bold text-slate-900 mb-3">Horarios Vigentes Protegidos</h2>
                 <table class="w-full text-sm text-left">
                     <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
-                        <tr><th class="py-2 pr-3">Horario</th><th class="py-2 pr-3">Cohorte</th><th class="py-2 pr-3">Aula</th><th class="py-2">Profesora</th></tr>
+                        <tr>
+                            <th class="py-2 pr-3">Horario</th>
+                            <th class="py-2 pr-3">Cohorte</th>
+                            <th class="py-2 pr-3">Aula</th>
+                            <th class="py-2 pr-3">Profesora</th>
+                            @if(auth()->user()->hasEffectivePermission('academico.schedules.manage'))
+                                <th class="py-2">Acciones</th>
+                            @endif
+                        </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
+                        @php $canManageSchedules = auth()->user()->hasEffectivePermission('academico.schedules.manage'); @endphp
                         @forelse($schedules as $sch)
-                            <tr>
+                            @php $schPanelOpen = $editingScheduleId === $sch->id || $deletingScheduleId === $sch->id; @endphp
+                            <tr wire:key="schedule-row-{{ $sch->id }}" class="{{ $schPanelOpen ? 'bg-slate-50/80' : '' }}">
                                 <td class="py-2.5 pr-3 font-semibold text-brand-950">{{ $sch->formatted_slot }}</td>
-                                <td class="py-2.5 pr-3">{{ $sch->edition?->name }}</td>
+                                <td class="py-2.5 pr-3">
+                                    <div>{{ $sch->edition?->name }}</div>
+                                    <div class="text-[11px] text-slate-500">{{ $sch->edition?->course?->name }}</div>
+                                </td>
                                 <td class="py-2.5 pr-3 text-xs">{{ $sch->classroom?->name ?? 'Virtual' }}</td>
-                                <td class="py-2.5 text-xs">{{ $sch->teacher?->name ?? '—' }}</td>
+                                <td class="py-2.5 pr-3 text-xs">{{ $sch->teacher?->name ?? '—' }}</td>
+                                @if($canManageSchedules)
+                                    <td class="py-2.5">
+                                        <div class="flex flex-wrap gap-1.5">
+                                            <button type="button" wire:click="startEditSchedule({{ $sch->id }})" class="cecap-btn-secondary !min-h-8 !px-2.5 !py-1 text-xs">Editar</button>
+                                            <button type="button" wire:click="startDeleteSchedule({{ $sch->id }})" class="inline-flex min-h-8 items-center justify-center rounded-xl border border-rose-300 bg-white px-2.5 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 cursor-pointer">Eliminar</button>
+                                        </div>
+                                    </td>
+                                @endif
                             </tr>
+                            @if($editingScheduleId === $sch->id)
+                                <tr wire:key="schedule-edit-{{ $sch->id }}">
+                                    <td colspan="{{ $canManageSchedules ? 5 : 4 }}" class="py-3 px-1">
+                                        <form wire:submit="saveScheduleEdit" class="rounded-2xl border-2 border-brand-700 bg-brand-50/60 p-4 space-y-4">
+                                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                                <h3 class="text-sm font-bold text-brand-950">Modificar Horario — {{ $sch->formatted_slot }}</h3>
+                                                <button type="button" wire:click="cancelEditSchedule" class="cecap-btn-secondary !min-h-8 !px-3 !py-1 text-xs">Cancelar</button>
+                                            </div>
+                                            @if($errors->any())
+                                                <div class="rounded-xl border border-rose-300 bg-white px-3 py-2 text-xs text-rose-800">
+                                                    <ul class="list-disc pl-4 space-y-0.5">
+                                                        @foreach($errors->all() as $error)
+                                                            <li>{{ $error }}</li>
+                                                        @endforeach
+                                                    </ul>
+                                                </div>
+                                            @endif
+                                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Cohorte *</label>
+                                                    <select wire:model="edit_sch_edition_id" required class="cecap-input">
+                                                        @foreach($editions as $ed)
+                                                            <option value="{{ $ed->id }}">{{ $ed->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Aula (bloqueo anti-choque)</label>
+                                                    <select wire:model="edit_sch_classroom_id" class="cecap-input">
+                                                        <option value="">-- Ninguna / Virtual --</option>
+                                                        @foreach($classrooms as $r)
+                                                            <option value="{{ $r->id }}">{{ $r->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Profesora (bloqueo anti-choque)</label>
+                                                    <select wire:model="edit_sch_teacher_id" class="cecap-input">
+                                                        <option value="">-- Ninguna --</option>
+                                                        @foreach($teachers as $t)
+                                                            <option value="{{ $t->id }}">{{ $t->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Día *</label>
+                                                    <select wire:model="edit_sch_day_of_week" class="cecap-input">
+                                                        @foreach($daysOfWeek as $num => $dayName)
+                                                            <option value="{{ $num }}">{{ $dayName }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Hora Inicio *</label>
+                                                    <input wire:model="edit_sch_start_time" type="time" required class="cecap-input">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Hora Fin *</label>
+                                                    <input wire:model="edit_sch_end_time" type="time" required class="cecap-input">
+                                                </div>
+                                            </div>
+                                            <div class="flex flex-wrap gap-2">
+                                                <button type="submit" class="cecap-btn-primary text-xs sm:text-sm">Guardar Cambios del Horario</button>
+                                                <button type="button" wire:click="cancelEditSchedule" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
+                                            </div>
+                                        </form>
+                                    </td>
+                                </tr>
+                            @endif
+                            @if($deletingScheduleId === $sch->id)
+                                <tr wire:key="schedule-delete-{{ $sch->id }}">
+                                    <td colspan="{{ $canManageSchedules ? 5 : 4 }}" class="py-3 px-1">
+                                        <form wire:submit="confirmDeleteSchedule" class="rounded-2xl border-2 border-rose-400 bg-rose-50/80 p-4 space-y-3">
+                                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                                <div>
+                                                    <h3 class="text-sm font-bold text-rose-950">Eliminar Horario — {{ $sch->formatted_slot }}</h3>
+                                                    <p class="text-xs text-rose-900">Se retirará este bloque de la cohorte <strong>{{ $sch->edition?->name }}</strong> y se liberará inmediatamente el aula y la profesora (traza preservada en auditoría).</p>
+                                                </div>
+                                                <button type="button" wire:click="cancelDeleteSchedule" class="cecap-btn-secondary !min-h-8 !px-3 !py-1 text-xs">Cancelar</button>
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Motivo de eliminación (opcional, queda en auditoría)</label>
+                                                <input wire:model="schedule_delete_reason" type="text" class="cecap-input" placeholder="Ej. Cambio de día o ajuste de horario del grupo">
+                                            </div>
+                                            <div class="flex flex-wrap gap-2">
+                                                <button type="submit" class="inline-flex min-h-10 items-center justify-center rounded-xl bg-rose-700 px-4 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-rose-800 cursor-pointer">Confirmar Eliminación de Horario</button>
+                                                <button type="button" wire:click="cancelDeleteSchedule" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
+                                            </div>
+                                        </form>
+                                    </td>
+                                </tr>
+                            @endif
                         @empty
-                            <tr><td colspan="4" class="py-6 text-center text-slate-500">Sin horarios asignados.</td></tr>
+                            <tr><td colspan="{{ $canManageSchedules ? 5 : 4 }}" class="py-6 text-center text-slate-500">Sin horarios asignados.</td></tr>
                         @endforelse
                     </tbody>
                 </table>

@@ -230,6 +230,25 @@ class AcademicPage extends Component
 
     public string $sch_end_time = '11:00';
 
+    // Modificación y eliminación lógica inline de horarios
+    public ?int $editingScheduleId = null;
+
+    public ?int $edit_sch_edition_id = null;
+
+    public ?int $edit_sch_classroom_id = null;
+
+    public ?int $edit_sch_teacher_id = null;
+
+    public int $edit_sch_day_of_week = 1;
+
+    public string $edit_sch_start_time = '08:00';
+
+    public string $edit_sch_end_time = '11:00';
+
+    public ?int $deletingScheduleId = null;
+
+    public string $schedule_delete_reason = '';
+
     // Aula
     public string $room_code = '';
 
@@ -1657,6 +1676,12 @@ class AcademicPage extends Component
         $startMin = EditionSchedule::timeToMinutes($this->sch_start_time);
         $endMin = EditionSchedule::timeToMinutes($this->sch_end_time);
 
+        if ($endMin <= $startMin) {
+            $this->addError('schedule', 'La hora de fin debe ser posterior a la hora de inicio.');
+
+            return;
+        }
+
         try {
             $conflictService->assertScheduleHasNoConflicts(
                 dayOfWeek: $this->sch_day_of_week,
@@ -1691,6 +1716,193 @@ class AcademicPage extends Component
 
         AuditService::log('academic.schedule_created', 'academico', $schedule, null, ['slot' => $schedule->formatted_slot]);
         $this->feedback = 'Horario asignado sin choques de aula ni profesora.';
+    }
+
+    public function startEditSchedule(int $scheduleId): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('academico.schedules.manage'), 403);
+
+        $schedule = EditionSchedule::with('edition.course')->findOrFail($scheduleId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $schedule->edition?->course?->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('schedule', 'No tiene autorización sobre la categoría de este horario.');
+
+            return;
+        }
+
+        $this->deletingScheduleId = null;
+        $this->editingScheduleId = $schedule->id;
+        $this->edit_sch_edition_id = $schedule->course_edition_id;
+        $this->edit_sch_classroom_id = $schedule->classroom_id;
+        $this->edit_sch_teacher_id = $schedule->teacher_id;
+        $this->edit_sch_day_of_week = (int) $schedule->day_of_week;
+        $this->edit_sch_start_time = EditionSchedule::minutesToTime((int) $schedule->start_minute);
+        $this->edit_sch_end_time = EditionSchedule::minutesToTime((int) $schedule->end_minute);
+        $this->resetValidation();
+        $this->feedback = null;
+    }
+
+    public function cancelEditSchedule(): void
+    {
+        $this->editingScheduleId = null;
+        $this->resetValidation();
+    }
+
+    public function saveScheduleEdit(ScheduleConflictService $conflictService): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('academico.schedules.manage'), 403);
+        if (! $this->editingScheduleId) {
+            return;
+        }
+
+        $schedule = EditionSchedule::with('edition.course')->findOrFail($this->editingScheduleId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $schedule->edition?->course?->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('schedule', 'No tiene autorización sobre la categoría de este horario.');
+
+            return;
+        }
+
+        $this->validate([
+            'edit_sch_edition_id' => ['required', 'integer', 'exists:course_editions,id'],
+            'edit_sch_classroom_id' => ['nullable', 'integer', 'exists:classrooms,id'],
+            'edit_sch_teacher_id' => ['nullable', 'integer', 'exists:users,id'],
+            'edit_sch_day_of_week' => ['required', 'integer', 'min:1', 'max:7'],
+            'edit_sch_start_time' => ['required', 'date_format:H:i'],
+            'edit_sch_end_time' => ['required', 'date_format:H:i'],
+        ]);
+
+        $targetEdition = CourseEdition::with('course')->findOrFail($this->edit_sch_edition_id);
+        if ($allowedCategoryIds !== null && ! in_array((int) $targetEdition->course->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('edit_sch_edition_id', 'No tiene autorización sobre la categoría de la cohorte seleccionada.');
+
+            return;
+        }
+
+        $startMin = EditionSchedule::timeToMinutes($this->edit_sch_start_time);
+        $endMin = EditionSchedule::timeToMinutes($this->edit_sch_end_time);
+
+        if ($endMin <= $startMin) {
+            $this->addError('schedule', 'La hora de fin debe ser posterior a la hora de inicio.');
+
+            return;
+        }
+
+        $old = [
+            'course_edition_id' => $schedule->course_edition_id,
+            'classroom_id' => $schedule->classroom_id,
+            'teacher_id' => $schedule->teacher_id,
+            'slot' => $schedule->formatted_slot,
+        ];
+
+        try {
+            $conflictService->assertScheduleHasNoConflicts(
+                dayOfWeek: $this->edit_sch_day_of_week,
+                startMinute: $startMin,
+                endMinute: $endMin,
+                startDate: $targetEdition->start_date->toDateString(),
+                endDate: $targetEdition->end_date->toDateString(),
+                classroomId: $this->edit_sch_classroom_id ?: null,
+                teacherId: $this->edit_sch_teacher_id ?: null,
+                ignoreScheduleId: $schedule->id
+            );
+
+            $schedule->update([
+                'course_edition_id' => $targetEdition->id,
+                'classroom_id' => $this->edit_sch_classroom_id ?: null,
+                'teacher_id' => $this->edit_sch_teacher_id ?: null,
+                'day_of_week' => $this->edit_sch_day_of_week,
+                'start_minute' => $startMin,
+                'end_minute' => $endMin,
+                'start_date' => $targetEdition->start_date->toDateString(),
+                'end_date' => $targetEdition->end_date->toDateString(),
+            ]);
+        } catch (ValidationException $e) {
+            $this->addError('schedule', collect($e->errors())->flatten()->first());
+
+            return;
+        } catch (QueryException $e) {
+            $this->addError('schedule', 'Bloqueo PostgreSQL GiST anti-choque: el aula o profesora ya tiene un horario superpuesto.');
+
+            return;
+        }
+
+        $schedule->refresh();
+        AuditService::log(
+            event: 'academic.schedule_updated',
+            module: 'academico',
+            auditable: $schedule,
+            oldValues: $old,
+            newValues: [
+                'course_edition_id' => $schedule->course_edition_id,
+                'classroom_id' => $schedule->classroom_id,
+                'teacher_id' => $schedule->teacher_id,
+                'slot' => $schedule->formatted_slot,
+            ]
+        );
+
+        $this->cancelEditSchedule();
+        $this->feedback = sprintf('Horario modificado correctamente (%s) sin choques de aula ni profesora.', $schedule->formatted_slot);
+    }
+
+    public function startDeleteSchedule(int $scheduleId): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('academico.schedules.manage'), 403);
+
+        $schedule = EditionSchedule::with('edition.course')->findOrFail($scheduleId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $schedule->edition?->course?->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('schedule', 'No tiene autorización sobre la categoría de este horario.');
+
+            return;
+        }
+
+        $this->editingScheduleId = null;
+        $this->deletingScheduleId = $schedule->id;
+        $this->schedule_delete_reason = '';
+        $this->resetValidation();
+        $this->feedback = null;
+    }
+
+    public function cancelDeleteSchedule(): void
+    {
+        $this->deletingScheduleId = null;
+        $this->schedule_delete_reason = '';
+        $this->resetValidation();
+    }
+
+    public function confirmDeleteSchedule(): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('academico.schedules.manage'), 403);
+        if (! $this->deletingScheduleId) {
+            return;
+        }
+
+        $schedule = EditionSchedule::with('edition.course')->findOrFail($this->deletingScheduleId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $schedule->edition?->course?->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('schedule', 'No tiene autorización sobre la categoría de este horario.');
+
+            return;
+        }
+
+        $slot = $schedule->formatted_slot;
+        $reason = trim($this->schedule_delete_reason) ?: 'Horario eliminado/retirado desde Académico';
+
+        // Retiro lógico (is_active=false): libera inmediatamente aula y profesora en PostgreSQL GiST sin borrado físico
+        $schedule->update(['is_active' => false]);
+
+        AuditService::log(
+            event: 'academic.schedule_deleted',
+            module: 'academico',
+            auditable: $schedule,
+            oldValues: ['is_active' => true, 'slot' => $slot],
+            newValues: ['is_active' => false],
+            reason: $reason
+        );
+
+        $this->cancelDeleteSchedule();
+        $this->feedback = sprintf('Horario %s eliminado y bloque liberado en aula/profesora (traza preservada en auditoría).', $slot);
     }
 
     public function createClassroom(): void
