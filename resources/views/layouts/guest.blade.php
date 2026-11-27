@@ -61,7 +61,7 @@
                     <button type="button" id="cecap-pdf-mode-html" class="cecap-btn-secondary !min-h-9 !px-3 !py-1 text-xs">Vista HTML</button>
                     <button type="button" id="cecap-pdf-mode-blob" class="cecap-btn-secondary !min-h-9 !px-3 !py-1 text-xs">PDF Blob</button>
                     <button type="button" id="cecap-pdf-print" class="cecap-btn-secondary !min-h-9 !px-3 !py-1 text-xs">Imprimir</button>
-                    <a id="cecap-pdf-download" href="#" class="cecap-btn-primary !min-h-9 !px-3 !py-1 text-xs">Descargar PDF</a>
+                    <button type="button" id="cecap-pdf-download" class="cecap-btn-primary !min-h-9 !px-3 !py-1 text-xs">Descargar PDF</button>
                     <a id="cecap-pdf-open-tab" href="#" target="_blank" rel="noopener" class="cecap-btn-secondary !min-h-9 !px-3 !py-1 text-xs">Nueva pestaña</a>
                     <button type="button" data-pdf-modal-close class="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-200 cursor-pointer">✕</button>
                 </div>

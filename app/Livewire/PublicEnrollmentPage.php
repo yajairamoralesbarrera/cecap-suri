@@ -535,10 +535,36 @@ class PublicEnrollmentPage extends Component
             ? $editions->firstWhere('id', $this->course_edition_id)
             : null;
 
+        $planillaPdfDataUri = null;
+        if ($this->createdEnrollmentId) {
+            $createdEnrollment = Enrollment::with([
+                'student.province',
+                'student.canton',
+                'student.district',
+                'edition.course.category',
+                'edition.shift',
+                'edition.modality',
+                'edition.schedules',
+            ])->find($this->createdEnrollmentId);
+
+            if ($createdEnrollment) {
+                $pdfBytes = \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.enrollment-form', [
+                    'enrollment' => $createdEnrollment,
+                    'settings' => $settings,
+                    'documentTypes' => config('cecap.document_types'),
+                    'logoDataUri' => $settings->logoDataUri(),
+                    'isHtmlPreview' => false,
+                ])->setPaper('letter', 'portrait')->output();
+
+                $planillaPdfDataUri = 'data:application/pdf;base64,'.base64_encode($pdfBytes);
+            }
+        }
+
         return view('livewire.public-enrollment-page', [
             'settings' => $settings,
             'editions' => $editions,
             'selectedEdition' => $selectedEdition,
+            'planillaPdfDataUri' => $planillaPdfDataUri,
             'requiredDocs' => $selectedEdition?->course?->required_documents ?? ['cedula_dimex'],
             'documentTypes' => config('cecap.document_types'),
             'idTypes' => Picklist::optionsFor('id_type'),

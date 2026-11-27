@@ -99,10 +99,13 @@
 
     function buildUrlCandidates(rawUrl, setParams = {}, deleteParams = []) {
         const rel = buildRelativePath(rawUrl, setParams, deleteParams);
-        const appBase = getAppBaseUrl().replace(/\/+$/, '');
-        const list = [appBase + rel, rel];
+        const list = [rel];
         if (window.location.origin && window.location.origin !== 'null') {
             list.push(window.location.origin + rel);
+        }
+        const appBase = getAppBaseUrl().replace(/\/+$/, '');
+        if (appBase) {
+            list.push(appBase + rel);
         }
         return [...new Set(list)];
     }
@@ -141,16 +144,14 @@
         const htmlRel = buildRelativePath(url, { vista: 'html' });
         const dlRel = buildRelativePath(url, { descargar: '1' }, ['vista']);
         const pdfRel = buildRelativePath(url, {}, ['vista', 'descargar']);
-        const appBase = getAppBaseUrl().replace(/\/+$/, '');
 
         if (titleEl) titleEl.textContent = title || 'Documento Oficial CeCap';
         if (downloadBtn) {
             downloadBtn.textContent = 'Descargar PDF';
-            downloadBtn.setAttribute('href', appBase + dlRel);
             downloadBtn.dataset.pdfDownloadUrl = dlRel;
             downloadBtn.dataset.pdfFilename = ((title || 'Documento-CeCap').replace(/[^\w\-]+/g, '-')) + '.pdf';
         }
-        if (openTabBtn) openTabBtn.setAttribute('href', appBase + htmlRel);
+        if (openTabBtn) openTabBtn.setAttribute('href', htmlRel);
         modal.dataset.currentUrl = pdfRel;
         modal.dataset.currentHtmlUrl = htmlRel;
 
@@ -227,7 +228,7 @@
 
             setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
         } catch {
-            const fallbackUrl = getAppBaseUrl().replace(/\/+$/, '') + buildRelativePath(url, { vista: 'html' }, ['descargar']);
+            const fallbackUrl = buildRelativePath(url, { vista: 'html' }, ['descargar']);
             window.open(fallbackUrl, '_blank', 'noopener');
         } finally {
             if (triggerEl && prevText !== null) {
@@ -388,9 +389,13 @@
         if (e.target.closest('#cecap-pdf-print')) {
             const frame = document.getElementById('cecap-pdf-frame');
             try {
+                frame?.contentWindow?.focus();
                 frame?.contentWindow?.print();
             } catch {
-                window.open(document.getElementById('cecap-pdf-open-tab')?.href, '_blank');
+                const openTabHref = document.getElementById('cecap-pdf-open-tab')?.getAttribute('href');
+                if (openTabHref) {
+                    window.open(openTabHref, '_blank', 'noopener');
+                }
             }
         }
     });

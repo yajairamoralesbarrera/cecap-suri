@@ -158,12 +158,53 @@ class DocumentPdfController extends Controller
             'logoDataUri' => ($data['settings'] ?? InstitutionSetting::current())->logoDataUri(),
         ]);
 
-        if ($request->query('vista') === 'html') {
-            return view($view, array_merge($shared, ['isHtmlPreview' => true]));
-        }
-
         $pdf = Pdf::loadView($view, array_merge($shared, ['isHtmlPreview' => false]))
             ->setPaper('letter', $orientation);
+
+        if ($request->query('vista') === 'html') {
+            $html = view($view, array_merge($shared, ['isHtmlPreview' => true]))->render();
+            $pdfDataUri = 'data:application/pdf;base64,'.base64_encode($pdf->output());
+            $safeFilename = e($filename);
+
+            $toolbar = <<<HTML
+<style>
+    @media print { .cecap-doc-toolbar { display: none !important; } }
+    .cecap-doc-toolbar {
+        display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+        background: #0F4C4C; color: #ffffff; padding: 10px 16px; border-radius: 10px;
+        margin-bottom: 16px; font-family: Arial, Helvetica, sans-serif; font-size: 12px;
+    }
+    .cecap-doc-toolbar-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .cecap-doc-btn {
+        display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 8px;
+        font-size: 12px; font-weight: bold; text-decoration: none; cursor: pointer; border: 1px solid rgba(255,255,255,0.35);
+    }
+    .cecap-doc-btn-primary { background: #107050; color: #ffffff; border-color: #6ee7b7; }
+    .cecap-doc-btn-secondary { background: #ffffff; color: #0F4C4C; border-color: #ffffff; }
+</style>
+<div class="cecap-doc-toolbar">
+    <div><strong>Vista previa lista para imprimir o descargar</strong> · {$safeFilename}</div>
+    <div class="cecap-doc-toolbar-actions">
+        <button type="button" id="cecap-doc-print-btn" class="cecap-doc-btn cecap-doc-btn-secondary">Imprimir</button>
+        <a href="{$pdfDataUri}" download="{$safeFilename}" class="cecap-doc-btn cecap-doc-btn-primary">Descargar PDF</a>
+    </div>
+</div>
+<script>
+    (function () {
+        var btn = document.getElementById('cecap-doc-print-btn');
+        if (btn) {
+            btn.addEventListener('click', function () {
+                try { window.focus(); window.print(); } catch (e) {}
+            });
+        }
+    })();
+</script>
+HTML;
+
+            $injected = preg_replace('/<body([^>]*)>/i', '<body$1>'.$toolbar, $html, 1) ?? ($toolbar.$html);
+
+            return response($injected, 200, ['Content-Type' => 'text/html; charset=UTF-8']);
+        }
 
         if ($request->boolean('descargar')) {
             return $pdf->download($filename);

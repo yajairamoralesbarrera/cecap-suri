@@ -137,12 +137,20 @@
                             class="cecap-btn-primary">
                         Ver / Imprimir Planilla de Inscripción PDF
                     </button>
-                    <a href="{{ $signedPlanillaUrl }}&descargar=1"
-                       data-pdf-download-url="{{ $signedPlanillaUrl }}&descargar=1"
-                       data-pdf-filename="Planilla-{{ $successCode }}.pdf"
-                       class="cecap-btn-secondary">
-                        Descargar Planilla PDF
-                    </a>
+                    @if(! empty($planillaPdfDataUri))
+                        <a href="{{ $planillaPdfDataUri }}"
+                           download="Planilla-{{ $successCode }}.pdf"
+                           class="cecap-btn-secondary">
+                            Descargar Planilla PDF
+                        </a>
+                    @else
+                        <button type="button"
+                                data-pdf-download-url="{{ $signedPlanillaUrl }}&descargar=1"
+                                data-pdf-filename="Planilla-{{ $successCode }}.pdf"
+                                class="cecap-btn-secondary">
+                            Descargar Planilla PDF
+                        </button>
+                    @endif
                 @endif
                 @if(! empty($missingDocumentLabels) && ! $showPendingUploadForm)
                     <button type="button" wire:click="openPendingUploadForm" class="cecap-btn-secondary">
