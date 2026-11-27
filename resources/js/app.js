@@ -110,13 +110,35 @@
         modal.dataset.currentUrl = pdfUrl.toString();
         modal.dataset.currentHtmlUrl = htmlUrl.toString();
 
-        // Por defecto carga ?vista=html (siempre compatible en iOS, Android, iframes y navegadores estrictos)
-        frame.src = htmlUrl.toString();
+        // Por defecto carga ?vista=html vía fetch -> srcdoc (evita bloqueos de iframes anidados y proxies)
         if (modeHtmlBtn) modeHtmlBtn.setAttribute('aria-pressed', 'true');
         if (modeBlobBtn) modeBlobBtn.setAttribute('aria-pressed', 'false');
 
         modal.classList.remove('hidden');
         modal.classList.add('flex');
+        loadHtmlIntoModalFrame(htmlUrl.toString());
+    }
+
+    async function loadHtmlIntoModalFrame(htmlUrl) {
+        const frame = document.getElementById('cecap-pdf-frame');
+        if (!frame || !htmlUrl) return;
+
+        frame.removeAttribute('src');
+        frame.srcdoc = '<!DOCTYPE html><html lang="es"><body style="font-family:sans-serif;color:#475569;padding:32px;text-align:center;">Cargando vista previa del documento...</body></html>';
+
+        try {
+            const resp = await fetch(htmlUrl, {
+                credentials: 'same-origin',
+                headers: { Accept: 'text/html' },
+            });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const html = await resp.text();
+            frame.removeAttribute('src');
+            frame.srcdoc = html;
+        } catch {
+            frame.removeAttribute('src');
+            frame.srcdoc = '<!DOCTYPE html><html lang="es"><body style="font-family:sans-serif;color:#9f1239;padding:32px;text-align:center;">No se pudo cargar la vista previa. Utilice el botón <strong>Descargar PDF</strong>.</body></html>';
+        }
     }
 
     function extractFilename(contentDisposition, fallback) {
@@ -200,11 +222,12 @@
             const blob = new Blob([buffer], { type: 'application/pdf' });
             if (activeBlobUrl) URL.revokeObjectURL(activeBlobUrl);
             activeBlobUrl = URL.createObjectURL(blob);
+            frame.removeAttribute('srcdoc');
             frame.src = activeBlobUrl;
             if (modeHtmlBtn) modeHtmlBtn.setAttribute('aria-pressed', 'false');
             if (modeBlobBtn) modeBlobBtn.setAttribute('aria-pressed', 'true');
         } catch {
-            frame.src = modal.dataset.currentHtmlUrl;
+            loadHtmlIntoModalFrame(modal.dataset.currentHtmlUrl);
             if (modeHtmlBtn) modeHtmlBtn.setAttribute('aria-pressed', 'true');
             if (modeBlobBtn) modeBlobBtn.setAttribute('aria-pressed', 'false');
         }
@@ -213,7 +236,10 @@
     function closePdfModal() {
         const modal = document.getElementById('cecap-pdf-modal');
         const frame = document.getElementById('cecap-pdf-frame');
-        if (frame) frame.src = 'about:blank';
+        if (frame) {
+            frame.removeAttribute('srcdoc');
+            frame.src = 'about:blank';
+        }
         if (activeBlobUrl) {
             URL.revokeObjectURL(activeBlobUrl);
             activeBlobUrl = null;
@@ -304,11 +330,10 @@
 
         if (e.target.closest('#cecap-pdf-mode-html')) {
             const modal = document.getElementById('cecap-pdf-modal');
-            const frame = document.getElementById('cecap-pdf-frame');
             const modeHtmlBtn = document.getElementById('cecap-pdf-mode-html');
             const modeBlobBtn = document.getElementById('cecap-pdf-mode-blob');
-            if (modal && frame && modal.dataset.currentHtmlUrl) {
-                frame.src = modal.dataset.currentHtmlUrl;
+            if (modal && modal.dataset.currentHtmlUrl) {
+                loadHtmlIntoModalFrame(modal.dataset.currentHtmlUrl);
                 if (modeHtmlBtn) modeHtmlBtn.setAttribute('aria-pressed', 'true');
                 if (modeBlobBtn) modeBlobBtn.setAttribute('aria-pressed', 'false');
             }
