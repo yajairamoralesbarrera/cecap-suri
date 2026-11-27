@@ -117,6 +117,13 @@
                     @endforeach
                 </td>
             </tr>
+            @php $missingDocLabels = $enrollment->missingDocumentLabels(); @endphp
+            @if(! empty($missingDocLabels))
+                <tr>
+                    <th>Documentos Faltantes</th>
+                    <td style="color:#9f1239; font-weight:bold;">{{ implode(' · ', $missingDocLabels) }}</td>
+                </tr>
+            @endif
             @if($enrollment->exception_authorized)
                 <tr>
                     <th>Excepción Autorizada</th>
@@ -130,6 +137,9 @@
         <div class="notice">
             <strong>AVISO DE INSCRIPCIÓN PROVISIONAL (PLAZO {{ $settings->online_enrollment_provisional_days }} DÍAS):</strong><br>
             {{ $settings->online_enrollment_notice }}<br>
+            @if(! empty($missingDocLabels))
+                <strong>Documentos pendientes por entregar:</strong> {{ implode(', ', $missingDocLabels) }}<br>
+            @endif
             <strong>Vencimiento provisional:</strong> {{ $enrollment->provisional_expires_at?->format('d/m/Y H:i') ?? '7 días naturales' }}<br>
             <strong>Horario de atención CeCap:</strong> {{ $settings->attention_hours }}
         </div>

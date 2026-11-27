@@ -88,7 +88,9 @@
             activeBlobUrl = null;
         }
 
-        const parsed = new URL(url, window.location.origin);
+        const rawParsed = new URL(url, window.location.origin);
+        const parsed = new URL(rawParsed.pathname + rawParsed.search + rawParsed.hash, window.location.origin);
+
         const htmlUrl = new URL(parsed.toString());
         htmlUrl.searchParams.set('vista', 'html');
 
@@ -105,7 +107,7 @@
         modal.dataset.currentUrl = pdfUrl.toString();
         modal.dataset.currentHtmlUrl = htmlUrl.toString();
 
-        // Por defecto carga ?vista=html (siempre compatible en iOS, Android y navegadores estrictos)
+        // Por defecto carga ?vista=html (siempre compatible en iOS, Android, iframes y navegadores estrictos)
         frame.src = htmlUrl.toString();
         if (modeHtmlBtn) modeHtmlBtn.setAttribute('aria-pressed', 'true');
         if (modeBlobBtn) modeBlobBtn.setAttribute('aria-pressed', 'false');
@@ -117,6 +119,8 @@
     async function switchPdfModalToBlob() {
         const modal = document.getElementById('cecap-pdf-modal');
         const frame = document.getElementById('cecap-pdf-frame');
+        const modeHtmlBtn = document.getElementById('cecap-pdf-mode-html');
+        const modeBlobBtn = document.getElementById('cecap-pdf-mode-blob');
         if (!modal || !frame || !modal.dataset.currentUrl) return;
 
         try {
@@ -129,8 +133,12 @@
             if (activeBlobUrl) URL.revokeObjectURL(activeBlobUrl);
             activeBlobUrl = URL.createObjectURL(blob);
             frame.src = activeBlobUrl;
+            if (modeHtmlBtn) modeHtmlBtn.setAttribute('aria-pressed', 'false');
+            if (modeBlobBtn) modeBlobBtn.setAttribute('aria-pressed', 'true');
         } catch {
             frame.src = modal.dataset.currentHtmlUrl;
+            if (modeHtmlBtn) modeHtmlBtn.setAttribute('aria-pressed', 'true');
+            if (modeBlobBtn) modeBlobBtn.setAttribute('aria-pressed', 'false');
         }
     }
 

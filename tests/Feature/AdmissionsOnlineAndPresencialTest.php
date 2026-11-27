@@ -97,15 +97,34 @@ it('registers incomplete online pre-enrollment as documentacion_pendiente and se
         ->set('email', 'mariana.soto@correo.cr')
         ->set('phone', '8811-4455')
         ->call('submit')
-        ->assertHasNoErrors();
+        ->assertHasNoErrors()
+        ->assertSee('Documentos faltantes por presentar')
+        ->assertSee('Cédula / DIMEX')
+        ->assertSee('Atestados Académicos (Títulos / Notas)');
 
     $enrollment = Enrollment::firstOrFail();
     expect($enrollment->status)->toBe('documentacion_pendiente');
     expect($enrollment->provisional_expires_at)->not->toBeNull();
+    expect($enrollment->missingDocumentLabels())->toBe([
+        'Cédula / DIMEX',
+        'Atestados Académicos (Títulos / Notas)',
+    ]);
 
-    $signedUrl = URL::temporarySignedRoute('inscripcion.planilla.publica', now()->addDays(7), ['enrollment' => $enrollment->id]);
-    $this->get($signedUrl.'&vista=html')->assertOk()->assertSee($enrollment->enrollment_code);
-    $this->get($signedUrl)->assertOk()->assertHeader('content-type', 'application/pdf');
+    $signedUrl = $component->get('signedPlanillaUrl');
+    expect($signedUrl)->toStartWith('/inscripcion/planilla/'.$enrollment->id);
+
+    // Debe funcionar incluso detrás de proxy reverso HTTPS con Host distinto
+    $proxyHeaders = ['Host' => 'preview.cecap-proxy.test', 'X-Forwarded-Proto' => 'https'];
+    $this->withHeaders($proxyHeaders)->get($signedUrl.'&vista=html')
+        ->assertOk()
+        ->assertSee($enrollment->enrollment_code)
+        ->assertSee('Atestados Académicos (Títulos / Notas)');
+    $this->withHeaders($proxyHeaders)->get($signedUrl)
+        ->assertOk()
+        ->assertHeader('content-type', 'application/pdf');
+    $this->withHeaders($proxyHeaders)->get($signedUrl.'&descargar=1')
+        ->assertOk()
+        ->assertHeader('content-type', 'application/pdf');
 });
 
 it('blocks presencial confirmation when required docs are missing unless audited exception is authorized', function () {

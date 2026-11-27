@@ -111,8 +111,9 @@ class EnrollmentService
         $docsComplete = count($missing) === 0;
 
         if ($confirmImmediately && ! $docsComplete && ! $authorizeException) {
+            $missingLabels = $this->documentLabels($missing);
             throw ValidationException::withMessages([
-                'documents' => 'Matrícula presencial bloqueada: faltan documentos obligatorios ('.implode(', ', $missing).'). Debe completarlos o autorizar una excepción con motivo y fecha compromiso.',
+                'documents' => 'Matrícula presencial bloqueada: faltan los siguientes documentos obligatorios: '.implode(', ', $missingLabels).'. Debe completarlos o autorizar una excepción con motivo y fecha compromiso.',
             ]);
         }
 
@@ -202,8 +203,9 @@ class EnrollmentService
         $docsComplete = count($missing) === 0;
 
         if (! $docsComplete && ! $authorizeException) {
+            $missingLabels = $this->documentLabels($missing);
             throw ValidationException::withMessages([
-                'documents' => 'No se puede confirmar la matrícula: faltan documentos obligatorios ('.implode(', ', $missing).'). Autorice una excepción con motivo y fecha compromiso para continuar.',
+                'documents' => 'No se puede confirmar la matrícula: faltan los siguientes documentos obligatorios: '.implode(', ', $missingLabels).'. Autorice una excepción con motivo y fecha compromiso para continuar.',
             ]);
         }
 
@@ -265,5 +267,19 @@ class EnrollmentService
 
             return $enrollment->fresh();
         });
+    }
+
+    /**
+     * @param  list<string>  $keys
+     * @return list<string>
+     */
+    protected function documentLabels(array $keys): array
+    {
+        $labels = config('cecap.document_types', []);
+
+        return array_values(array_map(
+            fn (string $key): string => (string) ($labels[$key] ?? $key),
+            $keys
+        ));
     }
 }

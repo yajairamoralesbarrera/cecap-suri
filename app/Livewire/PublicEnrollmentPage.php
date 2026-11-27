@@ -76,6 +76,9 @@ class PublicEnrollmentPage extends Component
 
     public ?string $provisionalExpiresAt = null;
 
+    /** @var list<string> */
+    public array $missingDocumentLabels = [];
+
     public function updatedGender(string $value): void
     {
         $settings = InstitutionSetting::current();
@@ -226,10 +229,12 @@ class PublicEnrollmentPage extends Component
         $this->successCode = $enrollment->enrollment_code;
         $this->successStatus = $enrollment->status;
         $this->provisionalExpiresAt = $enrollment->provisional_expires_at?->format('d/m/Y H:i');
+        $this->missingDocumentLabels = $enrollment->missingDocumentLabels();
         $this->signedPlanillaUrl = URL::temporarySignedRoute(
             'inscripcion.planilla.publica',
             now()->addDays(max(1, (int) $settings->online_enrollment_provisional_days)),
-            ['enrollment' => $enrollment->id]
+            ['enrollment' => $enrollment->id],
+            absolute: false
         );
     }
 
@@ -241,6 +246,7 @@ class PublicEnrollmentPage extends Component
             'canton_id', 'district_id', 'address_detail', 'emergency_contact_name',
             'emergency_contact_phone', 'notes', 'file_cedula', 'file_atestado',
             'successCode', 'successStatus', 'signedPlanillaUrl', 'provisionalExpiresAt',
+            'missingDocumentLabels',
         ]);
         $this->gender = 'femenino';
         $this->genderBlocked = false;

@@ -107,6 +107,21 @@ class Enrollment extends Model
         return array_values(array_diff($required, $submitted));
     }
 
+    /**
+     * Nombres legibles en español de los documentos faltantes según el checklist del curso.
+     *
+     * @return list<string>
+     */
+    public function missingDocumentLabels(): array
+    {
+        $labels = config('cecap.document_types', []);
+
+        return array_values(array_map(
+            fn (string $key): string => (string) ($labels[$key] ?? $key),
+            $this->missingDocuments()
+        ));
+    }
+
     public function calculateFinalGrade(): float
     {
         $grades = $this->gradeRecords()->get();

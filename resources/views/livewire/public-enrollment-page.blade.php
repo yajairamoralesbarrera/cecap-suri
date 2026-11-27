@@ -27,6 +27,18 @@
                 </div>
             </div>
 
+            @if(! empty($missingDocumentLabels))
+                <div class="rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-950 space-y-2">
+                    <div class="font-bold">Documentos faltantes por presentar:</div>
+                    <ul class="list-disc pl-5 space-y-0.5 font-medium">
+                        @foreach($missingDocumentLabels as $docLabel)
+                            <li>{{ $docLabel }}</li>
+                        @endforeach
+                    </ul>
+                    <p class="text-xs text-rose-800">Debe presentar {{ count($missingDocumentLabels) === 1 ? 'este documento' : 'estos documentos' }} en Secretaría/Admisiones antes del <strong>{{ $provisionalExpiresAt }}</strong> para confirmar su matrícula.</p>
+                </div>
+            @endif
+
             <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 space-y-1">
                 <div class="font-bold">Siguiente paso obligatorio (plazo de {{ $settings->online_enrollment_provisional_days }} días):</div>
                 <p>{{ $settings->online_enrollment_notice }}</p>

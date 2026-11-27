@@ -29,6 +29,13 @@
                 </div>
                 <p class="text-sm text-slate-700">Curso: <strong>{{ $confirmingEnrollment->edition?->course?->name }}</strong> ({{ $confirmingEnrollment->edition?->name }})</p>
 
+                @php $confirmMissing = $confirmingEnrollment->missingDocumentLabels(); @endphp
+                @if(! empty($confirmMissing))
+                    <div class="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-900">
+                        <strong>Documentos faltantes actuales:</strong> {{ implode(', ', $confirmMissing) }}
+                    </div>
+                @endif
+
                 <div class="space-y-2">
                     <div class="text-xs font-bold uppercase text-slate-600">Documentos Requeridos (Checklist del Curso)</div>
                     <div class="flex flex-wrap gap-4 text-sm">
@@ -96,7 +103,11 @@
                                 @endif
                             </td>
                             <td class="py-2.5 pr-3 text-xs">
-                                {{ $enr->documents_complete ? 'Completo' : 'Faltan: '.implode(', ', $enr->missingDocuments()) }}
+                                @if($enr->documents_complete)
+                                    <span class="font-semibold text-emerald-700">Completo</span>
+                                @else
+                                    <span class="font-semibold text-rose-700">Falta:</span> {{ implode(', ', $enr->missingDocumentLabels()) }}
+                                @endif
                             </td>
                             <td class="py-2.5">
                                 <div class="flex flex-wrap gap-1.5">
