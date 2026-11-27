@@ -75,6 +75,30 @@ class StaffMember extends Model
         return $this->morphMany(RecordAttachment::class, 'attachable')->latest();
     }
 
+    public static function roleTypeLabels(): array
+    {
+        return [
+            'teacher' => 'Profesora',
+            'both' => 'Docente + Administrativo',
+            'administrative' => 'Administrativo',
+        ];
+    }
+
+    public function getStaffRoleTypeLabelAttribute(): string
+    {
+        return self::roleTypeLabels()[$this->staff_role_type] ?? match ($this->staff_role_type) {
+            'staff' => 'Administrativo',
+            default => (string) $this->staff_role_type,
+        };
+    }
+
+    public function getHiringRegimeLabelAttribute(): string
+    {
+        return $this->hiring_regime === 'planilla_laboral'
+            ? 'Planilla Laboral CR'
+            : 'Servicios Profesionales CR';
+    }
+
     public function requiresProfessionalCredentials(): bool
     {
         return in_array($this->staff_role_type, ['teacher', 'both'], true);

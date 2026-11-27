@@ -148,20 +148,64 @@ it('enforces Costa Rica staff legal separation (Planilla vs Servicios Profesiona
         ->set('specialty_2', 'Contabilidad')
         ->set('specialty_3', 'Corte y Confección')
         ->set('identification_file', UploadedFile::fake()->create('cedula_karla.pdf', 100, 'application/pdf'))
-        ->set('credentials_file', UploadedFile::fake()->create('titulo_docente.pdf', 150, 'application/pdf'))
+        ->set('credentials_files', [
+            UploadedFile::fake()->create('titulo_docente.pdf', 150, 'application/pdf'),
+            UploadedFile::fake()->create('certificacion_ina.pdf', 120, 'application/pdf'),
+        ])
         ->set('signed_contract_file', UploadedFile::fake()->create('contrato_vigente_karla.pdf', 180, 'application/pdf'))
         ->call('createStaff')
         ->assertHasNoErrors();
 
     $member = StaffMember::where('identification_number', '1-9000-1111')->firstOrFail();
     expect($member->birth_date?->toDateString())->toBe('1988-06-15');
+    expect($member->staff_role_type_label)->toBe('Profesora');
+    expect($member->hiring_regime_label)->toBe('Planilla Laboral CR');
     expect($member->academic_degree)->toBe('Licenciatura en Educación Técnica');
     expect($member->specialties)->toBe(['Gastronomía', 'Contabilidad', 'Corte y Confección']);
     expect($member->specialties_list)->toBe(['Gastronomía', 'Contabilidad', 'Corte y Confección']);
     expect($member->specialty)->toBe('Gastronomía · Contabilidad · Corte y Confección');
-    expect($member->attachments()->where('document_type', 'cedula_dimex')->exists())->toBeTrue();
-    expect($member->attachments()->where('document_type', 'atestado_profesional')->exists())->toBeTrue();
-    expect($member->attachments()->where('document_type', 'contrato_pdf')->exists())->toBeTrue();
+    expect($member->attachments()->where('document_type', 'cedula_dimex')->where('status', 'activo')->count())->toBe(1);
+    expect($member->attachments()->where('document_type', 'atestado_profesional')->where('status', 'activo')->count())->toBe(2);
+    expect($member->attachments()->where('document_type', 'contrato_pdf')->where('status', 'activo')->count())->toBe(1);
+
+    // Agregar atestado adicional inline sin reemplazar los 2 anteriores
+    Livewire::test(StaffPage::class)
+        ->call('startAttachCredentials', $member->id)
+        ->set('extra_credentials_files', [
+            UploadedFile::fake()->create('colegiatura.pdf', 90, 'application/pdf'),
+        ])
+        ->set('extra_credentials_notes', 'Colegiatura vigente')
+        ->call('uploadExtraCredentials')
+        ->assertHasNoErrors();
+
+    expect($member->attachments()->where('document_type', 'atestado_profesional')->where('status', 'activo')->count())->toBe(3);
+
+    // Segundo colaborador Administrativo en Servicios Profesionales para probar consulta por nombre y tipo en español
+    StaffMember::create([
+        'staff_code' => StaffMember::nextCode(),
+        'staff_role_type' => 'administrative',
+        'first_name' => 'Elena',
+        'last_name' => 'Salas',
+        'identification_type' => 'cedula_nacional',
+        'identification_number' => '1-9000-2222',
+        'birth_date' => '1991-04-10',
+        'email' => 'elena.salas@cecap.or.cr',
+        'phone' => '8877-6655',
+        'hiring_regime' => 'servicios_profesionales',
+        'status' => 'activo',
+        'created_by' => $admin->id,
+    ]);
+
+    Livewire::test(StaffPage::class)
+        ->assertSee('Profesora')
+        ->assertSee('Administrativo')
+        ->set('filter_role_type', 'administrative')
+        ->assertSee('Elena Salas')
+        ->assertDontSee('Karla Ureña')
+        ->set('filter_role_type', '')
+        ->set('search', 'Karla')
+        ->assertSee('Karla Ureña')
+        ->assertDontSee('Elena Salas');
     $payroll = app(StaffPayrollService::class);
 
     // 1. Contrato Planilla Laboral CR

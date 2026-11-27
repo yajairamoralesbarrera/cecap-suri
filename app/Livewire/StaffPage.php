@@ -61,7 +61,23 @@ class StaffPage extends Component
 
     public $credentials_file = null;
 
+    public array $credentials_files = [];
+
     public $signed_contract_file = null;
+
+    // Filtros de consulta en Expedientes de Colaboradores
+    public string $search = '';
+
+    public string $filter_role_type = '';
+
+    public string $filter_regime = '';
+
+    // Carga inline de atestados adicionales en un expediente existente
+    public ?int $attachingCredentialsStaffId = null;
+
+    public array $extra_credentials_files = [];
+
+    public string $extra_credentials_notes = '';
 
     // Carga inline de contrato firmado sobre un contrato existente
     public ?int $attachingContractId = null;
@@ -166,11 +182,13 @@ class StaffPage extends Component
             'hiring_regime' => ['required', 'in:planilla_laboral,servicios_profesionales'],
             'identification_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
             'credentials_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'credentials_files' => ['nullable', 'array', 'max:10'],
+            'credentials_files.*' => ['file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
             'signed_contract_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
         ];
 
         // Atestados Profesionales OBLIGATORIOS para Profesoras (teacher / both)
-        if (in_array($this->staff_role_type, ['teacher', 'both'], true)) {
+        if (in_array($this->staff_role_type, ['teacher', 'both'], true) && empty($this->credentials_files)) {
             $rules['credentials_file'] = ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'];
         }
 
@@ -181,6 +199,8 @@ class StaffPage extends Component
             'email.required' => 'El correo electrónico es obligatorio en el módulo de Colaboradores.',
             'identification_file.required' => 'Debe adjuntar el documento de identificación (Cédula / DIMEX / Pasaporte).',
             'credentials_file.required' => 'Los Atestados Profesionales (títulos/certificaciones) son OBLIGATORIOS para Profesoras (docente o mixto).',
+            'credentials_files.max' => 'Puede adjuntar hasta 10 archivos de atestados por carga.',
+            'credentials_files.*.mimes' => 'Cada atestado debe ser PDF, JPG, PNG o WebP.',
         ]);
 
         $rawSpecialties = [
@@ -227,8 +247,23 @@ class StaffPage extends Component
             $attachmentService->store($member, $this->identification_file, 'cedula_dimex', 'Documento de identificación personal');
         }
 
+        $credentialUploads = [];
         if ($this->credentials_file) {
-            $attachmentService->store($member, $this->credentials_file, 'atestado_profesional', 'Atestados profesionales verificados al ingreso');
+            $credentialUploads[] = $this->credentials_file;
+        }
+        foreach ($this->credentials_files as $credFile) {
+            if ($credFile) {
+                $credentialUploads[] = $credFile;
+            }
+        }
+        foreach ($credentialUploads as $credFile) {
+            $attachmentService->store(
+                attachable: $member,
+                file: $credFile,
+                documentType: 'atestado_profesional',
+                notes: 'Atestado profesional verificado al ingreso',
+                replaceExisting: false
+            );
         }
 
         if ($this->signed_contract_file) {
@@ -236,9 +271,85 @@ class StaffPage extends Component
         }
 
         AuditService::log('staff.member_created', 'personal', $member, null, $member->only(['staff_code', 'staff_role_type', 'email', 'hiring_regime', 'birth_date', 'academic_degree', 'specialties']));
-        $this->reset(['first_name', 'last_name', 'second_last_name', 'identification_number', 'birth_date', 'email', 'phone', 'specialty', 'specialty_1', 'specialty_2', 'specialty_3', 'academic_degree', 'identification_file', 'credentials_file', 'signed_contract_file']);
+        $this->reset(['first_name', 'last_name', 'second_last_name', 'identification_number', 'birth_date', 'email', 'phone', 'specialty', 'specialty_1', 'specialty_2', 'specialty_3', 'academic_degree', 'identification_file', 'credentials_file', 'credentials_files', 'signed_contract_file']);
         $this->identification_type = 'cedula_nacional';
         $this->feedback = 'Colaboradora registrada correctamente con su expediente y documentos privados.';
+    }
+
+    public function clearDirectoryFilters(): void
+    {
+        $this->reset(['search', 'filter_role_type', 'filter_regime']);
+    }
+
+    public function startAttachCredentials(int $staffId): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('personal.manage'), 403);
+        $this->attachingCredentialsStaffId = $staffId;
+        $this->extra_credentials_files = [];
+        $this->extra_credentials_notes = '';
+        $this->resetValidation();
+        $this->feedback = null;
+    }
+
+    public function cancelAttachCredentials(): void
+    {
+        $this->attachingCredentialsStaffId = null;
+        $this->reset(['extra_credentials_files', 'extra_credentials_notes']);
+        $this->resetValidation();
+    }
+
+    public function uploadExtraCredentials(AttachmentService $attachmentService): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('personal.manage'), 403);
+        if (! $this->attachingCredentialsStaffId) {
+            return;
+        }
+
+        $this->validate([
+            'extra_credentials_files' => ['required', 'array', 'min:1', 'max:10'],
+            'extra_credentials_files.*' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'extra_credentials_notes' => ['nullable', 'string', 'max:500'],
+        ], [
+            'extra_credentials_files.required' => 'Seleccione al menos un archivo de atestado (PDF o imagen).',
+            'extra_credentials_files.min' => 'Seleccione al menos un archivo de atestado (PDF o imagen).',
+            'extra_credentials_files.max' => 'Puede adjuntar hasta 10 atestados por carga.',
+            'extra_credentials_files.*.mimes' => 'Cada atestado debe ser PDF, JPG, PNG o WebP.',
+        ]);
+
+        $member = StaffMember::findOrFail($this->attachingCredentialsStaffId);
+        $notes = trim($this->extra_credentials_notes) !== ''
+            ? trim($this->extra_credentials_notes)
+            : 'Atestado profesional adicional adjuntado al expediente';
+
+        $uploadedCount = 0;
+        foreach ($this->extra_credentials_files as $file) {
+            if (! $file) {
+                continue;
+            }
+            $attachmentService->store(
+                attachable: $member,
+                file: $file,
+                documentType: 'atestado_profesional',
+                notes: $notes,
+                replaceExisting: false
+            );
+            $uploadedCount++;
+        }
+
+        AuditService::log(
+            event: 'staff.credentials_added',
+            module: 'personal',
+            auditable: $member,
+            newValues: ['count' => $uploadedCount, 'notes' => $notes]
+        );
+
+        $this->cancelAttachCredentials();
+        $this->feedback = sprintf(
+            '%d %s agregado(s) al expediente de %s sin reemplazar los anteriores.',
+            $uploadedCount,
+            $uploadedCount === 1 ? 'atestado profesional' : 'atestados profesionales',
+            $member->full_name
+        );
     }
 
     public function createContract(AttachmentService $attachmentService): void
@@ -398,8 +509,34 @@ class StaffPage extends Component
     {
         $selectedPayContract = $this->pay_contract_id ? StaffContract::find($this->pay_contract_id) : null;
 
+        $allStaffMembers = StaffMember::orderBy('first_name')->orderBy('last_name')->get();
+
+        $staffQuery = StaffMember::with('attachments')->latest();
+
+        if (trim($this->search) !== '') {
+            $term = '%'.mb_strtolower(trim($this->search)).'%';
+            $staffQuery->where(function ($q) use ($term) {
+                $q->whereRaw("LOWER(TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '') || ' ' || COALESCE(second_last_name, ''))) LIKE ?", [$term])
+                    ->orWhereRaw('LOWER(identification_number) LIKE ?', [$term])
+                    ->orWhereRaw('LOWER(staff_code) LIKE ?', [$term])
+                    ->orWhereRaw('LOWER(email) LIKE ?', [$term])
+                    ->orWhereRaw("LOWER(COALESCE(academic_degree, '')) LIKE ?", [$term])
+                    ->orWhereRaw("LOWER(COALESCE(specialty, '')) LIKE ?", [$term]);
+            });
+        }
+
+        if ($this->filter_role_type !== '') {
+            $staffQuery->where('staff_role_type', $this->filter_role_type);
+        }
+
+        if ($this->filter_regime !== '') {
+            $staffQuery->where('hiring_regime', $this->filter_regime);
+        }
+
         return view('livewire.staff-page', [
-            'staffMembers' => StaffMember::with('attachments')->latest()->get(),
+            'staffMembers' => $staffQuery->get(),
+            'allStaffMembers' => $allStaffMembers,
+            'roleTypeLabels' => StaffMember::roleTypeLabels(),
             'contracts' => StaffContract::with(['staffMember', 'attachment'])->latest()->get(),
             'payments' => StaffPayment::with(['staffMember', 'contract'])->latest('payment_date')->limit(50)->get(),
             'selectedPayContract' => $selectedPayContract,

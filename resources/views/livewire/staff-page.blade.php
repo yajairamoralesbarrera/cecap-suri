@@ -9,7 +9,7 @@
     @endif
 
     <div class="flex flex-wrap gap-2">
-        <button type="button" wire:click="setTab('directory')" class="{{ $tab === 'directory' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Directorio de Colaboradores ({{ $staffMembers->count() }})</button>
+        <button type="button" wire:click="setTab('directory')" class="{{ $tab === 'directory' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Directorio de Colaboradores ({{ $allStaffMembers->count() }})</button>
         <button type="button" wire:click="setTab('contracts')" class="{{ $tab === 'contracts' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Contratos CR ({{ $contracts->count() }})</button>
         <button type="button" wire:click="setTab('payments')" class="{{ $tab === 'payments' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Pagos y Comprobantes CR ({{ $payments->count() }})</button>
     </div>
@@ -124,14 +124,20 @@
                                     @else
                                         <span class="text-slate-500 font-normal">(opcional)</span>
                                     @endif
-                                    <span class="block text-[11px] font-normal text-slate-500">Títulos / certificaciones (PDF/Imagen máx 25MB)</span>
+                                    <span class="block text-[11px] font-normal text-slate-500">Puede seleccionar uno o varios archivos (PDF/Imagen máx 25MB c/u)</span>
                                 </label>
-                                <input wire:model="credentials_file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
-                                <div wire:loading wire:target="credentials_file" class="mt-1 text-xs font-semibold text-brand-800">Subiendo atestados...</div>
-                                @if($credentials_file)
-                                    <div wire:loading.remove wire:target="credentials_file" class="mt-1 text-xs font-semibold text-emerald-700">✓ Listo: {{ $credentials_file->getClientOriginalName() }}</div>
+                                <input wire:model="credentials_files" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
+                                <div wire:loading wire:target="credentials_files" class="mt-1 text-xs font-semibold text-brand-800">Subiendo atestados...</div>
+                                @if(!empty($credentials_files))
+                                    <div wire:loading.remove wire:target="credentials_files" class="mt-1 space-y-0.5 text-xs font-semibold text-emerald-700">
+                                        @foreach($credentials_files as $cf)
+                                            <div>✓ {{ $cf->getClientOriginalName() }}</div>
+                                        @endforeach
+                                    </div>
                                 @endif
                                 @error('credentials_file') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                                @error('credentials_files') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                                @error('credentials_files.*') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
                             </div>
                             <div>
                                 <label class="block text-sm font-semibold text-slate-700 mb-1">
@@ -147,23 +153,64 @@
                             </div>
                         </div>
                     </div>
-                    <button type="submit" wire:loading.attr="disabled" wire:target="identification_file,credentials_file,signed_contract_file,createStaff" class="cecap-btn-primary disabled:opacity-60">
-                        <span wire:loading.remove wire:target="identification_file,credentials_file,signed_contract_file,createStaff">Guardar Colaboradora</span>
-                        <span wire:loading wire:target="identification_file,credentials_file,signed_contract_file,createStaff">Procesando documentos...</span>
+                    <button type="submit" wire:loading.attr="disabled" wire:target="identification_file,credentials_file,credentials_files,signed_contract_file,createStaff" class="cecap-btn-primary disabled:opacity-60">
+                        <span wire:loading.remove wire:target="identification_file,credentials_file,credentials_files,signed_contract_file,createStaff">Guardar Colaboradora</span>
+                        <span wire:loading wire:target="identification_file,credentials_file,credentials_files,signed_contract_file,createStaff">Procesando documentos...</span>
                     </button>
                 </form>
             @endif
 
-            <div class="cecap-card overflow-x-auto">
-                <h2 class="text-base font-bold text-slate-900 mb-3">Expedientes de Colaboradores</h2>
+            <div class="cecap-card space-y-4 overflow-x-auto">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <h2 class="text-base font-bold text-slate-900">Expedientes de Colaboradores</h2>
+                    <span class="text-xs font-semibold text-slate-500">Mostrando {{ $staffMembers->count() }} de {{ $allStaffMembers->count() }} colaboradores</span>
+                </div>
+
+                {{-- Consulta por nombre, tipo y régimen --}}
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                    <div class="md:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Buscar por nombre, cédula, código o especialidad</label>
+                        <input wire:model.live.debounce.300ms="search" type="text" class="cecap-input" placeholder="Ej. Yajaira, PER-2026, 801720968, Gastronomía...">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Tipo</label>
+                        <select wire:model.live="filter_role_type" class="cecap-input">
+                            <option value="">Todos los tipos</option>
+                            @foreach($roleTypeLabels as $code => $label)
+                                <option value="{{ $code }}">{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Régimen CR</label>
+                        <select wire:model.live="filter_regime" class="cecap-input">
+                            <option value="">Todos los regímenes</option>
+                            <option value="planilla_laboral">Planilla Laboral CR</option>
+                            <option value="servicios_profesionales">Servicios Profesionales CR</option>
+                        </select>
+                    </div>
+                    @if(trim($search) !== '' || $filter_role_type !== '' || $filter_regime !== '')
+                        <div class="md:col-span-4 flex justify-end">
+                            <button type="button" wire:click="clearDirectoryFilters" class="cecap-btn-secondary !min-h-8 !px-3 !py-1 text-xs">Limpiar filtros</button>
+                        </div>
+                    @endif
+                </div>
+
                 <table class="w-full text-sm text-left">
                     <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
-                        <tr><th class="py-2 pr-3">Código</th><th class="py-2 pr-3">Colaboradora / Identificación</th><th class="py-2 pr-3">Tipo / Formación / Régimen CR</th><th class="py-2 pr-3">Contacto</th><th class="py-2">Documentos del Expediente</th></tr>
+                        <tr>
+                            <th class="py-2 pr-3">Código</th>
+                            <th class="py-2 pr-3">Colaboradora / Identificación</th>
+                            <th class="py-2 pr-3">Tipo</th>
+                            <th class="py-2 pr-3">Régimen CR</th>
+                            <th class="py-2 pr-3">Contacto</th>
+                            <th class="py-2">Documentos del Expediente</th>
+                        </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @forelse($staffMembers as $st)
-                            <tr>
-                                <td class="py-2.5 pr-3 font-mono text-xs font-bold">{{ $st->staff_code }}</td>
+                            <tr wire:key="staff-row-{{ $st->id }}" class="{{ $attachingCredentialsStaffId === $st->id ? 'bg-slate-50/80' : '' }}">
+                                <td class="py-2.5 pr-3 font-mono text-xs font-bold whitespace-nowrap">{{ $st->staff_code }}</td>
                                 <td class="py-2.5 pr-3 font-semibold">
                                     {{ $st->full_name }}
                                     <div class="text-xs font-normal text-slate-500">{{ $idTypes[$st->identification_type] ?? $st->identification_type }}: <span class="font-mono">{{ $st->identification_number }}</span></div>
@@ -172,8 +219,11 @@
                                     @endif
                                 </td>
                                 <td class="py-2.5 pr-3 text-xs space-y-1">
-                                    <div><span class="cecap-badge bg-brand-100 text-brand-900">{{ $st->staff_role_type }}</span></div>
-                                    <div class="font-semibold">{{ $st->hiring_regime === 'planilla_laboral' ? 'Planilla Laboral CR' : 'Servicios Profesionales CR' }}</div>
+                                    <div>
+                                        <span class="cecap-badge {{ $st->staff_role_type === 'teacher' ? 'bg-brand-100 text-brand-900' : ($st->staff_role_type === 'both' ? 'bg-indigo-100 text-indigo-900' : 'bg-slate-200 text-slate-800') }}">
+                                            {{ $st->staff_role_type_label }}
+                                        </span>
+                                    </div>
                                     @if($st->academic_degree)
                                         <div class="text-slate-700"><span class="font-semibold text-slate-500">Grado:</span> {{ $st->academic_degree }}</div>
                                     @endif
@@ -185,19 +235,72 @@
                                         </div>
                                     @endif
                                 </td>
+                                <td class="py-2.5 pr-3 text-xs">
+                                    <span class="inline-flex items-center rounded-lg px-2 py-1 font-semibold {{ $st->hiring_regime === 'planilla_laboral' ? 'bg-emerald-50 text-emerald-900 border border-emerald-200' : 'bg-amber-50 text-amber-950 border border-amber-200' }}">
+                                        {{ $st->hiring_regime_label }}
+                                    </span>
+                                </td>
                                 <td class="py-2.5 pr-3 text-xs">{{ $st->email }}<div>{{ $st->phone }}</div></td>
-                                <td class="py-2.5 text-xs space-y-0.5">
-                                    @forelse($st->attachments->where('status', 'activo') as $att)
-                                        <div>
-                                            <a href="{{ route('attachments.download', $att->uuid) }}" class="text-brand-800 underline font-medium">{{ $att->document_type_label }}: {{ $att->original_name }} (v{{ $att->version }})</a>
+                                <td class="py-2.5 text-xs space-y-1">
+                                    <div class="space-y-0.5">
+                                        @forelse($st->attachments->where('status', 'activo') as $att)
+                                            <div>
+                                                <a href="{{ route('attachments.download', $att->uuid) }}" class="text-brand-800 underline font-medium">{{ $att->document_type_label }}: {{ $att->original_name }} (v{{ $att->version }})</a>
+                                            </div>
+                                        @empty
+                                            <span class="text-slate-400">Sin adjuntos</span>
+                                        @endforelse
+                                    </div>
+                                    @if(auth()->user()->hasEffectivePermission('personal.manage'))
+                                        <div class="pt-1">
+                                            <button type="button" wire:click="startAttachCredentials({{ $st->id }})" class="inline-flex min-h-7 items-center justify-center rounded-lg border border-brand-300 bg-brand-50 px-2.5 py-1 text-[11px] font-semibold text-brand-900 hover:bg-brand-100 cursor-pointer">
+                                                + Agregar Atestados
+                                            </button>
                                         </div>
-                                    @empty
-                                        <span class="text-slate-400">Sin adjuntos</span>
-                                    @endforelse
+                                    @endif
                                 </td>
                             </tr>
+                            @if($attachingCredentialsStaffId === $st->id)
+                                <tr wire:key="staff-credentials-{{ $st->id }}">
+                                    <td colspan="6" class="py-3 px-1">
+                                        <form wire:submit="uploadExtraCredentials" class="rounded-2xl border-2 border-brand-400 bg-brand-50/70 p-4 space-y-3">
+                                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                                <div class="text-sm font-bold text-brand-950">Agregar Atestados Profesionales — {{ $st->full_name }} ({{ $st->staff_code }})</div>
+                                                <button type="button" wire:click="cancelAttachCredentials" class="text-xs font-semibold text-slate-600 hover:text-slate-900 underline">Cancelar</button>
+                                            </div>
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Atestados (puede seleccionar uno o varios — PDF/Imagen máx 25MB c/u) *</label>
+                                                    <input wire:model="extra_credentials_files" type="file" multiple required accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input bg-white">
+                                                    <div wire:loading wire:target="extra_credentials_files" class="mt-1 text-xs font-semibold text-brand-800">Subiendo atestados...</div>
+                                                    @if(!empty($extra_credentials_files))
+                                                        <div wire:loading.remove wire:target="extra_credentials_files" class="mt-1 space-y-0.5 text-xs font-semibold text-emerald-700">
+                                                            @foreach($extra_credentials_files as $ef)
+                                                                <div>✓ {{ $ef->getClientOriginalName() }}</div>
+                                                            @endforeach
+                                                        </div>
+                                                    @endif
+                                                    @error('extra_credentials_files') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                                                    @error('extra_credentials_files.*') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Descripción / Detalle (opcional)</label>
+                                                    <input wire:model="extra_credentials_notes" type="text" class="cecap-input bg-white" placeholder="Ej. Título Licenciatura, Certificación INA, Colegiatura">
+                                                </div>
+                                            </div>
+                                            <div class="flex flex-wrap gap-2">
+                                                <button type="submit" wire:loading.attr="disabled" wire:target="extra_credentials_files,uploadExtraCredentials" class="cecap-btn-primary !min-h-9 !px-4 !py-1.5 text-xs disabled:opacity-60">
+                                                    <span wire:loading.remove wire:target="extra_credentials_files,uploadExtraCredentials">Guardar Atestados en Expediente</span>
+                                                    <span wire:loading wire:target="extra_credentials_files,uploadExtraCredentials">Subiendo archivos...</span>
+                                                </button>
+                                                <button type="button" wire:click="cancelAttachCredentials" class="cecap-btn-secondary !min-h-9 !px-4 !py-1.5 text-xs">Cancelar</button>
+                                            </div>
+                                        </form>
+                                    </td>
+                                </tr>
+                            @endif
                         @empty
-                            <tr><td colspan="5" class="py-6 text-center text-slate-500">Sin personal registrado.</td></tr>
+                            <tr><td colspan="6" class="py-6 text-center text-slate-500">No se encontraron colaboradores con los criterios seleccionados.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -216,7 +319,7 @@
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Colaboradora *</label>
                             <select wire:model="contract_staff_id" required class="cecap-input">
                                 <option value="">-- Seleccione --</option>
-                                @foreach($staffMembers as $m)<option value="{{ $m->id }}">{{ $m->full_name }} ({{ $m->staff_role_type }})</option>@endforeach
+                                @foreach($allStaffMembers as $m)<option value="{{ $m->id }}">{{ $m->full_name }} ({{ $m->staff_role_type_label }})</option>@endforeach
                             </select>
                         </div>
                         <div>

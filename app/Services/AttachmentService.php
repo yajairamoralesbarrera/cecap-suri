@@ -26,7 +26,8 @@ class AttachmentService
         UploadedFile $file,
         string $documentType,
         ?string $notes = null,
-        ?int $uploadedBy = null
+        ?int $uploadedBy = null,
+        bool $replaceExisting = true
     ): RecordAttachment {
         $mime = (string) $file->getMimeType();
         if (! in_array($mime, self::ALLOWED_MIMES, true)) {
@@ -37,24 +38,26 @@ class AttachmentService
             throw new InvalidArgumentException('El archivo supera el tamaño máximo permitido de 25 MB.');
         }
 
-        $previous = RecordAttachment::query()
-            ->where('attachable_type', $attachable->getMorphClass())
-            ->where('attachable_id', $attachable->getKey())
-            ->where('document_type', $documentType)
-            ->where('is_current', true)
-            ->get();
-
         $nextVersion = ((int) RecordAttachment::query()
             ->where('attachable_type', $attachable->getMorphClass())
             ->where('attachable_id', $attachable->getKey())
             ->where('document_type', $documentType)
             ->max('version')) + 1;
 
-        foreach ($previous as $old) {
-            $old->update([
-                'is_current' => false,
-                'status' => 'reemplazado',
-            ]);
+        if ($replaceExisting) {
+            $previous = RecordAttachment::query()
+                ->where('attachable_type', $attachable->getMorphClass())
+                ->where('attachable_id', $attachable->getKey())
+                ->where('document_type', $documentType)
+                ->where('is_current', true)
+                ->get();
+
+            foreach ($previous as $old) {
+                $old->update([
+                    'is_current' => false,
+                    'status' => 'reemplazado',
+                ]);
+            }
         }
 
         $uuid = (string) Str::uuid();
