@@ -56,12 +56,23 @@ class AttachmentController extends Controller
                 ? $this->renderPdfPagesAsPngBase64(Storage::disk('local')->path($attachment->stored_path), 8)
                 : [];
 
+            $referer = (string) $request->headers->get('referer', '');
+            $backUrl = route('admisiones', [], false);
+            if ($referer !== '') {
+                $parsed = parse_url($referer);
+                $refPath = (string) ($parsed['path'] ?? '');
+                if ($refPath !== '' && ! str_starts_with($refPath, '/adjuntos/')) {
+                    $backUrl = $refPath.(isset($parsed['query']) ? '?'.$parsed['query'] : '');
+                }
+            }
+
             return response()->view('attachments.preview', [
                 'attachment' => $attachment,
                 'base64' => base64_encode((string) $bytes),
                 'isImage' => str_starts_with((string) $attachment->mime_type, 'image/'),
                 'isPdf' => $isPdf,
                 'pdfPages' => $pdfPages,
+                'backUrl' => $backUrl,
                 'downloadUrl' => route('attachments.download', ['uuid' => $attachment->uuid, 'descargar' => 1], false),
             ]);
         }

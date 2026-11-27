@@ -56,6 +56,21 @@
             color: #ffffff;
             text-transform: uppercase;
         }
+        .btn-back {
+            display: inline-block;
+            padding: 8px 14px;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 700;
+            background: rgba(255,255,255,0.16);
+            color: #ffffff;
+            text-decoration: none;
+            border: 1px solid rgba(255,255,255,0.45);
+            cursor: pointer;
+        }
+        .btn-back:hover {
+            background: rgba(255,255,255,0.28);
+        }
         .btn-download {
             display: inline-block;
             padding: 8px 14px;
@@ -151,6 +166,9 @@
             </div>
             <div class="header-actions">
                 <span class="badge">{{ strtoupper($attachment->status) }}</span>
+                <a href="{{ $backUrl ?? '/admisiones' }}" id="cecap-attachment-back-btn" class="btn-back">
+                    ← Regresar
+                </a>
                 <a href="data:{{ $attachment->mime_type }};base64,{{ $base64 }}"
                    download="{{ $attachment->original_name }}"
                    class="btn-download">
@@ -213,5 +231,20 @@
             @endif
         </div>
     </div>
+    <script>
+        (function () {
+            var backBtn = document.getElementById('cecap-attachment-back-btn');
+            if (!backBtn) return;
+            backBtn.addEventListener('click', function (e) {
+                try {
+                    if (window.parent && window.parent !== window && window.frameElement && window.frameElement.id === 'cecap-pdf-frame') {
+                        e.preventDefault();
+                        window.parent.postMessage({ type: 'cecap-close-pdf-modal' }, '*');
+                        return;
+                    }
+                } catch (err) {}
+            });
+        })();
+    </script>
 </body>
 </html>

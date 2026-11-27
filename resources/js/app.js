@@ -411,6 +411,12 @@
         }
     });
 
+    window.addEventListener('message', (e) => {
+        if (e?.data && e.data.type === 'cecap-close-pdf-modal') {
+            closePdfModal();
+        }
+    });
+
     document.addEventListener('DOMContentLoaded', initSidebar);
     document.addEventListener('livewire:navigated', initSidebar);
 })();
