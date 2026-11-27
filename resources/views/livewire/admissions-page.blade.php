@@ -15,7 +15,7 @@
 
     <div class="flex flex-wrap gap-2">
         <button type="button" wire:click="setTab('queue')" class="{{ $tab === 'queue' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Cola de Admisiones ({{ $enrollments->count() }})</button>
-        <button type="button" wire:click="setTab('enroll')" class="{{ $tab === 'enroll' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">{{ $editingStudentId ? 'Editando Expediente' : 'Matrícula Presencial / Nueva Alumna' }}</button>
+        <button type="button" wire:click="setTab('enroll')" class="{{ $tab === 'enroll' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Matrícula Presencial / Nueva Alumna</button>
         <button type="button" wire:click="setTab('students')" class="{{ $tab === 'students' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Directorio de Alumnas ({{ $students->count() }})</button>
     </div>
 

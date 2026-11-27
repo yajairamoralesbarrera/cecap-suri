@@ -280,4 +280,95 @@ it('allows audited inline editing of course editions without duplicating and tog
     expect(\App\Models\AuditLog::where('event', 'academic.edition_public_toggled')->where('auditable_id', (string) $edition->id)->exists())->toBeTrue();
 });
 
+it('duplicates courses with incremental codes and copied/editable/duplicable subjects, and allows inline subject edit and duplication', function () {
+    $admin = User::where('email', 'superadmin@cecap.or.cr')->firstOrFail();
+    $cat = AcademicCategory::create(['code' => 'CAT-DUP', 'name' => 'Gastronomía', 'created_by' => $admin->id]);
+    $source = Course::create([
+        'academic_category_id' => $cat->id,
+        'code' => 'TEC-PAN-001',
+        'name' => 'Técnico en Panadería',
+        'program_type' => 'curso_tecnico',
+        'required_education_level' => 'noveno_aprobado',
+        'default_max_capacity' => 20,
+        'duration_hours' => 120,
+        'duration_months' => 4,
+        'base_enrollment_fee' => 15000,
+        'base_monthly_fee' => 30000,
+        'required_documents' => ['cedula_dimex', 'atestado_academico'],
+        'created_by' => $admin->id,
+    ]);
+    $sub1 = $source->subjects()->create([
+        'code' => 'MAT-01',
+        'name' => 'Masas Básicas',
+        'hours' => 40,
+        'sessions_count' => 10,
+        'order_index' => 1,
+        'is_mandatory' => true,
+        'is_active' => true,
+    ]);
+
+    // 1. Duplicar curso dejando campos y materias iguales (código incremental automático TEC-PAN-002)
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->call('startDuplicateCourse', $source->id)
+        ->assertSet('duplicatingCourseId', $source->id)
+        ->assertSet('dup_code', 'TEC-PAN-002')
+        ->assertSet('dup_name', 'Técnico en Panadería')
+        ->assertCount('dup_subjects', 1)
+        ->call('saveDuplicatedCourse')
+        ->assertHasNoErrors()
+        ->assertSet('duplicatingCourseId', null);
+
+    $dup1 = Course::where('code', 'TEC-PAN-002')->firstOrFail();
+    expect($dup1->name)->toBe('Técnico en Panadería');
+    expect($dup1->subjects()->count())->toBe(1);
+    expect($dup1->subjects()->firstOrFail()->code)->toBe('MAT-01');
+    expect(\App\Models\AuditLog::where('event', 'academic.course_duplicated')->where('auditable_id', (string) $dup1->id)->exists())->toBeTrue();
+
+    // 2. Duplicar nuevamente el curso original: debe sugerir TEC-PAN-003, permitir editar nombre y duplicar materia con código incremental MAT-02
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->call('startDuplicateCourse', $source->id)
+        ->assertSet('dup_code', 'TEC-PAN-003')
+        ->set('dup_name', 'Técnico en Panadería Avanzada')
+        ->set('dup_default_max_capacity', 18)
+        ->call('duplicateDupSubjectRow', 0)
+        ->assertCount('dup_subjects', 2)
+        ->assertSet('dup_subjects.1.code', 'MAT-02')
+        ->set('dup_subjects.1.name', 'Masas Laminadas')
+        ->call('saveDuplicatedCourse')
+        ->assertHasNoErrors();
+
+    $dup2 = Course::where('code', 'TEC-PAN-003')->firstOrFail();
+    expect($dup2->name)->toBe('Técnico en Panadería Avanzada');
+    expect($dup2->default_max_capacity)->toBe(18);
+    expect($dup2->subjects()->pluck('code')->all())->toBe(['MAT-01', 'MAT-02']);
+
+    // 3. Dentro de "+ Materias", editar materia manteniendo código y duplicar materia con código incremental
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->call('openCourseSubjects', $source->id)
+        ->call('startEditSubject', $sub1->id)
+        ->set('edit_sub_name', 'Masas Artesanales')
+        ->set('edit_sub_hours', 48)
+        ->set('edit_sub_sessions', 12)
+        ->call('saveSubjectEdit')
+        ->assertHasNoErrors()
+        ->call('startDuplicateSubject', $sub1->id)
+        ->assertSet('dup_sub_code', 'MAT-02')
+        ->assertSet('dup_sub_name', 'Masas Artesanales')
+        ->set('dup_sub_name', 'Masas Dulces')
+        ->call('saveDuplicatedSubject')
+        ->assertHasNoErrors();
+
+    $sub1->refresh();
+    expect($sub1->code)->toBe('MAT-01');
+    expect($sub1->name)->toBe('Masas Artesanales');
+    expect($sub1->hours)->toBe(48);
+    expect($source->subjects()->where('code', 'MAT-02')->firstOrFail()->name)->toBe('Masas Dulces');
+    expect(\App\Models\AuditLog::where('event', 'academic.subject_updated')->where('auditable_id', (string) $sub1->id)->exists())->toBeTrue();
+    expect(\App\Models\AuditLog::where('event', 'academic.subject_duplicated')->exists())->toBeTrue();
+});
+
+
 

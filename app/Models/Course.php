@@ -51,6 +51,32 @@ class Course extends Model
         return ['cedula_dimex'];
     }
 
+    public static function nextIncrementalCode(string $sourceCode): string
+    {
+        $clean = strtoupper(trim($sourceCode));
+        if ($clean === '') {
+            $clean = 'CUR-01';
+        }
+
+        if (preg_match('/^(.*?)(\d+)$/', $clean, $matches)) {
+            $prefix = $matches[1];
+            $numStr = $matches[2];
+            $padLen = strlen($numStr);
+            $nextNum = (int) $numStr + 1;
+        } else {
+            $prefix = $clean.'-';
+            $padLen = 2;
+            $nextNum = 2;
+        }
+
+        do {
+            $candidate = $prefix.str_pad((string) $nextNum, $padLen, '0', STR_PAD_LEFT);
+            $nextNum++;
+        } while (self::where('code', $candidate)->exists());
+
+        return $candidate;
+    }
+
     public function category(): BelongsTo
     {
         return $this->belongsTo(AcademicCategory::class, 'academic_category_id');

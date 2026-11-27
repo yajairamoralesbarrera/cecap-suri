@@ -68,6 +68,35 @@ class AcademicPage extends Component
         ['code' => 'MAT-01', 'name' => '', 'hours' => 40, 'sessions_count' => 10],
     ];
 
+    // Duplicación inline de curso (con código incremental y sus materias editables)
+    public ?int $duplicatingCourseId = null;
+
+    public ?int $dup_category_id = null;
+
+    public string $dup_code = '';
+
+    public string $dup_name = '';
+
+    public string $dup_program_type = 'curso_corto';
+
+    public string $dup_education_level = 'primaria_completa';
+
+    public int $dup_default_max_capacity = 25;
+
+    public int $dup_duration_hours = 40;
+
+    public int $dup_duration_months = 2;
+
+    public float $dup_enrollment_fee = 15000;
+
+    public float $dup_monthly_fee = 25000;
+
+    public array $dup_required_documents = ['cedula_dimex'];
+
+    public string $dup_description = '';
+
+    public array $dup_subjects = [];
+
     // Gestión de materias en un curso ya existente
     public ?int $managingSubjectsCourseId = null;
 
@@ -78,6 +107,27 @@ class AcademicPage extends Component
     public int $new_sub_hours = 40;
 
     public int $new_sub_sessions = 10;
+
+    // Edición y duplicación inline de materias existentes
+    public ?int $editingSubjectId = null;
+
+    public string $edit_sub_code = '';
+
+    public string $edit_sub_name = '';
+
+    public int $edit_sub_hours = 40;
+
+    public int $edit_sub_sessions = 10;
+
+    public ?int $duplicatingSubjectId = null;
+
+    public string $dup_sub_code = '';
+
+    public string $dup_sub_name = '';
+
+    public int $dup_sub_hours = 40;
+
+    public int $dup_sub_sessions = 10;
 
     // Edición (autollenado desde curso)
     public ?int $ed_course_id = null;
@@ -264,6 +314,7 @@ class AcademicPage extends Component
         }
 
         $this->managingSubjectsCourseId = null;
+        $this->duplicatingCourseId = null;
         $this->editingCourseId = $course->id;
         $this->course_category_id = $course->academic_category_id;
         $this->course_code = $course->code;
@@ -444,6 +495,220 @@ class AcademicPage extends Component
         $this->feedback = 'Curso registrado exitosamente.';
     }
 
+    public function startDuplicateCourse(int $courseId): void
+    {
+        $this->authorizeManage();
+        $course = Course::with('subjects')->findOrFail($courseId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $course->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('dup_category_id', 'No tiene autorización sobre la categoría de este curso.');
+
+            return;
+        }
+
+        $this->editingCourseId = null;
+        $this->managingSubjectsCourseId = null;
+        $this->duplicatingCourseId = $course->id;
+        $this->dup_category_id = $course->academic_category_id;
+        $this->dup_code = Course::nextIncrementalCode($course->code);
+        $this->dup_name = $course->name;
+        $this->dup_program_type = $course->program_type;
+        $this->dup_education_level = $course->required_education_level;
+        $this->dup_default_max_capacity = (int) $course->default_max_capacity;
+        $this->dup_duration_hours = (int) $course->duration_hours;
+        $this->dup_duration_months = (int) $course->duration_months;
+        $this->dup_enrollment_fee = (float) $course->base_enrollment_fee;
+        $this->dup_monthly_fee = (float) $course->base_monthly_fee;
+        $this->dup_required_documents = $course->required_documents ?? Course::defaultRequiredDocumentsFor($course->program_type);
+        $this->dup_description = (string) ($course->description ?? '');
+        $this->dup_subjects = $course->subjects->map(fn ($sub) => [
+            'code' => $sub->code,
+            'name' => $sub->name,
+            'hours' => (int) $sub->hours,
+            'sessions_count' => (int) ($sub->sessions_count ?? 1),
+        ])->values()->all();
+
+        $this->resetValidation();
+        $this->feedback = null;
+    }
+
+    public function cancelDuplicateCourse(): void
+    {
+        $this->duplicatingCourseId = null;
+        $this->dup_subjects = [];
+        $this->resetValidation();
+    }
+
+    public function updatedDupProgramType(string $value): void
+    {
+        $this->dup_required_documents = Course::defaultRequiredDocumentsFor($value);
+        if ($value === 'curso_tecnico' && empty($this->dup_subjects)) {
+            $this->dup_subjects = [['code' => 'MAT-01', 'name' => '', 'hours' => 40, 'sessions_count' => 10]];
+        }
+    }
+
+    public function addDupSubjectRow(): void
+    {
+        $usedCodes = array_column($this->dup_subjects, 'code');
+        $lastCode = ! empty($usedCodes) ? (string) end($usedCodes) : 'MAT-00';
+        $nextCode = CourseSubject::nextIncrementalCode(null, $lastCode, $usedCodes);
+        $this->dup_subjects[] = [
+            'code' => $nextCode,
+            'name' => '',
+            'hours' => 40,
+            'sessions_count' => 10,
+        ];
+    }
+
+    public function duplicateDupSubjectRow(int $index): void
+    {
+        if (! isset($this->dup_subjects[$index])) {
+            return;
+        }
+        $source = $this->dup_subjects[$index];
+        $usedCodes = array_column($this->dup_subjects, 'code');
+        $nextCode = CourseSubject::nextIncrementalCode(null, (string) ($source['code'] ?? 'MAT-01'), $usedCodes);
+        $clone = [
+            'code' => $nextCode,
+            'name' => (string) ($source['name'] ?? ''),
+            'hours' => max(1, (int) ($source['hours'] ?? 40)),
+            'sessions_count' => max(1, (int) ($source['sessions_count'] ?? 10)),
+        ];
+        array_splice($this->dup_subjects, $index + 1, 0, [$clone]);
+        $this->dup_subjects = array_values($this->dup_subjects);
+    }
+
+    public function removeDupSubjectRow(int $index): void
+    {
+        if (isset($this->dup_subjects[$index])) {
+            unset($this->dup_subjects[$index]);
+            $this->dup_subjects = array_values($this->dup_subjects);
+        }
+    }
+
+    public function saveDuplicatedCourse(): void
+    {
+        $this->authorizeManage();
+        if (! $this->duplicatingCourseId) {
+            return;
+        }
+
+        $source = Course::findOrFail($this->duplicatingCourseId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $this->dup_category_id, $allowedCategoryIds, true)) {
+            $this->addError('dup_category_id', 'No tiene autorización sobre la categoría académica seleccionada.');
+
+            return;
+        }
+
+        $this->dup_code = strtoupper(trim($this->dup_code));
+
+        $this->validate([
+            'dup_category_id' => ['required', 'integer', 'exists:academic_categories,id'],
+            'dup_code' => ['required', 'string', 'max:40', 'unique:courses,code'],
+            'dup_name' => ['required', 'string', 'max:180'],
+            'dup_program_type' => ['required', 'in:curso_corto,programa,curso_tecnico'],
+            'dup_education_level' => ['required', 'string', 'max:80'],
+            'dup_default_max_capacity' => ['required', 'integer', 'min:1', 'max:500'],
+            'dup_duration_hours' => ['required', 'integer', 'min:1'],
+            'dup_duration_months' => ['required', 'integer', 'min:1', 'max:48'],
+            'dup_enrollment_fee' => ['required', 'numeric', 'min:0'],
+            'dup_monthly_fee' => ['required', 'numeric', 'min:0'],
+        ], [
+            'dup_code.unique' => 'Ya existe un curso registrado con ese código. Use el código incremental sugerido u otro único.',
+        ]);
+
+        $cleanSubjects = collect($this->dup_subjects)
+            ->filter(fn ($row) => trim((string) ($row['name'] ?? '')) !== '')
+            ->values();
+
+        if ($this->dup_program_type === 'curso_tecnico' && $cleanSubjects->isEmpty()) {
+            $this->addError('dup_subjects', 'Los Cursos Técnicos requieren al menos una materia registrada.');
+
+            return;
+        }
+
+        // Verificar que no haya códigos de materia repetidos dentro del curso duplicado
+        $seenSubjectCodes = [];
+        foreach ($cleanSubjects as $idx => $sub) {
+            $subCode = strtoupper(trim((string) ($sub['code'] ?? '')));
+            if ($subCode === '') {
+                $subCode = CourseSubject::nextIncrementalCode(null, 'MAT-00', $seenSubjectCodes);
+            }
+            if (in_array($subCode, $seenSubjectCodes, true)) {
+                $this->addError('dup_subjects', "El código de materia {$subCode} está repetido en la lista. Ajuste o incremente el código antes de guardar.");
+
+                return;
+            }
+            $seenSubjectCodes[] = $subCode;
+        }
+
+        $docs = ! empty($this->dup_required_documents)
+            ? array_values(array_unique($this->dup_required_documents))
+            : Course::defaultRequiredDocumentsFor($this->dup_program_type);
+
+        $newCourse = DB::transaction(function () use ($docs, $cleanSubjects): Course {
+            $course = Course::create([
+                'academic_category_id' => $this->dup_category_id,
+                'code' => $this->dup_code,
+                'name' => trim($this->dup_name),
+                'program_type' => $this->dup_program_type,
+                'description' => $this->dup_description ?: null,
+                'required_education_level' => $this->dup_education_level,
+                'default_max_capacity' => $this->dup_default_max_capacity,
+                'duration_hours' => $this->dup_duration_hours,
+                'duration_months' => $this->dup_duration_months,
+                'base_enrollment_fee' => $this->dup_enrollment_fee,
+                'base_monthly_fee' => $this->dup_monthly_fee,
+                'required_documents' => $docs,
+                'is_active' => true,
+                'created_by' => Auth::id(),
+            ]);
+
+            $usedCodes = [];
+            foreach ($cleanSubjects as $idx => $sub) {
+                $subCode = strtoupper(trim((string) ($sub['code'] ?? '')));
+                if ($subCode === '') {
+                    $subCode = CourseSubject::nextIncrementalCode(null, 'MAT-00', $usedCodes);
+                }
+                $usedCodes[] = $subCode;
+
+                CourseSubject::create([
+                    'course_id' => $course->id,
+                    'code' => $subCode,
+                    'name' => trim((string) $sub['name']),
+                    'hours' => max(1, (int) ($sub['hours'] ?? 20)),
+                    'sessions_count' => max(1, (int) ($sub['sessions_count'] ?? 1)),
+                    'order_index' => $idx + 1,
+                    'is_mandatory' => true,
+                    'is_active' => true,
+                ]);
+            }
+
+            return $course;
+        });
+
+        AuditService::log(
+            event: 'academic.course_duplicated',
+            module: 'academico',
+            auditable: $newCourse,
+            oldValues: ['source_course_id' => $source->id, 'source_code' => $source->code],
+            newValues: [
+                'code' => $newCourse->code,
+                'name' => $newCourse->name,
+                'subjects_copied' => $cleanSubjects->count(),
+            ]
+        );
+
+        $copiedCount = $cleanSubjects->count();
+        $this->cancelDuplicateCourse();
+        $this->feedback = sprintf(
+            'Curso duplicado exitosamente con código %s (%d materia(s) incluida(s)).',
+            $newCourse->code,
+            $copiedCount
+        );
+    }
+
     public function openCourseSubjects(int $courseId): void
     {
         $course = Course::with('subjects')->findOrFail($courseId);
@@ -455,9 +720,12 @@ class AcademicPage extends Component
         }
 
         $this->editingCourseId = null;
+        $this->duplicatingCourseId = null;
+        $this->editingSubjectId = null;
+        $this->duplicatingSubjectId = null;
         $this->managingSubjectsCourseId = $course->id;
-        $nextIdx = $course->subjects->count() + 1;
-        $this->new_sub_code = sprintf('MAT-%02d', $nextIdx);
+        $lastCode = $course->subjects->last()?->code ?? 'MAT-00';
+        $this->new_sub_code = CourseSubject::nextIncrementalCode($course->id, $lastCode);
         $this->new_sub_name = '';
         $this->new_sub_hours = 40;
         $this->new_sub_sessions = 10;
@@ -467,6 +735,8 @@ class AcademicPage extends Component
     public function closeCourseSubjects(): void
     {
         $this->managingSubjectsCourseId = null;
+        $this->editingSubjectId = null;
+        $this->duplicatingSubjectId = null;
     }
 
     public function addSubjectToCourse(): void
@@ -511,12 +781,151 @@ class AcademicPage extends Component
 
         AuditService::log('academic.subject_added', 'academico', $subject, null, $subject->only(['course_id', 'code', 'name', 'hours', 'sessions_count']));
 
-        $nextIdx = $course->subjects()->count() + 1;
-        $this->new_sub_code = sprintf('MAT-%02d', $nextIdx);
+        $this->new_sub_code = CourseSubject::nextIncrementalCode($course->id, $subject->code);
         $this->new_sub_name = '';
         $this->new_sub_hours = 40;
         $this->new_sub_sessions = 10;
         $this->feedback = sprintf('Materia "%s" agregada al curso %s.', $subject->name, $course->name);
+    }
+
+    public function startEditSubject(int $subjectId): void
+    {
+        $this->authorizeManage();
+        $subject = CourseSubject::with('course')->findOrFail($subjectId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $subject->course->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('edit_sub_name', 'No tiene autorización sobre la categoría de este curso.');
+
+            return;
+        }
+
+        $this->duplicatingSubjectId = null;
+        $this->editingSubjectId = $subject->id;
+        $this->edit_sub_code = $subject->code;
+        $this->edit_sub_name = $subject->name;
+        $this->edit_sub_hours = (int) $subject->hours;
+        $this->edit_sub_sessions = (int) ($subject->sessions_count ?? 1);
+        $this->resetValidation();
+    }
+
+    public function cancelEditSubject(): void
+    {
+        $this->editingSubjectId = null;
+        $this->resetValidation();
+    }
+
+    public function saveSubjectEdit(): void
+    {
+        $this->authorizeManage();
+        if (! $this->editingSubjectId) {
+            return;
+        }
+
+        $subject = CourseSubject::with('course')->findOrFail($this->editingSubjectId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $subject->course->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('edit_sub_name', 'No tiene autorización sobre la categoría de este curso.');
+
+            return;
+        }
+
+        $this->validate([
+            'edit_sub_name' => ['required', 'string', 'max:160'],
+            'edit_sub_hours' => ['required', 'integer', 'min:1'],
+            'edit_sub_sessions' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $old = $subject->only(['code', 'name', 'hours', 'sessions_count']);
+        // Código inmutable al editar materia existente
+        $subject->update([
+            'name' => trim($this->edit_sub_name),
+            'hours' => $this->edit_sub_hours,
+            'sessions_count' => $this->edit_sub_sessions,
+        ]);
+
+        AuditService::log('academic.subject_updated', 'academico', $subject, $old, $subject->only(['code', 'name', 'hours', 'sessions_count']));
+        $this->cancelEditSubject();
+        $this->feedback = sprintf('Materia %s actualizada manteniendo su mismo código.', $subject->code);
+    }
+
+    public function startDuplicateSubject(int $subjectId): void
+    {
+        $this->authorizeManage();
+        $subject = CourseSubject::with('course')->findOrFail($subjectId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $subject->course->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('dup_sub_name', 'No tiene autorización sobre la categoría de este curso.');
+
+            return;
+        }
+
+        $this->editingSubjectId = null;
+        $this->duplicatingSubjectId = $subject->id;
+        $this->dup_sub_code = CourseSubject::nextIncrementalCode($subject->course_id, $subject->code);
+        $this->dup_sub_name = $subject->name;
+        $this->dup_sub_hours = (int) $subject->hours;
+        $this->dup_sub_sessions = (int) ($subject->sessions_count ?? 1);
+        $this->resetValidation();
+    }
+
+    public function cancelDuplicateSubject(): void
+    {
+        $this->duplicatingSubjectId = null;
+        $this->resetValidation();
+    }
+
+    public function saveDuplicatedSubject(): void
+    {
+        $this->authorizeManage();
+        if (! $this->duplicatingSubjectId) {
+            return;
+        }
+
+        $source = CourseSubject::with('course')->findOrFail($this->duplicatingSubjectId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $source->course->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('dup_sub_name', 'No tiene autorización sobre la categoría de este curso.');
+
+            return;
+        }
+
+        $this->validate([
+            'dup_sub_code' => ['required', 'string', 'max:40'],
+            'dup_sub_name' => ['required', 'string', 'max:160'],
+            'dup_sub_hours' => ['required', 'integer', 'min:1'],
+            'dup_sub_sessions' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $code = strtoupper(trim($this->dup_sub_code));
+        if (CourseSubject::where('course_id', $source->course_id)->where('code', $code)->exists()) {
+            $this->addError('dup_sub_code', "Ya existe una materia con el código {$code} en este curso.");
+
+            return;
+        }
+
+        $nextOrder = (int) CourseSubject::where('course_id', $source->course_id)->max('order_index') + 1;
+        $newSubject = CourseSubject::create([
+            'course_id' => $source->course_id,
+            'code' => $code,
+            'name' => trim($this->dup_sub_name),
+            'hours' => $this->dup_sub_hours,
+            'sessions_count' => $this->dup_sub_sessions,
+            'order_index' => $nextOrder,
+            'is_mandatory' => $source->is_mandatory,
+            'is_active' => true,
+        ]);
+
+        AuditService::log(
+            event: 'academic.subject_duplicated',
+            module: 'academico',
+            auditable: $newSubject,
+            oldValues: ['source_subject_id' => $source->id, 'source_code' => $source->code],
+            newValues: $newSubject->only(['course_id', 'code', 'name', 'hours', 'sessions_count'])
+        );
+
+        $this->cancelDuplicateSubject();
+        $this->new_sub_code = CourseSubject::nextIncrementalCode($source->course_id, $newSubject->code);
+        $this->feedback = sprintf('Materia duplicada con código incremental %s ("%s").', $newSubject->code, $newSubject->name);
     }
 
     public function toggleSubjectActive(int $subjectId): void
