@@ -91,15 +91,19 @@ class AuthController extends Controller
 
     public function register(Request $request): RedirectResponse
     {
+        $validIdTypes = array_keys(\App\Models\Picklist::optionsFor('id_type'));
+
         $data = $request->validate([
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
             'second_last_name' => ['nullable', 'string', 'max:100'],
-            'identification_type' => ['required', 'string', 'max:40'],
-            'identification_number' => ['required', 'string', 'max:40', 'unique:users,identification_number'],
+            'identification_type' => ['required', 'string', 'max:40', \Illuminate\Validation\Rule::in($validIdTypes)],
+            'identification_number' => ['required', 'string', 'max:40', new \App\Rules\ValidIdentificationNumber($request->input('identification_type')), 'unique:users,identification_number'],
             'email' => ['required', 'email', 'max:255', new \App\Rules\ValidEmailDomain(), 'unique:users,email'],
             'phone' => ['required', 'string', 'max:30'],
             'password' => ['required', 'confirmed', PasswordRule::min(8)],
+        ], [
+            'identification_type.in' => 'Seleccione un tipo de identificación válido.',
         ]);
 
         $email = strtolower(trim($data['email']));

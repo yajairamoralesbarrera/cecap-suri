@@ -128,12 +128,14 @@ class StaffPage extends Component
     {
         abort_unless(Auth::user()->hasEffectivePermission('personal.manage'), 403);
 
+        $validIdTypes = array_keys(Picklist::optionsFor('id_type'));
+
         $rules = [
             'staff_role_type' => ['required', 'in:teacher,administrative,both'],
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
-            'identification_type' => ['required', 'string', 'max:40'],
-            'identification_number' => ['required', 'string', 'max:40', 'unique:staff_members,identification_number'],
+            'identification_type' => ['required', 'string', 'max:40', \Illuminate\Validation\Rule::in($validIdTypes)],
+            'identification_number' => ['required', 'string', 'max:40', new \App\Rules\ValidIdentificationNumber($this->identification_type), 'unique:staff_members,identification_number'],
             'email' => ['required', 'email', 'max:255', new \App\Rules\ValidEmailDomain()], // OBLIGATORIO
             'phone' => ['required', 'string', 'max:30'],
             'hiring_regime' => ['required', 'in:planilla_laboral,servicios_profesionales'],
@@ -146,6 +148,7 @@ class StaffPage extends Component
         }
 
         $this->validate($rules, [
+            'identification_type.in' => 'Seleccione un tipo de identificación válido.',
             'email.required' => 'El correo electrónico es obligatorio en el módulo de Personal.',
             'credentials_file.required' => 'Los Atestados Profesionales (títulos/certificaciones) son OBLIGATORIOS para Profesoras (docente o mixto).',
         ]);

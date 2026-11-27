@@ -11,10 +11,12 @@ use App\Models\InstitutionSetting;
 use App\Models\Picklist;
 use App\Models\Student;
 use App\Rules\ValidEmailDomain;
+use App\Rules\ValidIdentificationNumber;
 use App\Services\AttachmentService;
 use App\Services\EnrollmentService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Locked;
@@ -149,9 +151,58 @@ class PublicEnrollmentPage extends Component
         $this->evaluateDuplicateCourseEnrollment();
     }
 
+    public function updatedIdentificationType(): void
+    {
+        $this->resetErrorBag(['identification_type', 'identification_number']);
+        if (trim($this->identification_number) !== '') {
+            $this->validateIdentificationPair();
+        }
+        $this->evaluateDuplicateCourseEnrollment();
+    }
+
     public function updatedIdentificationNumber(): void
     {
+        $this->resetErrorBag(['identification_type', 'identification_number']);
+        if (trim($this->identification_number) !== '') {
+            $this->validateIdentificationPair();
+        }
         $this->evaluateDuplicateCourseEnrollment();
+    }
+
+    protected function validateIdentificationPair(): bool
+    {
+        $validTypes = array_keys(Picklist::optionsFor('id_type'));
+        $validator = \Illuminate\Support\Facades\Validator::make([
+            'identification_type' => $this->identification_type,
+            'identification_number' => $this->identification_number,
+        ], [
+            'identification_type' => ['required', 'string', 'max:40', Rule::in($validTypes)],
+            'identification_number' => ['required', 'string', 'max:40', new ValidIdentificationNumber($this->identification_type)],
+        ], [
+            'identification_type.in' => 'Seleccione un tipo de identificación válido.',
+        ]);
+
+        if ($validator->fails()) {
+            foreach ($validator->errors()->messages() as $field => $msgs) {
+                $this->addError($field, $msgs[0]);
+            }
+
+            return false;
+        }
+
+        $existing = Student::findByIdentification($this->identification_number);
+        if ($existing && $existing->identification_type && $existing->identification_type !== $this->identification_type) {
+            $registeredLabel = Picklist::labelFor('id_type', $existing->identification_type);
+            $this->addError('identification_type', sprintf(
+                'La identificación %s ya está registrada como %s. Seleccione el tipo de identificación correcto.',
+                $existing->identification_number,
+                $registeredLabel
+            ));
+
+            return false;
+        }
+
+        return true;
     }
 
     public function updatedEducationLevel(): void
@@ -254,11 +305,16 @@ class PublicEnrollmentPage extends Component
 
     public function autofillByIdentification(): void
     {
+        $this->resetErrorBag(['identification_type', 'identification_number']);
         $id = trim($this->identification_number);
         if ($id === '') {
             $this->duplicateCourseBlocked = false;
             $this->duplicateCourseMessage = '';
 
+            return;
+        }
+
+        if (! $this->validateIdentificationPair()) {
             return;
         }
 
@@ -303,11 +359,12 @@ class PublicEnrollmentPage extends Component
         }
 
         $isMinor = Student::isBirthDateMinor($this->birth_date);
+        $validIdTypes = array_keys(Picklist::optionsFor('id_type'));
 
         $rules = [
             'course_edition_id' => ['required', 'integer', 'exists:course_editions,id'],
-            'identification_type' => ['required', 'string', 'max:40'],
-            'identification_number' => ['required', 'string', 'max:40'],
+            'identification_type' => ['required', 'string', 'max:40', Rule::in($validIdTypes)],
+            'identification_number' => ['required', 'string', 'max:40', new ValidIdentificationNumber($this->identification_type)],
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
             'second_last_name' => ['nullable', 'string', 'max:100'],
@@ -325,13 +382,14 @@ class PublicEnrollmentPage extends Component
 
         if ($isMinor) {
             $rules['guardian_full_name'] = ['required', 'string', 'max:160'];
-            $rules['guardian_identification_number'] = ['required', 'string', 'max:40'];
+            $rules['guardian_identification_number'] = ['required', 'string', 'max:40', new ValidIdentificationNumber()];
             $rules['guardian_relationship'] = ['required', 'string', 'max:60'];
             $rules['guardian_phone'] = ['required', 'string', 'max:30'];
             $rules['guardian_email'] = ['nullable', 'email', 'max:255', new ValidEmailDomain()];
         }
 
         $this->validate($rules, [
+            'identification_type.in' => 'Seleccione un tipo de identificación válido.',
             'email.required' => 'El correo electrónico es obligatorio para enviar su comprobante y planilla.',
             'gender.in' => $settings->gender_policy_message,
             'birth_date.required' => 'La fecha de nacimiento es obligatoria.',
@@ -341,6 +399,10 @@ class PublicEnrollmentPage extends Component
             'guardian_relationship.required' => 'Por ser menor de edad, debe indicar el parentesco del representante legal.',
             'guardian_phone.required' => 'Por ser menor de edad, debe indicar el teléfono del representante legal.',
         ]);
+
+        if (! $this->validateIdentificationPair()) {
+            return;
+        }
 
         $edition = CourseEdition::with('course')->findOrFail($this->course_edition_id);
         $this->evaluateCapacityRequirement();

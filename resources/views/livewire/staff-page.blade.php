@@ -37,8 +37,19 @@
                             </select>
                         </div>
                         <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Tipo de Identificación *</label>
+                            <select wire:model.live="identification_type" class="cecap-input">
+                                @foreach($idTypes as $code => $label)
+                                    <option value="{{ $code }}">{{ $label }}</option>
+                                @endforeach
+                            </select>
+                            @error('identification_type') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                        </div>
+                        <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Cédula / DIMEX *</label>
-                            <input wire:model="identification_number" type="text" required class="cecap-input">
+                            <input wire:model="identification_number" type="text" required class="cecap-input" placeholder="{{ \App\Rules\ValidIdentificationNumber::placeholderFor($identification_type) }}">
+                            <div class="mt-1 text-[11px] text-slate-500">{{ \App\Rules\ValidIdentificationNumber::hintFor($identification_type) }}</div>
+                            @error('identification_number') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
                         </div>
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Nombre *</label>

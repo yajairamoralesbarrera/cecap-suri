@@ -947,6 +947,84 @@ it('blocks duplicate cédula in the same course (online and presencial), require
         ->assertSee('Autorizar excepción si faltan documentos');
 });
 
+it('validates identification_number format according to identification_type and enforces type consistency', function () {
+    $edition = createSampleEdition('curso_corto');
+    $admin = User::where('email', 'superadmin@cecap.or.cr')->firstOrFail();
+
+    // 1. Online: Cédula Nacional con 12 dígitos (DIMEX) -> rechazada
+    Livewire::test(PublicEnrollmentPage::class)
+        ->set('course_edition_id', $edition->id)
+        ->set('identification_type', 'cedula_nacional')
+        ->set('identification_number', '155812345678')
+        ->set('first_name', 'Elena')
+        ->set('last_name', 'Castro')
+        ->set('email', 'elena.castro@correo.com')
+        ->set('phone', '8800-1122')
+        ->set('birth_date', '1995-03-15')
+        ->call('submit')
+        ->assertHasErrors('identification_number');
+
+    // 2. Online: DIMEX con 9 dígitos (Cédula) -> rechazada
+    Livewire::test(PublicEnrollmentPage::class)
+        ->set('course_edition_id', $edition->id)
+        ->set('identification_type', 'dimex')
+        ->set('identification_number', '1-1234-5678')
+        ->set('first_name', 'Elena')
+        ->set('last_name', 'Castro')
+        ->set('email', 'elena.castro@correo.com')
+        ->set('phone', '8800-1122')
+        ->set('birth_date', '1995-03-15')
+        ->call('submit')
+        ->assertHasErrors('identification_number');
+
+    // 3. Online: DIMEX válido (12 dígitos) -> aceptado
+    Livewire::test(PublicEnrollmentPage::class)
+        ->set('course_edition_id', $edition->id)
+        ->set('identification_type', 'dimex')
+        ->set('identification_number', '155812345678')
+        ->set('first_name', 'Elena')
+        ->set('last_name', 'Castro')
+        ->set('email', 'elena.castro@correo.com')
+        ->set('phone', '8800-1122')
+        ->set('birth_date', '1995-03-15')
+        ->call('submit')
+        ->assertHasNoErrors();
+
+    expect(Student::where('identification_number', '155812345678')->firstOrFail()->identification_type)->toBe('dimex');
+
+    // 4. Presencial: Pasaporte válido -> aceptado; luego mismo número con tipo inválido o distinto -> rechazado
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->set('tab', 'enroll')
+        ->set('course_edition_id', $edition->id)
+        ->set('identification_type', 'pasaporte')
+        ->set('identification_number', 'PA-987654')
+        ->set('first_name', 'Lucía')
+        ->set('last_name', 'Méndez')
+        ->set('email', 'lucia.mendez@correo.org')
+        ->set('phone', '8800-2233')
+        ->set('birth_date', '1992-07-10')
+        ->call('createPresencialEnrollment')
+        ->assertHasNoErrors();
+
+    // 5. Presencial: intentar registrar una alumna existente (DIMEX 155812345678) pero seleccionando Pasaporte -> error en identification_type
+    $edition2 = createSampleEdition('curso_corto');
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->set('tab', 'enroll')
+        ->set('course_edition_id', $edition2->id)
+        ->set('identification_type', 'pasaporte')
+        ->set('identification_number', '155812345678')
+        ->set('first_name', 'Elena')
+        ->set('last_name', 'Castro')
+        ->set('email', 'elena.castro@correo.com')
+        ->set('phone', '8800-1122')
+        ->set('birth_date', '1995-03-15')
+        ->call('createPresencialEnrollment')
+        ->assertHasErrors('identification_type');
+});
+
+
 
 
 
