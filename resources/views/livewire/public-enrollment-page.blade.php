@@ -74,18 +74,35 @@
                                     <div>
                                         <label for="pending_file_cedula" class="block text-sm font-semibold text-slate-700 mb-1">Copia de Cédula / DIMEX (PDF/JPG/PNG/WebP)</label>
                                         <input id="pending_file_cedula" wire:model="pending_file_cedula" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
+                                        <div wire:loading wire:target="pending_file_cedula" class="mt-1 text-xs font-semibold text-amber-700">Subiendo archivo, espere un momento...</div>
+                                        @if($pending_file_cedula)
+                                            <div wire:loading.remove wire:target="pending_file_cedula" class="mt-1 text-xs font-semibold text-emerald-700">✓ Archivo listo: {{ $pending_file_cedula->getClientOriginalName() }}</div>
+                                        @endif
+                                        @error('pending_file_cedula') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
                                     </div>
                                 @endif
                                 @if(in_array('atestado_academico', $missingDocumentKeys, true))
                                     <div>
                                         <label for="pending_file_atestado" class="block text-sm font-semibold text-slate-700 mb-1">Atestados Académicos (PDF/JPG/PNG/WebP)</label>
                                         <input id="pending_file_atestado" wire:model="pending_file_atestado" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
+                                        <div wire:loading wire:target="pending_file_atestado" class="mt-1 text-xs font-semibold text-amber-700">Subiendo archivo, espere un momento...</div>
+                                        @if($pending_file_atestado)
+                                            <div wire:loading.remove wire:target="pending_file_atestado" class="mt-1 text-xs font-semibold text-emerald-700">✓ Archivo listo: {{ $pending_file_atestado->getClientOriginalName() }}</div>
+                                        @endif
+                                        @error('pending_file_atestado') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
                                     </div>
                                 @endif
                             </div>
 
                             <div class="flex flex-wrap gap-2">
-                                <button type="submit" class="cecap-btn-primary text-xs">Guardar Documentos en esta Solicitud</button>
+                                <button type="submit"
+                                        wire:loading.attr="disabled"
+                                        wire:target="pending_file_cedula,pending_file_atestado,uploadMissingDocuments"
+                                        class="cecap-btn-primary text-xs">
+                                    <span wire:loading.remove wire:target="pending_file_cedula,pending_file_atestado,uploadMissingDocuments">Guardar Documentos en esta Solicitud</span>
+                                    <span wire:loading wire:target="pending_file_cedula,pending_file_atestado">Subiendo documentos...</span>
+                                    <span wire:loading wire:target="uploadMissingDocuments">Guardando...</span>
+                                </button>
                                 <button type="button" wire:click="closePendingUploadForm" class="cecap-btn-secondary text-xs">Volver al resumen</button>
                             </div>
                         </form>
@@ -284,11 +301,21 @@
                     <div>
                         <label for="file_cedula" class="block text-sm font-semibold text-slate-700 mb-1">Copia de Cédula / DIMEX</label>
                         <input id="file_cedula" wire:model="file_cedula" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
+                        <div wire:loading wire:target="file_cedula" class="mt-1 text-xs font-semibold text-amber-700">Subiendo archivo, espere un momento...</div>
+                        @if($file_cedula)
+                            <div wire:loading.remove wire:target="file_cedula" class="mt-1 text-xs font-semibold text-emerald-700">✓ Archivo listo: {{ $file_cedula->getClientOriginalName() }}</div>
+                        @endif
+                        @error('file_cedula') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
                     </div>
                     @if(in_array('atestado_academico', $requiredDocs, true))
                         <div>
                             <label for="file_atestado" class="block text-sm font-semibold text-slate-700 mb-1">Atestados Académicos (Requerido para Curso Técnico)</label>
                             <input id="file_atestado" wire:model="file_atestado" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
+                            <div wire:loading wire:target="file_atestado" class="mt-1 text-xs font-semibold text-amber-700">Subiendo archivo, espere un momento...</div>
+                            @if($file_atestado)
+                                <div wire:loading.remove wire:target="file_atestado" class="mt-1 text-xs font-semibold text-emerald-700">✓ Archivo listo: {{ $file_atestado->getClientOriginalName() }}</div>
+                            @endif
+                            @error('file_atestado') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
                         </div>
                     @endif
                 </div>
@@ -296,8 +323,14 @@
 
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-slate-200 pt-4">
                 <p class="text-xs text-slate-500">Al enviar, se generará su Planilla de Inscripción PDF descargable e imprimible (enlace seguro válido por {{ $settings->online_enrollment_provisional_days }} días).</p>
-                <button type="submit" @disabled($genderBlocked || $educationBlocked) class="cecap-btn-primary shrink-0">
-                    Enviar Preinscripción Provisional
+                <button type="submit"
+                        @disabled($genderBlocked || $educationBlocked)
+                        wire:loading.attr="disabled"
+                        wire:target="file_cedula,file_atestado,submit"
+                        class="cecap-btn-primary shrink-0">
+                    <span wire:loading.remove wire:target="file_cedula,file_atestado,submit">Enviar Preinscripción Provisional</span>
+                    <span wire:loading wire:target="file_cedula,file_atestado">Subiendo documentos...</span>
+                    <span wire:loading wire:target="submit">Enviando solicitud...</span>
                 </button>
             </div>
         </form>
