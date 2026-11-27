@@ -47,6 +47,12 @@ class StaffPage extends Component
 
     public string $specialty = '';
 
+    public string $specialty_1 = '';
+
+    public string $specialty_2 = '';
+
+    public string $specialty_3 = '';
+
     public string $academic_degree = '';
 
     public string $hiring_regime = 'planilla_laboral';
@@ -152,6 +158,11 @@ class StaffPage extends Component
             'birth_date' => ['required', 'date', 'before:today'],
             'email' => ['required', 'email', 'max:255', new \App\Rules\ValidEmailDomain()], // OBLIGATORIO
             'phone' => ['required', 'string', 'max:30'],
+            'academic_degree' => ['nullable', 'string', 'max:140'],
+            'specialty' => ['nullable', 'string', 'max:140'],
+            'specialty_1' => ['nullable', 'string', 'max:140'],
+            'specialty_2' => ['nullable', 'string', 'max:140'],
+            'specialty_3' => ['nullable', 'string', 'max:140'],
             'hiring_regime' => ['required', 'in:planilla_laboral,servicios_profesionales'],
             'identification_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
             'credentials_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
@@ -172,6 +183,27 @@ class StaffPage extends Component
             'credentials_file.required' => 'Los Atestados Profesionales (títulos/certificaciones) son OBLIGATORIOS para Profesoras (docente o mixto).',
         ]);
 
+        $rawSpecialties = [
+            trim($this->specialty_1 !== '' ? $this->specialty_1 : $this->specialty),
+            trim($this->specialty_2),
+            trim($this->specialty_3),
+        ];
+        $specialties = [];
+        $seen = [];
+        foreach ($rawSpecialties as $spec) {
+            if ($spec === '') {
+                continue;
+            }
+            $norm = mb_strtolower($spec);
+            if (! isset($seen[$norm])) {
+                $seen[$norm] = true;
+                $specialties[] = $spec;
+            }
+            if (count($specialties) === 3) {
+                break;
+            }
+        }
+
         $member = StaffMember::create([
             'staff_code' => StaffMember::nextCode(),
             'staff_role_type' => $this->staff_role_type,
@@ -183,8 +215,9 @@ class StaffPage extends Component
             'birth_date' => $this->birth_date,
             'email' => strtolower(trim($this->email)),
             'phone' => trim($this->phone),
-            'specialty' => $this->specialty ?: null,
-            'academic_degree' => $this->academic_degree ?: null,
+            'academic_degree' => trim($this->academic_degree) !== '' ? trim($this->academic_degree) : null,
+            'specialty' => ! empty($specialties) ? implode(' · ', $specialties) : null,
+            'specialties' => ! empty($specialties) ? $specialties : null,
             'hiring_regime' => $this->hiring_regime,
             'status' => 'activo',
             'created_by' => Auth::id(),
@@ -202,8 +235,8 @@ class StaffPage extends Component
             $attachmentService->store($member, $this->signed_contract_file, 'contrato_pdf', 'Contrato existente / firmado adjunto al ingreso');
         }
 
-        AuditService::log('staff.member_created', 'personal', $member, null, $member->only(['staff_code', 'staff_role_type', 'email', 'hiring_regime', 'birth_date']));
-        $this->reset(['first_name', 'last_name', 'second_last_name', 'identification_number', 'birth_date', 'email', 'phone', 'specialty', 'academic_degree', 'identification_file', 'credentials_file', 'signed_contract_file']);
+        AuditService::log('staff.member_created', 'personal', $member, null, $member->only(['staff_code', 'staff_role_type', 'email', 'hiring_regime', 'birth_date', 'academic_degree', 'specialties']));
+        $this->reset(['first_name', 'last_name', 'second_last_name', 'identification_number', 'birth_date', 'email', 'phone', 'specialty', 'specialty_1', 'specialty_2', 'specialty_3', 'academic_degree', 'identification_file', 'credentials_file', 'signed_contract_file']);
         $this->identification_type = 'cedula_nacional';
         $this->feedback = 'Colaboradora registrada correctamente con su expediente y documentos privados.';
     }

@@ -77,8 +77,30 @@
                             <input wire:model="phone" type="tel" required class="cecap-input">
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Especialidad / Grado</label>
-                            <input wire:model="specialty" type="text" class="cecap-input" placeholder="Ej. Contabilidad / Gastronomía">
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Grado Académico</label>
+                            <input wire:model="academic_degree" type="text" class="cecap-input" placeholder="Ej. Técnico Medio, Bachillerato, Licenciatura">
+                            @error('academic_degree') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                        </div>
+
+                        <div class="md:col-span-3 rounded-xl border border-slate-200 bg-white p-4 space-y-2">
+                            <div class="text-sm font-semibold text-slate-700">Especialidades <span class="text-xs font-normal text-slate-500">(puede indicar hasta 3 especialidades)</span></div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Especialidad 1 (Principal)</label>
+                                    <input wire:model="specialty_1" type="text" class="cecap-input" placeholder="Ej. Gastronomía">
+                                    @error('specialty_1') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Especialidad 2 (Opcional)</label>
+                                    <input wire:model="specialty_2" type="text" class="cecap-input" placeholder="Ej. Contabilidad">
+                                    @error('specialty_2') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Especialidad 3 (Opcional)</label>
+                                    <input wire:model="specialty_3" type="text" class="cecap-input" placeholder="Ej. Corte y Confección">
+                                    @error('specialty_3') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                                </div>
+                            </div>
                         </div>
 
                         <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
@@ -136,7 +158,7 @@
                 <h2 class="text-base font-bold text-slate-900 mb-3">Expedientes de Colaboradores</h2>
                 <table class="w-full text-sm text-left">
                     <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
-                        <tr><th class="py-2 pr-3">Código</th><th class="py-2 pr-3">Colaboradora / Identificación</th><th class="py-2 pr-3">Tipo / Régimen CR</th><th class="py-2 pr-3">Contacto</th><th class="py-2">Documentos del Expediente</th></tr>
+                        <tr><th class="py-2 pr-3">Código</th><th class="py-2 pr-3">Colaboradora / Identificación</th><th class="py-2 pr-3">Tipo / Formación / Régimen CR</th><th class="py-2 pr-3">Contacto</th><th class="py-2">Documentos del Expediente</th></tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @forelse($staffMembers as $st)
@@ -149,9 +171,19 @@
                                         <div class="text-[11px] font-normal text-slate-500">Nacimiento: {{ $st->birth_date->format('d/m/Y') }} ({{ $st->birth_date->age }} años)</div>
                                     @endif
                                 </td>
-                                <td class="py-2.5 pr-3 text-xs">
-                                    <span class="cecap-badge bg-brand-100 text-brand-900">{{ $st->staff_role_type }}</span>
-                                    <div class="mt-1 font-semibold">{{ $st->hiring_regime === 'planilla_laboral' ? 'Planilla Laboral CR' : 'Servicios Profesionales CR' }}</div>
+                                <td class="py-2.5 pr-3 text-xs space-y-1">
+                                    <div><span class="cecap-badge bg-brand-100 text-brand-900">{{ $st->staff_role_type }}</span></div>
+                                    <div class="font-semibold">{{ $st->hiring_regime === 'planilla_laboral' ? 'Planilla Laboral CR' : 'Servicios Profesionales CR' }}</div>
+                                    @if($st->academic_degree)
+                                        <div class="text-slate-700"><span class="font-semibold text-slate-500">Grado:</span> {{ $st->academic_degree }}</div>
+                                    @endif
+                                    @if(!empty($st->specialties_list))
+                                        <div class="flex flex-wrap gap-1 pt-0.5">
+                                            @foreach($st->specialties_list as $sp)
+                                                <span class="inline-flex items-center rounded-md bg-slate-100 border border-slate-200 px-1.5 py-0.5 text-[11px] font-medium text-slate-700">{{ $sp }}</span>
+                                            @endforeach
+                                        </div>
+                                    @endif
                                 </td>
                                 <td class="py-2.5 pr-3 text-xs">{{ $st->email }}<div>{{ $st->phone }}</div></td>
                                 <td class="py-2.5 text-xs space-y-0.5">

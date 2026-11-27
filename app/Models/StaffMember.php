@@ -26,6 +26,7 @@ class StaffMember extends Model
         'gender',
         'birth_date',
         'specialty',
+        'specialties',
         'academic_degree',
         'hiring_regime',
         'status',
@@ -37,7 +38,21 @@ class StaffMember extends Model
     {
         return [
             'birth_date' => 'date',
+            'specialties' => 'array',
         ];
+    }
+
+    public function getSpecialtiesListAttribute(): array
+    {
+        if (is_array($this->specialties) && ! empty($this->specialties)) {
+            return array_values(array_slice(array_filter(array_map('trim', $this->specialties)), 0, 3));
+        }
+
+        if (filled($this->specialty)) {
+            return [trim((string) $this->specialty)];
+        }
+
+        return [];
     }
 
     public function user(): BelongsTo

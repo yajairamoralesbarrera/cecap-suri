@@ -143,6 +143,10 @@ it('enforces Costa Rica staff legal separation (Planilla vs Servicios Profesiona
         ->set('birth_date', '1988-06-15')
         ->set('email', 'karla.urena@cecap.or.cr')
         ->set('phone', '8899-0011')
+        ->set('academic_degree', 'Licenciatura en Educación Técnica')
+        ->set('specialty_1', 'Gastronomía')
+        ->set('specialty_2', 'Contabilidad')
+        ->set('specialty_3', 'Corte y Confección')
         ->set('identification_file', UploadedFile::fake()->create('cedula_karla.pdf', 100, 'application/pdf'))
         ->set('credentials_file', UploadedFile::fake()->create('titulo_docente.pdf', 150, 'application/pdf'))
         ->set('signed_contract_file', UploadedFile::fake()->create('contrato_vigente_karla.pdf', 180, 'application/pdf'))
@@ -151,6 +155,10 @@ it('enforces Costa Rica staff legal separation (Planilla vs Servicios Profesiona
 
     $member = StaffMember::where('identification_number', '1-9000-1111')->firstOrFail();
     expect($member->birth_date?->toDateString())->toBe('1988-06-15');
+    expect($member->academic_degree)->toBe('Licenciatura en Educación Técnica');
+    expect($member->specialties)->toBe(['Gastronomía', 'Contabilidad', 'Corte y Confección']);
+    expect($member->specialties_list)->toBe(['Gastronomía', 'Contabilidad', 'Corte y Confección']);
+    expect($member->specialty)->toBe('Gastronomía · Contabilidad · Corte y Confección');
     expect($member->attachments()->where('document_type', 'cedula_dimex')->exists())->toBeTrue();
     expect($member->attachments()->where('document_type', 'atestado_profesional')->exists())->toBeTrue();
     expect($member->attachments()->where('document_type', 'contrato_pdf')->exists())->toBeTrue();
