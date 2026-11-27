@@ -303,7 +303,7 @@
                             </select>
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Adjunto Privado (PDF/JPG/PNG/WebP máx 10MB)</label>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Adjunto Privado (PDF/JPG/PNG/WebP máx 25MB)</label>
                             <div class="flex gap-2">
                                 <select wire:model="attachment_doc_type" class="cecap-input w-44 shrink-0">
                                     <option value="cedula_dimex">Cédula / DIMEX</option>

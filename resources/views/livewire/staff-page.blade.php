@@ -66,7 +66,7 @@
                         </div>
                         <div class="md:col-span-3">
                             <label class="block text-sm font-semibold text-slate-700 mb-1">
-                                Atestados Profesionales (PDF/JPG/PNG/WebP máx 10MB)
+                                Atestados Profesionales (PDF/JPG/PNG/WebP máx 25MB)
                                 @if(in_array($staff_role_type, ['teacher', 'both'], true))
                                     <span class="text-rose-700">* OBLIGATORIO PARA PROFESORAS</span>
                                 @endif

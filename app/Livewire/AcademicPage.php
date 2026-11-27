@@ -108,6 +108,35 @@ class AcademicPage extends Component
 
     public bool $ed_public_open = true;
 
+    // Edición inline de una edición existente (evita duplicados)
+    public ?int $editingEditionId = null;
+
+    public string $edit_ed_code = '';
+
+    public string $edit_ed_name = '';
+
+    public ?int $edit_ed_shift_id = null;
+
+    public ?int $edit_ed_modality_id = null;
+
+    public ?int $edit_ed_classroom_id = null;
+
+    public ?int $edit_ed_teacher_id = null;
+
+    public string $edit_ed_start_date = '';
+
+    public string $edit_ed_end_date = '';
+
+    public int $edit_ed_max_capacity = 25;
+
+    public float $edit_ed_enrollment_fee = 0;
+
+    public float $edit_ed_monthly_fee = 0;
+
+    public int $edit_ed_installments_count = 1;
+
+    public bool $edit_ed_public_open = true;
+
     // Horario anti-choque
     public ?int $sch_edition_id = null;
 
@@ -532,6 +561,118 @@ class AcademicPage extends Component
         AuditService::log('academic.edition_created', 'academico', $edition, null, $edition->only(['code', 'name', 'max_capacity']));
         $this->reset(['ed_code', 'ed_name']);
         $this->feedback = 'Edición creada con capacidad autollenada y lista para matrícula.';
+    }
+
+    public function editEdition(int $editionId): void
+    {
+        $this->authorizeManage();
+        $edition = CourseEdition::with('course')->findOrFail($editionId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $edition->course->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('ed_course_id', 'No tiene autorización sobre la categoría de esta edición.');
+
+            return;
+        }
+
+        $this->editingEditionId = $edition->id;
+        $this->edit_ed_code = $edition->code;
+        $this->edit_ed_name = $edition->name;
+        $this->edit_ed_shift_id = $edition->shift_id;
+        $this->edit_ed_modality_id = $edition->modality_id;
+        $this->edit_ed_classroom_id = $edition->classroom_id;
+        $this->edit_ed_teacher_id = $edition->teacher_id;
+        $this->edit_ed_start_date = $edition->start_date?->toDateString() ?? '';
+        $this->edit_ed_end_date = $edition->end_date?->toDateString() ?? '';
+        $this->edit_ed_max_capacity = (int) $edition->max_capacity;
+        $this->edit_ed_enrollment_fee = (float) $edition->enrollment_fee;
+        $this->edit_ed_monthly_fee = (float) $edition->monthly_fee;
+        $this->edit_ed_installments_count = (int) $edition->installments_count;
+        $this->edit_ed_public_open = (bool) $edition->is_public_enrollment_open;
+        $this->resetValidation();
+        $this->feedback = null;
+    }
+
+    public function cancelEditEdition(): void
+    {
+        $this->editingEditionId = null;
+        $this->resetValidation();
+    }
+
+    public function saveEditionEdit(): void
+    {
+        $this->authorizeManage();
+        if (! $this->editingEditionId) {
+            return;
+        }
+
+        $edition = CourseEdition::with('course')->findOrFail($this->editingEditionId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $edition->course->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('edit_ed_name', 'No tiene autorización sobre la categoría de esta edición.');
+
+            return;
+        }
+
+        $this->validate([
+            'edit_ed_code' => ['required', 'string', 'max:50', 'unique:course_editions,code,'.$edition->id],
+            'edit_ed_name' => ['required', 'string', 'max:180'],
+            'edit_ed_shift_id' => ['required', 'integer', 'exists:academic_shifts,id'],
+            'edit_ed_modality_id' => ['required', 'integer', 'exists:academic_modalities,id'],
+            'edit_ed_classroom_id' => ['nullable', 'integer', 'exists:classrooms,id'],
+            'edit_ed_teacher_id' => ['nullable', 'integer', 'exists:users,id'],
+            'edit_ed_start_date' => ['required', 'date'],
+            'edit_ed_end_date' => ['required', 'date', 'after_or_equal:edit_ed_start_date'],
+            'edit_ed_max_capacity' => ['required', 'integer', 'min:1'],
+            'edit_ed_enrollment_fee' => ['required', 'numeric', 'min:0'],
+            'edit_ed_monthly_fee' => ['required', 'numeric', 'min:0'],
+            'edit_ed_installments_count' => ['required', 'integer', 'min:1', 'max:48'],
+        ]);
+
+        $activeCount = $edition->activeEnrollmentsCount();
+        if ($this->edit_ed_max_capacity < $activeCount) {
+            $this->addError('edit_ed_max_capacity', sprintf('La capacidad máxima no puede ser menor a las %d inscripciones activas actuales.', $activeCount));
+
+            return;
+        }
+
+        $old = $edition->only(['code', 'name', 'shift_id', 'modality_id', 'classroom_id', 'teacher_id', 'start_date', 'end_date', 'max_capacity', 'enrollment_fee', 'monthly_fee', 'installments_count', 'is_public_enrollment_open']);
+
+        $edition->update([
+            'code' => strtoupper(trim($this->edit_ed_code)),
+            'name' => trim($this->edit_ed_name),
+            'shift_id' => $this->edit_ed_shift_id,
+            'modality_id' => $this->edit_ed_modality_id,
+            'classroom_id' => $this->edit_ed_classroom_id ?: null,
+            'teacher_id' => $this->edit_ed_teacher_id ?: null,
+            'start_date' => $this->edit_ed_start_date,
+            'end_date' => $this->edit_ed_end_date,
+            'max_capacity' => $this->edit_ed_max_capacity,
+            'enrollment_fee' => $this->edit_ed_enrollment_fee,
+            'monthly_fee' => $this->edit_ed_monthly_fee,
+            'installments_count' => $this->edit_ed_installments_count,
+            'is_public_enrollment_open' => $this->edit_ed_public_open,
+        ]);
+
+        AuditService::log('academic.edition_updated', 'academico', $edition, $old, $edition->only(array_keys($old)));
+        $this->editingEditionId = null;
+        $this->feedback = sprintf('Edición %s actualizada correctamente (cambio auditado, sin duplicar).', $edition->code);
+    }
+
+    public function toggleEditionPublicOpen(int $editionId): void
+    {
+        $this->authorizeManage();
+        $edition = CourseEdition::with('course')->findOrFail($editionId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $edition->course->academic_category_id, $allowedCategoryIds, true)) {
+            return;
+        }
+
+        $old = ['is_public_enrollment_open' => $edition->is_public_enrollment_open];
+        $edition->update(['is_public_enrollment_open' => ! $edition->is_public_enrollment_open]);
+        AuditService::log('academic.edition_public_toggled', 'academico', $edition, $old, ['is_public_enrollment_open' => $edition->is_public_enrollment_open]);
+        $this->feedback = $edition->is_public_enrollment_open
+            ? sprintf('Edición %s habilitada en /inscripcion.', $edition->code)
+            : sprintf('Edición %s ocultada de /inscripcion (sin borrado físico).', $edition->code);
     }
 
     public function createSchedule(ScheduleConflictService $conflictService): void

@@ -160,7 +160,7 @@
                         <option value="">-- Seleccione un curso o programa abierto --</option>
                         @foreach($editions as $ed)
                             <option value="{{ $ed->id }}">
-                                {{ $ed->course?->name }} ({{ $ed->course?->program_type_label }}) — {{ $ed->shift?->name }} · {{ $ed->modality?->name }} · Cupos: {{ $ed->availableSeats() }}
+                                {{ $ed->course?->name }} [{{ $ed->code }}] ({{ $ed->course?->program_type_label }}) — {{ $ed->shift?->name }} · {{ $ed->modality?->name }} · Cupos: {{ $ed->availableSeats() }}
                             </option>
                         @endforeach
                     </select>
@@ -306,9 +306,9 @@
                 @endif
             </div>
 
-            {{-- 3. Adjuntos Privados (PDF/JPG/PNG/WebP máx 10MB) --}}
+            {{-- 3. Adjuntos Privados (PDF/JPG/PNG/WebP máx 25MB) --}}
             <div class="space-y-3">
-                <h2 class="text-base font-bold text-brand-950 border-b border-slate-200 pb-2">3. Documentos de Respaldo (Adjuntos Privados — Máx. 10 MB)</h2>
+                <h2 class="text-base font-bold text-brand-950 border-b border-slate-200 pb-2">3. Documentos de Respaldo (Adjuntos Privados — Máx. 25 MB)</h2>
                 <p class="text-xs text-slate-600">Formatos permitidos: PDF, JPG, PNG o WebP. Si aún no cuenta con todos los documentos, su solicitud ingresará como <strong>Documentación Pendiente</strong> y podrá entregarlos presencialmente.</p>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>

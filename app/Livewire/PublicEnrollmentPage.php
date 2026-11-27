@@ -235,8 +235,8 @@ class PublicEnrollmentPage extends Component
             'province_id' => ['nullable', 'integer', 'exists:cr_provinces,id'],
             'canton_id' => ['nullable', 'integer', 'exists:cr_cantons,id'],
             'district_id' => ['nullable', 'integer', 'exists:cr_districts,id'],
-            'file_cedula' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
-            'file_atestado' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+            'file_cedula' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'file_atestado' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
         ], [
             'email.required' => 'El correo electrónico es obligatorio para enviar su comprobante y planilla.',
             'gender.in' => $settings->gender_policy_message,
@@ -360,8 +360,8 @@ class PublicEnrollmentPage extends Component
         }
 
         $this->validate([
-            'pending_file_cedula' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
-            'pending_file_atestado' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+            'pending_file_cedula' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'pending_file_atestado' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
         ]);
 
         if (! $this->pending_file_cedula && ! $this->pending_file_atestado) {

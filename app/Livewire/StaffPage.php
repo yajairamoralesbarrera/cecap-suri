@@ -137,12 +137,12 @@ class StaffPage extends Component
             'email' => ['required', 'email', 'max:255'], // OBLIGATORIO
             'phone' => ['required', 'string', 'max:30'],
             'hiring_regime' => ['required', 'in:planilla_laboral,servicios_profesionales'],
-            'credentials_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+            'credentials_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
         ];
 
         // Atestados Profesionales OBLIGATORIOS para Profesoras (teacher / both)
         if (in_array($this->staff_role_type, ['teacher', 'both'], true)) {
-            $rules['credentials_file'] = ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'];
+            $rules['credentials_file'] = ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'];
         }
 
         $this->validate($rules, [
@@ -190,7 +190,7 @@ class StaffPage extends Component
         ];
 
         if ($this->contract_mode === 'pdf_adjunto') {
-            $rules['contract_pdf_file'] = ['required', 'file', 'mimes:pdf', 'max:10240'];
+            $rules['contract_pdf_file'] = ['required', 'file', 'mimes:pdf', 'max:25600'];
         }
 
         $this->validate($rules);

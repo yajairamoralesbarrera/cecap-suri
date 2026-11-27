@@ -19,7 +19,7 @@ class AttachmentService
         'image/webp',
     ];
 
-    public const MAX_BYTES = 10485760; // 10 MB
+    public const MAX_BYTES = 26214400; // 25 MB
 
     public function store(
         Model $attachable,
@@ -34,7 +34,7 @@ class AttachmentService
         }
 
         if ($file->getSize() > self::MAX_BYTES) {
-            throw new InvalidArgumentException('El archivo supera el tamaño máximo permitido de 10 MB.');
+            throw new InvalidArgumentException('El archivo supera el tamaño máximo permitido de 25 MB.');
         }
 
         $previous = RecordAttachment::query()

@@ -230,7 +230,7 @@ class AdmissionsPage extends Component
             'gender' => ['required', 'string', 'max:30'],
             'education_level' => ['required', 'string', 'max:80'],
             'course_edition_id' => ['required', 'integer', 'exists:course_editions,id'],
-            'attachment_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+            'attachment_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
         ], [
             'email.required' => 'El correo electrónico es obligatorio en Admisiones.',
         ]);

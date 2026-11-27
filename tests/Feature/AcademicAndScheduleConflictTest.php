@@ -212,3 +212,50 @@ it('allows audited editing of course attributes, adding subjects with sessions, 
     expect(\App\Models\AuditLog::where('event', 'academic.course_toggled')->where('auditable_id', (string) $course->id)->exists())->toBeTrue();
 });
 
+it('allows audited inline editing of course editions without duplicating and toggling public enrollment visibility', function () {
+    $admin = User::where('email', 'superadmin@cecap.or.cr')->firstOrFail();
+    $cat = AcademicCategory::create(['code' => 'CAT-ED', 'name' => 'Ediciones', 'created_by' => $admin->id]);
+    $course = Course::create([
+        'academic_category_id' => $cat->id,
+        'code' => 'CUR-ED-01',
+        'name' => 'Administración',
+        'program_type' => 'curso_corto',
+        'required_education_level' => 'primaria_completa',
+        'default_max_capacity' => 25,
+        'required_documents' => ['cedula_dimex'],
+        'created_by' => $admin->id,
+    ]);
+    $edition = CourseEdition::create([
+        'course_id' => $course->id,
+        'code' => 'ED-ADMIN-01',
+        'name' => 'Cohorte 1',
+        'shift_id' => AcademicShift::firstOrFail()->id,
+        'modality_id' => AcademicModality::firstOrFail()->id,
+        'start_date' => '2026-06-01',
+        'end_date' => '2026-08-31',
+        'max_capacity' => 25,
+        'is_public_enrollment_open' => true,
+        'created_by' => $admin->id,
+    ]);
+
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->call('editEdition', $edition->id)
+        ->assertSet('editingEditionId', $edition->id)
+        ->set('edit_ed_max_capacity', 12)
+        ->set('edit_ed_name', 'Cohorte 1 Actualizada')
+        ->call('saveEditionEdit')
+        ->assertHasNoErrors()
+        ->assertSet('editingEditionId', null)
+        ->call('toggleEditionPublicOpen', $edition->id);
+
+    expect(CourseEdition::count())->toBe(1);
+    $edition->refresh();
+    expect($edition->max_capacity)->toBe(12);
+    expect($edition->name)->toBe('Cohorte 1 Actualizada');
+    expect($edition->is_public_enrollment_open)->toBeFalse();
+    expect(\App\Models\AuditLog::where('event', 'academic.edition_updated')->where('auditable_id', (string) $edition->id)->exists())->toBeTrue();
+    expect(\App\Models\AuditLog::where('event', 'academic.edition_public_toggled')->where('auditable_id', (string) $edition->id)->exists())->toBeTrue();
+});
+
+

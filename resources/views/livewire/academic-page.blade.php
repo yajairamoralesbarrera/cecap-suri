@@ -429,24 +429,126 @@
                 <h2 class="text-base font-bold text-slate-900 mb-3">Ediciones Activas</h2>
                 <table class="w-full text-sm text-left">
                     <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
-                        <tr><th class="py-2 pr-3">Código</th><th class="py-2 pr-3">Edición</th><th class="py-2 pr-3">Turno / Mod.</th><th class="py-2 pr-3">Profesora</th><th class="py-2 pr-3">Cupos</th><th class="py-2">Horarios</th></tr>
+                        <tr>
+                            <th class="py-2 pr-3">Código</th>
+                            <th class="py-2 pr-3">Edición</th>
+                            <th class="py-2 pr-3">Turno / Mod.</th>
+                            <th class="py-2 pr-3">Profesora</th>
+                            <th class="py-2 pr-3">Cupos</th>
+                            <th class="py-2 pr-3">Horarios</th>
+                            <th class="py-2">Acciones</th>
+                        </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @forelse($editions as $ed)
-                            <tr>
+                            <tr wire:key="edition-row-{{ $ed->id }}" class="{{ $editingEditionId === $ed->id ? 'bg-slate-50/80' : '' }}">
                                 <td class="py-2.5 pr-3 font-mono text-xs font-bold">{{ $ed->code }}</td>
                                 <td class="py-2.5 pr-3 font-semibold">{{ $ed->name }}<div class="text-xs text-slate-500">{{ $ed->start_date?->format('d/m/Y') }} - {{ $ed->end_date?->format('d/m/Y') }}</div></td>
                                 <td class="py-2.5 pr-3 text-xs">{{ $ed->shift?->name }} · {{ $ed->modality?->name }}</td>
                                 <td class="py-2.5 pr-3 text-xs">{{ $ed->teacher?->name ?? 'Por asignar' }}</td>
                                 <td class="py-2.5 pr-3 text-xs font-bold">{{ $ed->activeEnrollmentsCount() }} / {{ $ed->max_capacity }}</td>
-                                <td class="py-2.5 text-xs">
+                                <td class="py-2.5 pr-3 text-xs">
                                     @foreach($ed->schedules as $sch)
                                         <div>{{ $sch->formatted_slot }}</div>
                                     @endforeach
                                 </td>
+                                <td class="py-2.5">
+                                    @if(auth()->user()->hasEffectivePermission('academico.manage'))
+                                        <div class="flex flex-wrap gap-1.5">
+                                            <button type="button" wire:click="editEdition({{ $ed->id }})" class="cecap-btn-secondary !min-h-9 !px-2.5 text-xs">Editar</button>
+                                            <button type="button" wire:click="toggleEditionPublicOpen({{ $ed->id }})" class="cecap-badge cursor-pointer {{ $ed->is_public_enrollment_open ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-200 text-slate-600' }}">
+                                                {{ $ed->is_public_enrollment_open ? 'En línea: Abierta' : 'En línea: Oculta' }}
+                                            </button>
+                                        </div>
+                                    @endif
+                                </td>
                             </tr>
+                            @if($editingEditionId === $ed->id)
+                                <tr wire:key="edition-edit-{{ $ed->id }}">
+                                    <td colspan="7" class="py-3 px-1">
+                                        <form wire:submit="saveEditionEdit" class="rounded-2xl border-2 border-brand-700 bg-brand-50/60 p-4 space-y-4">
+                                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                                <h3 class="text-sm sm:text-base font-bold text-brand-950">Editar Edición {{ $ed->code }} (Cambio Auditado — sin duplicar)</h3>
+                                                <button type="button" wire:click="cancelEditEdition" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar</button>
+                                            </div>
+                                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Código Edición *</label>
+                                                    <input wire:model="edit_ed_code" type="text" required class="cecap-input">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Nombre Edición *</label>
+                                                    <input wire:model="edit_ed_name" type="text" required class="cecap-input">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Capacidad Máxima (Cupos) *</label>
+                                                    <input wire:model="edit_ed_max_capacity" type="number" min="1" required class="cecap-input">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Turno *</label>
+                                                    <select wire:model="edit_ed_shift_id" required class="cecap-input">
+                                                        @foreach($shifts as $s)<option value="{{ $s->id }}">{{ $s->name }}</option>@endforeach
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Modalidad *</label>
+                                                    <select wire:model="edit_ed_modality_id" required class="cecap-input">
+                                                        @foreach($modalities as $m)<option value="{{ $m->id }}">{{ $m->name }}</option>@endforeach
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Aula</label>
+                                                    <select wire:model="edit_ed_classroom_id" class="cecap-input">
+                                                        <option value="">-- Sin asignar --</option>
+                                                        @foreach($classrooms as $r)<option value="{{ $r->id }}">{{ $r->name }} (Cap. {{ $r->capacity }})</option>@endforeach
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Profesora Titular</label>
+                                                    <select wire:model="edit_ed_teacher_id" class="cecap-input">
+                                                        <option value="">-- Sin asignar --</option>
+                                                        @foreach($teachers as $t)<option value="{{ $t->id }}">{{ $t->name }}</option>@endforeach
+                                                    </select>
+                                                </div>
+                                                <div class="grid grid-cols-2 gap-2">
+                                                    <div>
+                                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Inicio *</label>
+                                                        <input wire:model="edit_ed_start_date" type="date" required class="cecap-input">
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Fin *</label>
+                                                        <input wire:model="edit_ed_end_date" type="date" required class="cecap-input">
+                                                    </div>
+                                                </div>
+                                                <div class="grid grid-cols-3 gap-2">
+                                                    <div>
+                                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Matrícula</label>
+                                                        <input wire:model="edit_ed_enrollment_fee" type="number" step="0.01" class="cecap-input">
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Mensualidad</label>
+                                                        <input wire:model="edit_ed_monthly_fee" type="number" step="0.01" class="cecap-input">
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Cuotas</label>
+                                                        <input wire:model="edit_ed_installments_count" type="number" min="1" class="cecap-input">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <label class="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-700 cursor-pointer">
+                                                <input type="checkbox" wire:model="edit_ed_public_open" class="h-4 w-4 rounded text-brand-900">
+                                                <span>Visible y abierta para inscripción en línea (/inscripcion)</span>
+                                            </label>
+                                            <div class="flex flex-wrap gap-2">
+                                                <button type="submit" class="cecap-btn-primary text-xs sm:text-sm">Guardar Cambios de la Edición</button>
+                                                <button type="button" wire:click="cancelEditEdition" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
+                                            </div>
+                                        </form>
+                                    </td>
+                                </tr>
+                            @endif
                         @empty
-                            <tr><td colspan="6" class="py-6 text-center text-slate-500">Sin ediciones registradas.</td></tr>
+                            <tr><td colspan="7" class="py-6 text-center text-slate-500">Sin ediciones registradas.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
