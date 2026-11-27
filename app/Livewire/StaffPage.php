@@ -79,6 +79,47 @@ class StaffPage extends Component
 
     public string $extra_credentials_notes = '';
 
+    // Edición inline auditada de colaborador existente
+    public ?int $editingStaffId = null;
+
+    public string $edit_staff_role_type = 'teacher';
+
+    public string $edit_hiring_regime = 'planilla_laboral';
+
+    public string $edit_status = 'activo';
+
+    public string $edit_identification_type = 'cedula_nacional';
+
+    public string $edit_identification_number = '';
+
+    public string $edit_first_name = '';
+
+    public string $edit_last_name = '';
+
+    public string $edit_second_last_name = '';
+
+    public string $edit_birth_date = '';
+
+    public string $edit_email = '';
+
+    public string $edit_phone = '';
+
+    public string $edit_academic_degree = '';
+
+    public string $edit_specialty_1 = '';
+
+    public string $edit_specialty_2 = '';
+
+    public string $edit_specialty_3 = '';
+
+    public string $edit_notes = '';
+
+    public $edit_identification_file = null;
+
+    public array $edit_credentials_files = [];
+
+    public $edit_signed_contract_file = null;
+
     // Carga inline de contrato firmado sobre un contrato existente
     public ?int $attachingContractId = null;
 
@@ -284,6 +325,7 @@ class StaffPage extends Component
     public function startAttachCredentials(int $staffId): void
     {
         abort_unless(Auth::user()->hasEffectivePermission('personal.manage'), 403);
+        $this->editingStaffId = null;
         $this->attachingCredentialsStaffId = $staffId;
         $this->extra_credentials_files = [];
         $this->extra_credentials_notes = '';
@@ -350,6 +392,195 @@ class StaffPage extends Component
             $uploadedCount === 1 ? 'atestado profesional' : 'atestados profesionales',
             $member->full_name
         );
+    }
+
+    public function startEditStaff(int $staffId): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('personal.manage'), 403);
+        $member = StaffMember::findOrFail($staffId);
+
+        $this->attachingCredentialsStaffId = null;
+        $this->editingStaffId = $member->id;
+        $this->edit_staff_role_type = in_array($member->staff_role_type, ['teacher', 'administrative', 'both'], true)
+            ? $member->staff_role_type
+            : 'administrative';
+        $this->edit_hiring_regime = $member->hiring_regime ?: 'planilla_laboral';
+        $this->edit_status = in_array($member->status, ['activo', 'inactivo'], true) ? $member->status : 'activo';
+        $this->edit_identification_type = $member->identification_type ?: 'cedula_nacional';
+        $this->edit_identification_number = (string) $member->identification_number;
+        $this->edit_first_name = (string) $member->first_name;
+        $this->edit_last_name = (string) $member->last_name;
+        $this->edit_second_last_name = (string) ($member->second_last_name ?? '');
+        $this->edit_birth_date = $member->birth_date?->toDateString() ?? '';
+        $this->edit_email = (string) $member->email;
+        $this->edit_phone = (string) ($member->phone ?? '');
+        $this->edit_academic_degree = (string) ($member->academic_degree ?? '');
+
+        $specs = $member->specialties_list;
+        $this->edit_specialty_1 = $specs[0] ?? '';
+        $this->edit_specialty_2 = $specs[1] ?? '';
+        $this->edit_specialty_3 = $specs[2] ?? '';
+        $this->edit_notes = (string) ($member->notes ?? '');
+        $this->edit_identification_file = null;
+        $this->edit_credentials_files = [];
+        $this->edit_signed_contract_file = null;
+
+        $this->resetValidation();
+        $this->feedback = null;
+    }
+
+    public function cancelEditStaff(): void
+    {
+        $this->editingStaffId = null;
+        $this->reset([
+            'edit_identification_file',
+            'edit_credentials_files',
+            'edit_signed_contract_file',
+        ]);
+        $this->resetValidation();
+    }
+
+    public function saveStaffEdit(AttachmentService $attachmentService): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('personal.manage'), 403);
+        if (! $this->editingStaffId) {
+            return;
+        }
+
+        $member = StaffMember::findOrFail($this->editingStaffId);
+        $validIdTypes = array_keys(Picklist::optionsFor('id_type'));
+
+        $rules = [
+            'edit_staff_role_type' => ['required', 'in:teacher,administrative,both'],
+            'edit_hiring_regime' => ['required', 'in:planilla_laboral,servicios_profesionales'],
+            'edit_status' => ['required', 'in:activo,inactivo'],
+            'edit_first_name' => ['required', 'string', 'max:100'],
+            'edit_last_name' => ['required', 'string', 'max:100'],
+            'edit_second_last_name' => ['nullable', 'string', 'max:100'],
+            'edit_identification_type' => ['required', 'string', 'max:40', \Illuminate\Validation\Rule::in($validIdTypes)],
+            'edit_identification_number' => [
+                'required',
+                'string',
+                'max:40',
+                new \App\Rules\ValidIdentificationNumber($this->edit_identification_type),
+                \Illuminate\Validation\Rule::unique('staff_members', 'identification_number')->ignore($member->id),
+            ],
+            'edit_birth_date' => ['required', 'date', 'before:today'],
+            'edit_email' => ['required', 'email', 'max:255', new \App\Rules\ValidEmailDomain()],
+            'edit_phone' => ['required', 'string', 'max:30'],
+            'edit_academic_degree' => ['nullable', 'string', 'max:140'],
+            'edit_specialty_1' => ['nullable', 'string', 'max:140'],
+            'edit_specialty_2' => ['nullable', 'string', 'max:140'],
+            'edit_specialty_3' => ['nullable', 'string', 'max:140'],
+            'edit_notes' => ['nullable', 'string', 'max:1000'],
+            'edit_identification_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'edit_credentials_files' => ['nullable', 'array', 'max:10'],
+            'edit_credentials_files.*' => ['file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'edit_signed_contract_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+        ];
+
+        $this->validate($rules, [
+            'edit_identification_type.in' => 'Seleccione un tipo de identificación válido.',
+            'edit_birth_date.required' => 'La fecha de nacimiento es obligatoria en el expediente de Colaboradores.',
+            'edit_birth_date.before' => 'La fecha de nacimiento debe ser anterior a hoy.',
+            'edit_email.required' => 'El correo electrónico es obligatorio en el módulo de Colaboradores.',
+            'edit_credentials_files.max' => 'Puede adjuntar hasta 10 archivos de atestados por carga.',
+            'edit_credentials_files.*.mimes' => 'Cada atestado debe ser PDF, JPG, PNG o WebP.',
+        ]);
+
+        if (
+            in_array($this->edit_staff_role_type, ['teacher', 'both'], true)
+            && ! $member->hasActiveProfessionalCredentials()
+            && empty($this->edit_credentials_files)
+        ) {
+            $this->addError('edit_credentials_files', 'Para asignar el perfil de Profesora o Docente + Administrativo debe existir al menos un Atestado Profesional activo en el expediente.');
+
+            return;
+        }
+
+        $specialties = [];
+        $seen = [];
+        foreach ([$this->edit_specialty_1, $this->edit_specialty_2, $this->edit_specialty_3] as $spec) {
+            $clean = trim($spec);
+            if ($clean === '') {
+                continue;
+            }
+            $norm = mb_strtolower($clean);
+            if (! isset($seen[$norm])) {
+                $seen[$norm] = true;
+                $specialties[] = $clean;
+            }
+            if (count($specialties) === 3) {
+                break;
+            }
+        }
+
+        $oldValues = $member->only([
+            'staff_role_type',
+            'hiring_regime',
+            'status',
+            'first_name',
+            'last_name',
+            'second_last_name',
+            'identification_type',
+            'identification_number',
+            'birth_date',
+            'email',
+            'phone',
+            'academic_degree',
+            'specialties',
+            'notes',
+        ]);
+
+        $member->update([
+            'staff_role_type' => $this->edit_staff_role_type,
+            'hiring_regime' => $this->edit_hiring_regime,
+            'status' => $this->edit_status,
+            'first_name' => trim($this->edit_first_name),
+            'last_name' => trim($this->edit_last_name),
+            'second_last_name' => trim($this->edit_second_last_name) !== '' ? trim($this->edit_second_last_name) : null,
+            'identification_type' => $this->edit_identification_type,
+            'identification_number' => trim($this->edit_identification_number),
+            'birth_date' => $this->edit_birth_date,
+            'email' => strtolower(trim($this->edit_email)),
+            'phone' => trim($this->edit_phone),
+            'academic_degree' => trim($this->edit_academic_degree) !== '' ? trim($this->edit_academic_degree) : null,
+            'specialty' => ! empty($specialties) ? implode(' · ', $specialties) : null,
+            'specialties' => ! empty($specialties) ? $specialties : null,
+            'notes' => trim($this->edit_notes) !== '' ? trim($this->edit_notes) : null,
+        ]);
+
+        if ($this->edit_identification_file) {
+            $attachmentService->store($member, $this->edit_identification_file, 'cedula_dimex', 'Documento de identificación actualizado');
+        }
+
+        foreach ($this->edit_credentials_files as $credFile) {
+            if ($credFile) {
+                $attachmentService->store(
+                    attachable: $member,
+                    file: $credFile,
+                    documentType: 'atestado_profesional',
+                    notes: 'Atestado profesional agregado al editar expediente',
+                    replaceExisting: false
+                );
+            }
+        }
+
+        if ($this->edit_signed_contract_file) {
+            $attachmentService->store($member, $this->edit_signed_contract_file, 'contrato_pdf', 'Contrato firmado adjunto al editar expediente');
+        }
+
+        AuditService::log(
+            event: 'staff.member_updated',
+            module: 'personal',
+            auditable: $member,
+            oldValues: $oldValues,
+            newValues: $member->fresh()->only(array_keys($oldValues))
+        );
+
+        $fullName = $member->fresh()->full_name;
+        $this->cancelEditStaff();
+        $this->feedback = sprintf('Expediente de %s actualizado correctamente (con trazabilidad auditada).', $fullName);
     }
 
     public function createContract(AttachmentService $attachmentService): void

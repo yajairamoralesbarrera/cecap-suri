@@ -181,7 +181,7 @@ it('enforces Costa Rica staff legal separation (Planilla vs Servicios Profesiona
     expect($member->attachments()->where('document_type', 'atestado_profesional')->where('status', 'activo')->count())->toBe(3);
 
     // Segundo colaborador Administrativo en Servicios Profesionales para probar consulta por nombre y tipo en español
-    StaffMember::create([
+    $elena = StaffMember::create([
         'staff_code' => StaffMember::nextCode(),
         'staff_role_type' => 'administrative',
         'first_name' => 'Elena',
@@ -206,6 +206,36 @@ it('enforces Costa Rica staff legal separation (Planilla vs Servicios Profesiona
         ->set('search', 'Karla')
         ->assertSee('Karla Ureña')
         ->assertDontSee('Elena Salas');
+
+    // Edición inline auditada de colaboradora existente (datos + grado + especialidades + atestado adicional)
+    Livewire::test(StaffPage::class)
+        ->call('startEditStaff', $member->id)
+        ->set('edit_staff_role_type', 'both')
+        ->set('edit_academic_degree', 'Maestría en Educación Técnica')
+        ->set('edit_specialty_1', 'Gastronomía')
+        ->set('edit_specialty_2', 'Administración')
+        ->set('edit_specialty_3', '')
+        ->set('edit_phone', '8800-1122')
+        ->set('edit_credentials_files', [
+            UploadedFile::fake()->create('maestria.pdf', 110, 'application/pdf'),
+        ])
+        ->call('saveStaffEdit')
+        ->assertHasNoErrors();
+
+    $member->refresh();
+    expect($member->staff_role_type)->toBe('both');
+    expect($member->staff_role_type_label)->toBe('Docente + Administrativo');
+    expect($member->academic_degree)->toBe('Maestría en Educación Técnica');
+    expect($member->specialties)->toBe(['Gastronomía', 'Administración']);
+    expect($member->phone)->toBe('8800-1122');
+    expect($member->attachments()->where('document_type', 'atestado_profesional')->where('status', 'activo')->count())->toBe(4);
+
+    // Cambiar Administrativo sin atestados a Profesora exige adjuntar al menos un atestado
+    Livewire::test(StaffPage::class)
+        ->call('startEditStaff', $elena->id)
+        ->set('edit_staff_role_type', 'teacher')
+        ->call('saveStaffEdit')
+        ->assertHasErrors('edit_credentials_files');
     $payroll = app(StaffPayrollService::class);
 
     // 1. Contrato Planilla Laboral CR

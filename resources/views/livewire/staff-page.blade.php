@@ -209,8 +209,13 @@
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @forelse($staffMembers as $st)
-                            <tr wire:key="staff-row-{{ $st->id }}" class="{{ $attachingCredentialsStaffId === $st->id ? 'bg-slate-50/80' : '' }}">
-                                <td class="py-2.5 pr-3 font-mono text-xs font-bold whitespace-nowrap">{{ $st->staff_code }}</td>
+                            <tr wire:key="staff-row-{{ $st->id }}" class="{{ ($attachingCredentialsStaffId === $st->id || $editingStaffId === $st->id) ? 'bg-slate-50/80' : '' }}">
+                                <td class="py-2.5 pr-3 font-mono text-xs font-bold whitespace-nowrap">
+                                    {{ $st->staff_code }}
+                                    @if($st->status !== 'activo')
+                                        <div class="mt-1"><span class="cecap-badge bg-rose-100 text-rose-800">Inactivo</span></div>
+                                    @endif
+                                </td>
                                 <td class="py-2.5 pr-3 font-semibold">
                                     {{ $st->full_name }}
                                     <div class="text-xs font-normal text-slate-500">{{ $idTypes[$st->identification_type] ?? $st->identification_type }}: <span class="font-mono">{{ $st->identification_number }}</span></div>
@@ -252,7 +257,10 @@
                                         @endforelse
                                     </div>
                                     @if(auth()->user()->hasEffectivePermission('personal.manage'))
-                                        <div class="pt-1">
+                                        <div class="pt-1 flex flex-wrap gap-1.5">
+                                            <button type="button" wire:click="startEditStaff({{ $st->id }})" class="inline-flex min-h-7 items-center justify-center rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer">
+                                                Editar
+                                            </button>
                                             <button type="button" wire:click="startAttachCredentials({{ $st->id }})" class="inline-flex min-h-7 items-center justify-center rounded-lg border border-brand-300 bg-brand-50 px-2.5 py-1 text-[11px] font-semibold text-brand-900 hover:bg-brand-100 cursor-pointer">
                                                 + Agregar Atestados
                                             </button>
@@ -260,6 +268,140 @@
                                     @endif
                                 </td>
                             </tr>
+                            @if($editingStaffId === $st->id)
+                                <tr wire:key="staff-edit-{{ $st->id }}">
+                                    <td colspan="6" class="py-3 px-1">
+                                        <form wire:submit="saveStaffEdit" class="rounded-2xl border-2 border-amber-400 bg-amber-50/70 p-4 space-y-4">
+                                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                                <div class="text-sm font-bold text-amber-950">Editar Expediente de Colaborador(a) — {{ $st->full_name }} ({{ $st->staff_code }})</div>
+                                                <button type="button" wire:click="cancelEditStaff" class="text-xs font-semibold text-slate-600 hover:text-slate-900 underline">Cancelar</button>
+                                            </div>
+                                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Perfil de Colaborador(a) *</label>
+                                                    <select wire:model.live="edit_staff_role_type" class="cecap-input bg-white">
+                                                        @foreach($roleTypeLabels as $code => $label)
+                                                            <option value="{{ $code }}">{{ $label }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Régimen Legal CR *</label>
+                                                    <select wire:model="edit_hiring_regime" class="cecap-input bg-white">
+                                                        <option value="planilla_laboral">Planilla Laboral CR</option>
+                                                        <option value="servicios_profesionales">Servicios Profesionales CR</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Estado *</label>
+                                                    <select wire:model="edit_status" class="cecap-input bg-white">
+                                                        <option value="activo">Activo</option>
+                                                        <option value="inactivo">Inactivo</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Tipo de Identificación *</label>
+                                                    <select wire:model.live="edit_identification_type" class="cecap-input bg-white">
+                                                        @foreach($idTypes as $code => $label)
+                                                            <option value="{{ $code }}">{{ $label }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                    @error('edit_identification_type') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Cédula / DIMEX *</label>
+                                                    <input wire:model="edit_identification_number" type="text" required class="cecap-input bg-white" placeholder="{{ \App\Rules\ValidIdentificationNumber::placeholderFor($edit_identification_type) }}">
+                                                    @error('edit_identification_number') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Fecha de Nacimiento *</label>
+                                                    <input wire:model="edit_birth_date" type="date" required max="{{ now()->subDay()->toDateString() }}" class="cecap-input bg-white">
+                                                    @error('edit_birth_date') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Nombre *</label>
+                                                    <input wire:model="edit_first_name" type="text" required class="cecap-input bg-white">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Primer Apellido *</label>
+                                                    <input wire:model="edit_last_name" type="text" required class="cecap-input bg-white">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Segundo Apellido</label>
+                                                    <input wire:model="edit_second_last_name" type="text" class="cecap-input bg-white">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Correo Electrónico *</label>
+                                                    <input wire:model="edit_email" type="email" required class="cecap-input bg-white">
+                                                    @error('edit_email') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Teléfono *</label>
+                                                    <input wire:model="edit_phone" type="tel" required class="cecap-input bg-white">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Grado Académico</label>
+                                                    <input wire:model="edit_academic_degree" type="text" class="cecap-input bg-white" placeholder="Ej. Técnico Medio, Bachillerato, Licenciatura">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Especialidad 1 (Principal)</label>
+                                                    <input wire:model="edit_specialty_1" type="text" class="cecap-input bg-white">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Especialidad 2 (Opcional)</label>
+                                                    <input wire:model="edit_specialty_2" type="text" class="cecap-input bg-white">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Especialidad 3 (Opcional)</label>
+                                                    <input wire:model="edit_specialty_3" type="text" class="cecap-input bg-white">
+                                                </div>
+                                                <div class="md:col-span-3">
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Observaciones / Notas del Expediente</label>
+                                                    <input wire:model="edit_notes" type="text" class="cecap-input bg-white" placeholder="Notas internas opcionales">
+                                                </div>
+                                            </div>
+                                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 rounded-xl border border-amber-200 bg-white/80 p-3">
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Actualizar Identificación <span class="font-normal text-slate-500">(opcional)</span></label>
+                                                    <input wire:model="edit_identification_file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input bg-white">
+                                                    @if($edit_identification_file)
+                                                        <div class="mt-1 text-xs font-semibold text-emerald-700">✓ {{ $edit_identification_file->getClientOriginalName() }}</div>
+                                                    @endif
+                                                    @error('edit_identification_file') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Agregar Atestados <span class="font-normal text-slate-500">(uno o varios, sin reemplazar)</span></label>
+                                                    <input wire:model="edit_credentials_files" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input bg-white">
+                                                    @if(!empty($edit_credentials_files))
+                                                        <div class="mt-1 space-y-0.5 text-xs font-semibold text-emerald-700">
+                                                            @foreach($edit_credentials_files as $ecf)
+                                                                <div>✓ {{ $ecf->getClientOriginalName() }}</div>
+                                                            @endforeach
+                                                        </div>
+                                                    @endif
+                                                    @error('edit_credentials_files') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                                                    @error('edit_credentials_files.*') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Adjuntar Contrato Firmado <span class="font-normal text-slate-500">(opcional)</span></label>
+                                                    <input wire:model="edit_signed_contract_file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input bg-white">
+                                                    @if($edit_signed_contract_file)
+                                                        <div class="mt-1 text-xs font-semibold text-emerald-700">✓ {{ $edit_signed_contract_file->getClientOriginalName() }}</div>
+                                                    @endif
+                                                    @error('edit_signed_contract_file') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                                                </div>
+                                            </div>
+                                            <div class="flex flex-wrap gap-2">
+                                                <button type="submit" wire:loading.attr="disabled" wire:target="edit_identification_file,edit_credentials_files,edit_signed_contract_file,saveStaffEdit" class="cecap-btn-primary !min-h-9 !px-4 !py-1.5 text-xs disabled:opacity-60">
+                                                    <span wire:loading.remove wire:target="edit_identification_file,edit_credentials_files,edit_signed_contract_file,saveStaffEdit">Guardar Cambios del Expediente</span>
+                                                    <span wire:loading wire:target="edit_identification_file,edit_credentials_files,edit_signed_contract_file,saveStaffEdit">Guardando...</span>
+                                                </button>
+                                                <button type="button" wire:click="cancelEditStaff" class="cecap-btn-secondary !min-h-9 !px-4 !py-1.5 text-xs">Cancelar</button>
+                                            </div>
+                                        </form>
+                                    </td>
+                                </tr>
+                            @endif
                             @if($attachingCredentialsStaffId === $st->id)
                                 <tr wire:key="staff-credentials-{{ $st->id }}">
                                     <td colspan="6" class="py-3 px-1">
