@@ -113,19 +113,27 @@
                                             </div>
                                         @endif
 
+                                        @php
+                                            $confirmReqDocs = $confirmingEnrollment->required_documents_snapshot ?? ['cedula_dimex'];
+                                            $confirmOnlyCedula = count($confirmReqDocs) === 1 && in_array('cedula_dimex', $confirmReqDocs, true);
+                                            $confirmStillMissing = array_values(array_diff($confirmReqDocs, $confirm_docs ?? []));
+                                            $confirmWaitlistFull = $confirmingEnrollment->status === 'lista_espera' && ($confirmingEnrollment->edition?->availableSeats() ?? 0) <= 0;
+                                            $showConfirmExceptionBox = (! $confirmOnlyCedula && count($confirmStillMissing) > 0) || $confirmWaitlistFull;
+                                        @endphp
+
                                         <div class="space-y-2">
                                             <div class="text-xs font-bold uppercase text-slate-600">Documentos Requeridos (Checklist del Curso)</div>
                                             <div class="flex flex-wrap gap-4 text-sm">
-                                                @foreach($confirmingEnrollment->required_documents_snapshot ?? ['cedula_dimex'] as $docKey)
+                                                @foreach($confirmReqDocs as $docKey)
                                                     <label class="inline-flex items-center gap-2 cursor-pointer">
-                                                        <input type="checkbox" wire:model="confirm_docs" value="{{ $docKey }}" class="h-4 w-4 rounded text-brand-900">
+                                                        <input type="checkbox" wire:model.live="confirm_docs" value="{{ $docKey }}" class="h-4 w-4 rounded text-brand-900">
                                                         <span>{{ $documentTypes[$docKey] ?? $docKey }}</span>
                                                     </label>
                                                 @endforeach
                                             </div>
                                         </div>
 
-                                        @if(auth()->user()->hasEffectivePermission('admisiones.exceptions.authorize'))
+                                        @if($showConfirmExceptionBox && auth()->user()->hasEffectivePermission('admisiones.exceptions.authorize'))
                                             <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-3">
                                                 <label class="inline-flex items-center gap-2 text-sm font-semibold text-amber-950 cursor-pointer">
                                                     <input type="checkbox" wire:model.live="confirm_exception" class="h-4 w-4 rounded text-accent-600">
@@ -587,7 +595,7 @@
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-slate-700 mb-1">Nivel Educativo</label>
-                        <select wire:model="education_level" class="cecap-input">
+                        <select wire:model.live="education_level" class="cecap-input">
                             @foreach($educationLevels as $code => $label)
                                 <option value="{{ $code }}">{{ $label }}</option>
                             @endforeach
@@ -729,22 +737,38 @@
                 </div>
 
                 @if(! $isRejectAction && ! $isWaitlistAction)
+                    @php
+                        $courseRequiresOnlyCedula = count($requiredDocsForSelected) === 1 && in_array('cedula_dimex', $requiredDocsForSelected, true);
+                        $courseRequiresAtestado = in_array('atestado_academico', $requiredDocsForSelected, true);
+                        $effectiveSubmittedPresencial = collect($submitted_documents ?? [])
+                            ->merge($existingStudentAttachments->pluck('document_type')->all())
+                            ->when($attachment_file, fn ($col) => $col->push($attachment_doc_type))
+                            ->unique()
+                            ->values()
+                            ->all();
+                        $missingPresencialDocs = array_values(array_diff($requiredDocsForSelected, $effectiveSubmittedPresencial));
+                        $hasEducationMismatch = $selectedEdition?->course?->educationLevelRequirementError($education_level) !== null;
+                        $showPresencialExceptionBox = (! $courseRequiresOnlyCedula && count($missingPresencialDocs) > 0) || $hasEducationMismatch;
+                    @endphp
+
                     <div class="flex flex-wrap gap-6 text-sm">
                         <label class="inline-flex items-center gap-2 cursor-pointer">
                             <input type="checkbox" wire:model.live="submitted_documents" value="cedula_dimex" class="h-4 w-4 rounded text-brand-900">
                             <span>Cédula / DIMEX presentada</span>
                         </label>
-                        <label class="inline-flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" wire:model.live="submitted_documents" value="atestado_academico" class="h-4 w-4 rounded text-brand-900">
-                            <span>Atestados académicos presentados</span>
-                        </label>
+                        @if($courseRequiresAtestado)
+                            <label class="inline-flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" wire:model.live="submitted_documents" value="atestado_academico" class="h-4 w-4 rounded text-brand-900">
+                                <span>Atestados académicos presentados</span>
+                            </label>
+                        @endif
                         <label class="inline-flex items-center gap-2 cursor-pointer font-semibold text-brand-950">
                             <input type="checkbox" wire:model.live="confirm_immediately" class="h-4 w-4 rounded text-brand-900">
                             <span>Confirmar matrícula inmediatamente</span>
                         </label>
                     </div>
 
-                    @if(auth()->user()->hasEffectivePermission('admisiones.exceptions.authorize'))
+                    @if($showPresencialExceptionBox && auth()->user()->hasEffectivePermission('admisiones.exceptions.authorize'))
                         <div class="rounded-xl border border-amber-200 bg-amber-50/70 p-4 space-y-3">
                             <label class="inline-flex items-center gap-2 text-sm font-semibold text-amber-950 cursor-pointer">
                                 <input type="checkbox" wire:model.live="authorize_exception" class="h-4 w-4 rounded text-accent-600">

@@ -901,11 +901,12 @@ it('blocks duplicate cédula in the same course (online and presencial), require
 
     expect(Enrollment::where('student_id', $minorStudent->id)->count())->toBe(1);
 
-    // 5. Matrícula Presencial: muestra estado visible del adjunto en numeral 3 y exige representante legal si es menor
+    // 5. Matrícula Presencial: en curso que SOLO requiere cédula NO muestra autorización de excepción; muestra estado visible del adjunto en numeral 3 y exige representante legal si es menor
     Livewire::actingAs($admin)
         ->test(\App\Livewire\AdmissionsPage::class)
         ->set('tab', 'enroll')
         ->set('course_edition_id', $edition->id)
+        ->assertDontSee('Autorizar excepción si faltan documentos')
         ->set('identification_number', '1-9700-0002')
         ->set('first_name', 'Paula')
         ->set('last_name', 'Chacón')
@@ -929,6 +930,21 @@ it('blocks duplicate cédula in the same course (online and presencial), require
     $paula = Student::where('identification_number', '1-9700-0002')->firstOrFail();
     expect($paula->guardian_full_name)->toBe('Roberto Chacón Solís');
     expect($paula->attachments()->count())->toBe(1);
+
+    // 6. En Cola de Admisiones -> Confirmar: en curso que SOLO requiere cédula NO muestra autorización de excepción
+    $minorEnrollment = Enrollment::where('student_id', $minorStudent->id)->firstOrFail();
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->call('startConfirmEnrollment', $minorEnrollment->id)
+        ->assertDontSee('Autorizar excepción por documentación faltante');
+
+    // En un Curso Técnico que SÍ requiere atestados (faltante), SÍ muestra la opción de excepción
+    $techEdition = createSampleEdition('curso_tecnico');
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->set('tab', 'enroll')
+        ->set('course_edition_id', $techEdition->id)
+        ->assertSee('Autorizar excepción si faltan documentos');
 });
 
 

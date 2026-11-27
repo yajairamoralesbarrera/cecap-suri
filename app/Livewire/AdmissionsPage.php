@@ -190,6 +190,7 @@ class AdmissionsPage extends Component
         $max = (int) $edition->max_capacity;
         $this->selectedEditionIsFull = $edition->availableSeats() <= 0;
         $this->selectedEditionCapacityInfo = sprintf('%d / %d cupos ocupados', $active, $max);
+        $this->authorize_exception = false;
         $this->evaluateDuplicateCourseEnrollment();
     }
 

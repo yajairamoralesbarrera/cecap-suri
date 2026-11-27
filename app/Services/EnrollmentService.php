@@ -264,6 +264,7 @@ class EnrollmentService
         }
 
         $requiredDocs = $edition->course->required_documents ?? ['cedula_dimex'];
+        $courseRequiresOnlyCedula = count($requiredDocs) === 1 && in_array('cedula_dimex', $requiredDocs, true);
         $submitted = array_values(array_unique($submittedDocuments));
         $missing = array_values(array_diff($requiredDocs, $submitted));
         $docsComplete = count($missing) === 0;
@@ -271,8 +272,11 @@ class EnrollmentService
         $skipDocBlock = $isDirectRejection || $isDirectWaitlist;
         if (! $skipDocBlock && $confirmImmediately && ! $docsComplete && ! $authorizeException) {
             $missingLabels = $this->documentLabels($missing);
+            $message = $courseRequiresOnlyCedula
+                ? 'Matrícula presencial bloqueada: este curso solo requiere Cédula / DIMEX. Marque o adjunte la Cédula / DIMEX para confirmar la matrícula.'
+                : 'Matrícula presencial bloqueada: faltan los siguientes documentos obligatorios: '.implode(', ', $missingLabels).'. Debe completarlos o autorizar una excepción con motivo y fecha compromiso.';
             throw ValidationException::withMessages([
-                'documents' => 'Matrícula presencial bloqueada: faltan los siguientes documentos obligatorios: '.implode(', ', $missingLabels).'. Debe completarlos o autorizar una excepción con motivo y fecha compromiso.',
+                'documents' => $message,
             ]);
         }
 
@@ -474,14 +478,18 @@ class EnrollmentService
         }
 
         $requiredDocs = $enrollment->required_documents_snapshot ?? ['cedula_dimex'];
+        $courseRequiresOnlyCedula = count($requiredDocs) === 1 && in_array('cedula_dimex', $requiredDocs, true);
         $submitted = array_values(array_unique($submittedDocuments));
         $missing = array_values(array_diff($requiredDocs, $submitted));
         $docsComplete = count($missing) === 0;
 
         if (! $docsComplete && ! $authorizeException) {
             $missingLabels = $this->documentLabels($missing);
+            $message = $courseRequiresOnlyCedula
+                ? 'No se puede confirmar la matrícula: este curso solo requiere Cédula / DIMEX. Marque la Cédula / DIMEX como presentada para confirmar.'
+                : 'No se puede confirmar la matrícula: faltan los siguientes documentos obligatorios: '.implode(', ', $missingLabels).'. Autorice una excepción con motivo y fecha compromiso para continuar.';
             throw ValidationException::withMessages([
-                'documents' => 'No se puede confirmar la matrícula: faltan los siguientes documentos obligatorios: '.implode(', ', $missingLabels).'. Autorice una excepción con motivo y fecha compromiso para continuar.',
+                'documents' => $message,
             ]);
         }
 
