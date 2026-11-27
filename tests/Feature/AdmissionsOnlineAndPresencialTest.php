@@ -486,5 +486,116 @@ it('allows presencial officer to check availability first and directly enroll, w
     \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\EnrollmentRejectedMail::class, fn ($mail) => $mail->hasTo('monica.salas@correo.cr'));
 });
 
+it('supports inline attachment uploads in /admisiones, audited reopening of rejected enrollments with capacity check, student directory attachment sync, and returning-applicant lookup on /inscripcion', function () {
+    \Illuminate\Support\Facades\Mail::fake();
+    $admin = User::where('email', 'superadmin@cecap.or.cr')->firstOrFail();
+    $edition = createSampleEdition('curso_tecnico'); // requires cedula_dimex + atestado_academico
+    $edition->update(['max_capacity' => 1]);
+
+    // 1. Solicitante se preinscribe en línea solo con cédula (le falta atestado) -> documentacion_pendiente
+    Livewire::test(PublicEnrollmentPage::class)
+        ->set('course_edition_id', $edition->id)
+        ->set('gender', 'femenino')
+        ->set('identification_number', '1-9000-0001')
+        ->set('first_name', 'Gabriela')
+        ->set('last_name', 'Mora')
+        ->set('email', 'gabriela.mora@correo.cr')
+        ->set('phone', '8800-9001')
+        ->set('education_level', 'noveno_aprobado')
+        ->set('file_cedula', UploadedFile::fake()->create('cedula.pdf', 100, 'application/pdf'))
+        ->call('submit')
+        ->assertHasNoErrors();
+
+    $enr = Enrollment::firstOrFail();
+    expect($enr->status)->toBe('documentacion_pendiente');
+    expect($enr->documents_complete)->toBeFalse();
+
+    // 2. Retomar solicitud en /inscripcion en una sesión nueva usando cédula + código de solicitud
+    Livewire::test(PublicEnrollmentPage::class)
+        ->call('toggleResumeLookup')
+        ->set('lookup_identification', '1-9000-0001')
+        ->set('lookup_enrollment_code', $enr->enrollment_code)
+        ->call('resumePendingEnrollment')
+        ->assertHasNoErrors()
+        ->assertSet('createdEnrollmentId', $enr->id)
+        ->assertSet('showPendingUploadForm', true)
+        ->set('pending_file_atestado', UploadedFile::fake()->create('atestado.pdf', 120, 'application/pdf'))
+        ->call('uploadMissingDocuments')
+        ->assertHasNoErrors();
+
+    expect(Enrollment::count())->toBe(1);
+    expect($enr->fresh()->status)->toBe('preinscrita');
+    expect($enr->fresh()->documents_complete)->toBeTrue();
+
+    // 3. Rechazar la solicitud por documentación incompleta y luego subir adjunto + reabrirla en /admisiones
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->call('startRejectEnrollment', $enr->id)
+        ->set('rejection_reason_code', 'documentacion_incompleta')
+        ->call('submitRejection')
+        ->assertHasNoErrors();
+
+    expect($enr->fresh()->status)->toBe('rechazada');
+
+    // Reabrir con motivo y subiendo un nuevo PDF de respaldo (con cupo disponible -> vuelve a preinscrita sin duplicar)
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->call('startReopenEnrollment', $enr->id)
+        ->set('reopen_reason', 'Presentó certificación oficial del MEP en recepción')
+        ->set('reopen_attachment_doc_type', 'atestado_academico')
+        ->set('reopen_attachment_file', UploadedFile::fake()->create('titulo_mep.pdf', 140, 'application/pdf'))
+        ->call('submitReopenEnrollment')
+        ->assertHasNoErrors();
+
+    expect(Enrollment::count())->toBe(1);
+    expect($enr->fresh()->status)->toBe('preinscrita');
+    expect(AuditLog::where('event', 'enrollment.reopened')->where('auditable_id', (string) $enr->id)->exists())->toBeTrue();
+    expect(AuditLog::where('event', 'enrollment.documents_attached')->where('auditable_id', (string) $enr->id)->exists())->toBeTrue();
+
+    // 4. Crear una 2da solicitud rechazada mientras el único cupo (1/1) está ocupado: al reabrir sin sobrecupo debe entrar a lista_espera
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->set('tab', 'enroll')
+        ->set('course_edition_id', $edition->id)
+        ->set('full_capacity_decision', 'rechazar_cupo_lleno')
+        ->set('identification_number', '1-9000-0002')
+        ->set('first_name', 'Karina')
+        ->set('last_name', 'Ulloa')
+        ->set('email', 'karina.ulloa@correo.cr')
+        ->set('phone', '8800-9002')
+        ->set('gender', 'femenino')
+        ->set('education_level', 'bachillerato_secundaria')
+        ->set('submitted_documents', ['cedula_dimex'])
+        ->call('createPresencialEnrollment')
+        ->assertHasNoErrors();
+
+    $enr2 = Enrollment::whereHas('student', fn ($q) => $q->where('identification_number', '1-9000-0002'))->firstOrFail();
+    expect($enr2->status)->toBe('rechazada');
+
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->call('startReopenEnrollment', $enr2->id)
+        ->set('reopen_reason', 'Solicitante pidió quedar en lista de espera')
+        ->call('submitReopenEnrollment')
+        ->assertHasNoErrors();
+
+    expect($enr2->fresh()->status)->toBe('lista_espera');
+
+    // 5. Subir el atestado faltante de Karina desde Directorio de Alumnas (+ Adjunto) actualiza automáticamente el checklist de su solicitud en lista_espera
+    expect($enr2->fresh()->documents_complete)->toBeFalse();
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->set('tab', 'students')
+        ->call('startAttachStudent', $enr2->student_id)
+        ->set('student_attachment_doc_type', 'atestado_academico')
+        ->set('student_attachment_file', UploadedFile::fake()->create('atestado_karina.pdf', 110, 'application/pdf'))
+        ->call('uploadStudentAttachment')
+        ->assertHasNoErrors();
+
+    expect($enr2->fresh()->documents_complete)->toBeTrue();
+    expect($enr2->fresh()->status)->toBe('lista_espera');
+});
+
+
 
 

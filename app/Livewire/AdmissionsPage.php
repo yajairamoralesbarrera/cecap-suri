@@ -95,6 +95,35 @@ class AdmissionsPage extends Component
 
     public string $rejection_notes = '';
 
+    // Carga inline de adjuntos faltantes sobre una solicitud en Cola de Admisiones
+    public ?int $attachingEnrollmentId = null;
+
+    public string $enr_attachment_doc_type = 'atestado_academico';
+
+    public $enr_attachment_file = null;
+
+    public string $enr_attachment_notes = '';
+
+    // Reapertura auditada de una solicitud rechazada (con opción de adjuntar faltante al mismo tiempo)
+    public ?int $reopeningEnrollmentId = null;
+
+    public string $reopen_reason = '';
+
+    public bool $reopen_authorize_overcapacity = false;
+
+    public string $reopen_attachment_doc_type = 'atestado_academico';
+
+    public $reopen_attachment_file = null;
+
+    // Carga inline de adjuntos en Directorio de Alumnas
+    public ?int $attachingStudentId = null;
+
+    public string $student_attachment_doc_type = 'atestado_academico';
+
+    public $student_attachment_file = null;
+
+    public string $student_attachment_notes = '';
+
     // Decisión del funcionario en matrícula presencial (cupo disponible o cupo máximo alcanzado)
     public string $presencial_action = 'inscribir'; // inscribir | lista_espera | rechazar
 
@@ -172,6 +201,7 @@ class AdmissionsPage extends Component
     {
         $student = Student::findOrFail($studentId);
         $this->loadStudentIntoForm($student);
+        $this->attachingStudentId = null;
         $this->editingStudentId = $student->id;
         $this->edit_reason = '';
         $this->resetValidation();
@@ -365,6 +395,8 @@ class AdmissionsPage extends Component
     {
         $enr = Enrollment::findOrFail($enrollmentId);
         $this->rejectingEnrollmentId = null;
+        $this->attachingEnrollmentId = null;
+        $this->reopeningEnrollmentId = null;
         $this->confirmingEnrollmentId = $enr->id;
         $this->confirm_docs = $enr->submitted_documents ?? [];
         $this->confirm_exception = false;
@@ -383,6 +415,8 @@ class AdmissionsPage extends Component
         abort_unless(Auth::user()->hasEffectivePermission('admisiones.manage'), 403);
         $enr = Enrollment::findOrFail($enrollmentId);
         $this->confirmingEnrollmentId = null;
+        $this->attachingEnrollmentId = null;
+        $this->reopeningEnrollmentId = null;
         $this->rejectingEnrollmentId = $enr->id;
         $this->rejection_reason_code = '';
         $this->rejection_notes = '';
@@ -478,15 +512,236 @@ class AdmissionsPage extends Component
         $this->feedback = 'Adjunto archivado de forma segura (sin borrado físico).';
     }
 
+    public function startAttachEnrollment(int $enrollmentId): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('admisiones.manage'), 403);
+        $enr = Enrollment::findOrFail($enrollmentId);
+        $this->confirmingEnrollmentId = null;
+        $this->rejectingEnrollmentId = null;
+        $this->reopeningEnrollmentId = null;
+        $this->attachingEnrollmentId = $enr->id;
+        $missing = $enr->missingDocuments();
+        $this->enr_attachment_doc_type = $missing[0] ?? 'atestado_academico';
+        $this->enr_attachment_file = null;
+        $this->enr_attachment_notes = '';
+        $this->resetValidation();
+        $this->feedback = null;
+    }
+
+    public function cancelAttachEnrollment(): void
+    {
+        $this->attachingEnrollmentId = null;
+        $this->reset(['enr_attachment_file', 'enr_attachment_notes']);
+        $this->resetValidation();
+    }
+
+    public function uploadEnrollmentAttachment(AttachmentService $attachmentService, EnrollmentService $enrollmentService): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('admisiones.manage'), 403);
+        if (! $this->attachingEnrollmentId) {
+            return;
+        }
+
+        $this->validate([
+            'enr_attachment_doc_type' => ['required', 'string', 'max:60'],
+            'enr_attachment_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'enr_attachment_notes' => ['nullable', 'string', 'max:500'],
+        ], [
+            'enr_attachment_file.required' => 'Seleccione el archivo (PDF, JPG, PNG o WebP) que desea adjuntar.',
+        ]);
+
+        $enrollment = Enrollment::with('student')->findOrFail($this->attachingEnrollmentId);
+        $attachmentService->store(
+            attachable: $enrollment->student,
+            file: $this->enr_attachment_file,
+            documentType: $this->enr_attachment_doc_type,
+            notes: $this->enr_attachment_notes ?: ('Adjunto cargado en solicitud '.$enrollment->enrollment_code)
+        );
+
+        $updated = $enrollmentService->attachDocumentsToEnrollment(
+            enrollment: $enrollment,
+            addedDocumentKeys: [$this->enr_attachment_doc_type],
+            notes: $this->enr_attachment_notes ?: null
+        );
+
+        $this->reset(['enr_attachment_file', 'enr_attachment_notes']);
+        $missing = $updated->missingDocuments();
+        if (! empty($missing)) {
+            $this->enr_attachment_doc_type = $missing[0];
+        } else {
+            $this->attachingEnrollmentId = null;
+        }
+
+        $this->feedback = $updated->documents_complete
+            ? sprintf('Adjunto guardado en %s. Documentación completa (estado actual: %s).', $updated->enrollment_code, strtoupper(str_replace('_', ' ', $updated->status)))
+            : sprintf('Adjunto guardado en %s. Aún falta: %s.', $updated->enrollment_code, implode(', ', $updated->missingDocumentLabels()));
+    }
+
+    public function startReopenEnrollment(int $enrollmentId): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('admisiones.manage'), 403);
+        $enr = Enrollment::findOrFail($enrollmentId);
+        $this->confirmingEnrollmentId = null;
+        $this->rejectingEnrollmentId = null;
+        $this->attachingEnrollmentId = null;
+        $this->reopeningEnrollmentId = $enr->id;
+        $this->reopen_reason = '';
+        $this->reopen_authorize_overcapacity = false;
+        $missing = $enr->missingDocuments();
+        $this->reopen_attachment_doc_type = $missing[0] ?? 'atestado_academico';
+        $this->reopen_attachment_file = null;
+        $this->resetValidation();
+        $this->feedback = null;
+    }
+
+    public function cancelReopenEnrollment(): void
+    {
+        $this->reopeningEnrollmentId = null;
+        $this->reset(['reopen_reason', 'reopen_authorize_overcapacity', 'reopen_attachment_file']);
+        $this->resetValidation();
+    }
+
+    public function submitReopenEnrollment(EnrollmentService $enrollmentService, AttachmentService $attachmentService): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('admisiones.manage'), 403);
+        if (! $this->reopeningEnrollmentId) {
+            return;
+        }
+
+        $this->validate([
+            'reopen_reason' => ['required', 'string', 'min:5', 'max:500'],
+            'reopen_attachment_doc_type' => ['nullable', 'string', 'max:60'],
+            'reopen_attachment_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+        ], [
+            'reopen_reason.required' => 'Debe indicar el motivo de reapertura de la solicitud para auditoría.',
+            'reopen_reason.min' => 'El motivo de reapertura debe tener al menos 5 caracteres.',
+        ]);
+
+        if ($this->reopen_authorize_overcapacity && ! Auth::user()->hasEffectivePermission('admisiones.exceptions.authorize')) {
+            $this->addError('reopen_authorize_overcapacity', 'No tiene permiso para autorizar sobrecupo excepcional.');
+
+            return;
+        }
+
+        $enrollment = Enrollment::with(['student', 'edition'])->findOrFail($this->reopeningEnrollmentId);
+
+        // Si el funcionario adjuntó de una vez el documento faltante, guardarlo primero en el expediente
+        if ($this->reopen_attachment_file) {
+            $docType = $this->reopen_attachment_doc_type ?: 'atestado_academico';
+            $attachmentService->store(
+                attachable: $enrollment->student,
+                file: $this->reopen_attachment_file,
+                documentType: $docType,
+                notes: 'Adjunto cargado al reabrir solicitud '.$enrollment->enrollment_code
+            );
+            $enrollment = $enrollmentService->attachDocumentsToEnrollment(
+                enrollment: $enrollment,
+                addedDocumentKeys: [$docType],
+                notes: 'Carga documental previa a reapertura: '.$this->reopen_reason
+            );
+        }
+
+        try {
+            $reopened = $enrollmentService->reopenRejectedEnrollment(
+                enrollment: $enrollment,
+                reason: $this->reopen_reason,
+                authorizeOvercapacity: $this->reopen_authorize_overcapacity
+            );
+        } catch (ValidationException $e) {
+            foreach ($e->errors() as $k => $msgs) {
+                $this->addError($k, $msgs[0]);
+            }
+
+            return;
+        }
+
+        $this->cancelReopenEnrollment();
+        $this->feedback = match ($reopened->status) {
+            'lista_espera' => sprintf('Solicitud %s reabierta en LISTA DE ESPERA (la edición alcanzó su cupo máximo).', $reopened->enrollment_code),
+            'preinscrita' => sprintf('Solicitud %s reabierta con documentación completa (estado: PREINSCRITA, lista para confirmar).', $reopened->enrollment_code),
+            default => sprintf('Solicitud %s reabierta en estado %s.', $reopened->enrollment_code, strtoupper(str_replace('_', ' ', $reopened->status))),
+        };
+    }
+
+    public function startAttachStudent(int $studentId): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('admisiones.manage'), 403);
+        $this->editingStudentId = null;
+        $this->attachingStudentId = $studentId;
+        $this->student_attachment_doc_type = 'atestado_academico';
+        $this->student_attachment_file = null;
+        $this->student_attachment_notes = '';
+        $this->resetValidation();
+        $this->feedback = null;
+    }
+
+    public function cancelAttachStudent(): void
+    {
+        $this->attachingStudentId = null;
+        $this->reset(['student_attachment_file', 'student_attachment_notes']);
+        $this->resetValidation();
+    }
+
+    public function uploadStudentAttachment(AttachmentService $attachmentService, EnrollmentService $enrollmentService): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('admisiones.manage'), 403);
+        if (! $this->attachingStudentId) {
+            return;
+        }
+
+        $this->validate([
+            'student_attachment_doc_type' => ['required', 'string', 'max:60'],
+            'student_attachment_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'student_attachment_notes' => ['nullable', 'string', 'max:500'],
+        ], [
+            'student_attachment_file.required' => 'Seleccione el archivo (PDF, JPG, PNG o WebP) que desea subir al expediente.',
+        ]);
+
+        $student = Student::findOrFail($this->attachingStudentId);
+        $att = $attachmentService->store(
+            attachable: $student,
+            file: $this->student_attachment_file,
+            documentType: $this->student_attachment_doc_type,
+            notes: $this->student_attachment_notes ?: 'Adjunto agregado al expediente desde Directorio de Alumnas'
+        );
+
+        // Sincronizar automáticamente el checklist en las inscripciones abiertas o incompletas de esta alumna
+        $openEnrollments = Enrollment::query()
+            ->where('student_id', $student->id)
+            ->where(function ($q) {
+                $q->whereIn('status', ['documentacion_pendiente', 'preinscrita', 'lista_espera'])
+                    ->orWhere(function ($q2) {
+                        $q2->where('status', 'confirmada')->where('documents_complete', false);
+                    });
+            })
+            ->get();
+
+        foreach ($openEnrollments as $enr) {
+            $enrollmentService->attachDocumentsToEnrollment(
+                enrollment: $enr,
+                addedDocumentKeys: [$this->student_attachment_doc_type],
+                notes: $this->student_attachment_notes ?: 'Sincronizado desde expediente de alumna'
+            );
+        }
+
+        $this->cancelAttachStudent();
+        $this->feedback = $openEnrollments->isNotEmpty()
+            ? sprintf('Adjunto %s (v%d) guardado en el expediente de %s y checklist actualizado en %d solicitud(es).', $att->document_type_label, $att->version, $student->full_name, $openEnrollments->count())
+            : sprintf('Adjunto %s (v%d) guardado en el expediente de %s.', $att->document_type_label, $att->version, $student->full_name);
+    }
+
     public function render()
     {
         return view('livewire.admissions-page', [
             'enrollments' => Enrollment::with(['student.attachments', 'edition.course'])->latest()->limit(60)->get(),
-            'students' => Student::withCount('enrollments')->latest()->limit(60)->get(),
+            'students' => Student::with('attachments')->withCount('enrollments')->latest()->limit(60)->get(),
             'editions' => CourseEdition::with('course')->whereIn('status', ['abierta', 'planificada', 'en_curso'])->orderByDesc('id')->get(),
             'selectedEdition' => $this->course_edition_id ? CourseEdition::with('course')->find($this->course_edition_id) : null,
             'confirmingEnrollment' => $this->confirmingEnrollmentId ? Enrollment::with(['student', 'edition.course'])->find($this->confirmingEnrollmentId) : null,
             'rejectingEnrollment' => $this->rejectingEnrollmentId ? Enrollment::with(['student', 'edition.course'])->find($this->rejectingEnrollmentId) : null,
+            'attachingEnrollment' => $this->attachingEnrollmentId ? Enrollment::with(['student.attachments', 'edition.course'])->find($this->attachingEnrollmentId) : null,
+            'reopeningEnrollment' => $this->reopeningEnrollmentId ? Enrollment::with(['student.attachments', 'edition.course'])->find($this->reopeningEnrollmentId) : null,
+            'attachingStudent' => $this->attachingStudentId ? Student::with('attachments')->find($this->attachingStudentId) : null,
             'rejectionReasons' => Picklist::optionsFor('enrollment_rejection_reason'),
             'fullCapacityDecisions' => Picklist::optionsFor('full_capacity_decision'),
             'documentTypes' => config('cecap.document_types'),

@@ -153,6 +153,37 @@
             </div>
         </div>
     @else
+        <div class="rounded-2xl border border-amber-300 bg-amber-50/80 p-4 space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                    <div class="text-sm font-bold text-amber-950">¿Ya te preinscribiste y te faltan documentos por subir?</div>
+                    <p class="text-xs text-amber-900">Ingresa tu cédula y tu código de solicitud para adjuntar los archivos faltantes sobre tu misma preinscripción sin duplicarla.</p>
+                </div>
+                <button type="button" wire:click="toggleResumeLookup" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">
+                    {{ $showResumeLookup ? 'Ocultar' : 'Completar documentos faltantes' }}
+                </button>
+            </div>
+
+            @if($showResumeLookup)
+                <form wire:submit="resumePendingEnrollment" class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end pt-2 border-t border-amber-200">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Número de Cédula / DIMEX *</label>
+                        <input wire:model="lookup_identification" type="text" required class="cecap-input" placeholder="Ej. 1-1234-5678">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Código de Solicitud *</label>
+                        <input wire:model="lookup_enrollment_code" type="text" required class="cecap-input font-mono uppercase" placeholder="Ej. MAT-2026-0001">
+                    </div>
+                    <div>
+                        <button type="submit" class="cecap-btn-primary w-full text-xs sm:text-sm">Buscar mi Solicitud</button>
+                    </div>
+                </form>
+                @error('lookup_enrollment_code')
+                    <div class="rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800">{{ $message }}</div>
+                @enderror
+            @endif
+        </div>
+
         <form wire:submit="submit" class="cecap-card space-y-6">
             @if($errors->any())
                 <div class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">

@@ -110,7 +110,10 @@ class EnrollmentService
      */
     public function attachOnlinePendingDocuments(Enrollment $enrollment, array $newlySubmittedDocuments): Enrollment
     {
-        if ($enrollment->source !== 'en_linea' || ! in_array($enrollment->status, ['documentacion_pendiente', 'preinscrita', 'lista_espera'], true)) {
+        $allowedStatus = in_array($enrollment->status, ['documentacion_pendiente', 'preinscrita', 'lista_espera'], true)
+            || ($enrollment->status === 'confirmada' && ! $enrollment->documents_complete);
+
+        if (! $allowedStatus) {
             throw ValidationException::withMessages([
                 'documents' => 'Esta solicitud ya no admite carga pública de documentos.',
             ]);
@@ -125,8 +128,8 @@ class EnrollmentService
             )));
             $missing = array_values(array_diff($requiredDocs, $mergedSubmitted));
             $docsComplete = count($missing) === 0;
-            $newStatus = $oldStatus === 'lista_espera'
-                ? 'lista_espera'
+            $newStatus = in_array($oldStatus, ['lista_espera', 'confirmada'], true)
+                ? $oldStatus
                 : ($docsComplete ? 'preinscrita' : 'documentacion_pendiente');
 
             $enrollment->update([
@@ -643,6 +646,160 @@ class EnrollmentService
             'mail_sent' => $mailSent,
             'reason_label' => $reason->label,
         ];
+    }
+
+    /**
+     * Registra documentos adjuntados por el funcionario sobre una solicitud existente
+     * (pendiente, lista de espera, confirmada con excepción o rechazada) sin duplicarla.
+     *
+     * @param  list<string>  $addedDocumentKeys
+     */
+    public function attachDocumentsToEnrollment(
+        Enrollment $enrollment,
+        array $addedDocumentKeys,
+        ?string $notes = null
+    ): Enrollment {
+        return DB::transaction(function () use ($enrollment, $addedDocumentKeys, $notes): Enrollment {
+            $oldStatus = $enrollment->status;
+            $oldSubmitted = $enrollment->submitted_documents ?? [];
+            $requiredDocs = $enrollment->required_documents_snapshot ?? ['cedula_dimex'];
+
+            $mergedSubmitted = array_values(array_unique(array_merge(
+                $oldSubmitted,
+                array_values(array_filter($addedDocumentKeys))
+            )));
+            $missing = array_values(array_diff($requiredDocs, $mergedSubmitted));
+            $docsComplete = count($missing) === 0;
+
+            $newStatus = ($oldStatus === 'documentacion_pendiente' && $docsComplete)
+                ? 'preinscrita'
+                : $oldStatus;
+
+            $enrollment->update([
+                'submitted_documents' => $mergedSubmitted,
+                'documents_complete' => $docsComplete,
+                'status' => $newStatus,
+                'updated_by' => Auth::id(),
+            ]);
+
+            $addedLabels = $this->documentLabels($addedDocumentKeys);
+            $cleanNotes = filled($notes) ? trim((string) $notes) : null;
+
+            StudentLifecycleEvent::create([
+                'student_id' => $enrollment->student_id,
+                'enrollment_id' => $enrollment->id,
+                'event_type' => $docsComplete ? 'documentacion_completada' : 'documento_adjuntado',
+                'from_status' => $oldStatus,
+                'to_status' => $newStatus,
+                'description' => trim(sprintf(
+                    'Documento(s) adjuntado(s) desde Admisiones: %s.%s',
+                    implode(', ', $addedLabels),
+                    $cleanNotes ? ' Nota: '.$cleanNotes : ''
+                )),
+                'metadata' => [
+                    'added_documents' => array_values($addedDocumentKeys),
+                    'documents_complete' => $docsComplete,
+                    'missing_documents' => $missing,
+                ],
+                'recorded_by' => Auth::id(),
+                'created_at' => now(),
+            ]);
+
+            AuditService::log(
+                event: 'enrollment.documents_attached',
+                module: 'admisiones',
+                auditable: $enrollment,
+                oldValues: ['status' => $oldStatus, 'submitted_documents' => $oldSubmitted],
+                newValues: ['status' => $newStatus, 'submitted_documents' => $mergedSubmitted, 'documents_complete' => $docsComplete],
+                reason: $cleanNotes ?: 'Carga de adjuntos faltantes en expediente'
+            );
+
+            return $enrollment->fresh(['student.attachments', 'edition.course']);
+        });
+    }
+
+    /**
+     * Reabre una solicitud previamente rechazada (sin duplicar la inscripción ni borrar el historial de rechazo),
+     * validando el cupo disponible actual de la edición.
+     */
+    public function reopenRejectedEnrollment(
+        Enrollment $enrollment,
+        string $reason,
+        bool $authorizeOvercapacity = false
+    ): Enrollment {
+        if ($enrollment->status !== 'rechazada') {
+            throw ValidationException::withMessages([
+                'reopen_reason' => 'Solo se pueden reabrir solicitudes que se encuentren en estado Rechazada.',
+            ]);
+        }
+
+        $cleanReason = trim($reason);
+        if (mb_strlen($cleanReason) < 5) {
+            throw ValidationException::withMessages([
+                'reopen_reason' => 'Debe indicar un motivo de reapertura (mínimo 5 caracteres) para auditoría.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($enrollment, $cleanReason, $authorizeOvercapacity): Enrollment {
+            $lockedEdition = CourseEdition::whereKey($enrollment->course_edition_id)->lockForUpdate()->firstOrFail();
+            $lockedIsFull = $lockedEdition->availableSeats() <= 0;
+
+            $oldStatus = $enrollment->status;
+            $previousReasonCode = $enrollment->rejection_reason_code;
+
+            if ($lockedIsFull && ! $authorizeOvercapacity) {
+                $newStatus = 'lista_espera';
+                $capacityDecision = 'lista_espera';
+            } else {
+                $newStatus = $enrollment->documents_complete ? 'preinscrita' : 'documentacion_pendiente';
+                $capacityDecision = ($lockedIsFull && $authorizeOvercapacity) ? 'autorizar_sobrecupo' : null;
+            }
+
+            $enrollment->update([
+                'status' => $newStatus,
+                'capacity_decision_code' => $capacityDecision,
+                'notes' => trim(($enrollment->notes ? $enrollment->notes.' | ' : '').'Reabierta: '.$cleanReason),
+                'updated_by' => Auth::id(),
+            ]);
+
+            StudentLifecycleEvent::create([
+                'student_id' => $enrollment->student_id,
+                'enrollment_id' => $enrollment->id,
+                'event_type' => 'solicitud_reabierta',
+                'from_status' => $oldStatus,
+                'to_status' => $newStatus,
+                'description' => sprintf(
+                    'Solicitud reabierta desde estado Rechazada hacia %s. Motivo: %s',
+                    strtoupper(str_replace('_', ' ', $newStatus)),
+                    $cleanReason
+                ),
+                'metadata' => [
+                    'previous_rejection_reason_code' => $previousReasonCode,
+                    'edition_was_full' => $lockedIsFull,
+                    'overcapacity_authorized' => $lockedIsFull && $authorizeOvercapacity,
+                ],
+                'recorded_by' => Auth::id(),
+                'created_at' => now(),
+            ]);
+
+            AuditService::log(
+                event: 'enrollment.reopened',
+                module: 'admisiones',
+                auditable: $enrollment,
+                oldValues: [
+                    'status' => $oldStatus,
+                    'rejection_reason_code' => $previousReasonCode,
+                ],
+                newValues: [
+                    'status' => $newStatus,
+                    'documents_complete' => $enrollment->documents_complete,
+                    'capacity_decision_code' => $capacityDecision,
+                ],
+                reason: $cleanReason
+            );
+
+            return $enrollment->fresh(['student.attachments', 'edition.course']);
+        });
     }
 
     /**

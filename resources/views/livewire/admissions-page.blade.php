@@ -36,7 +36,7 @@
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                     @forelse($enrollments as $enr)
-                        <tr wire:key="enr-row-{{ $enr->id }}" class="{{ ($confirmingEnrollmentId === $enr->id || $rejectingEnrollmentId === $enr->id) ? 'bg-slate-50/80' : '' }}">
+                        <tr wire:key="enr-row-{{ $enr->id }}" class="{{ ($confirmingEnrollmentId === $enr->id || $rejectingEnrollmentId === $enr->id || $attachingEnrollmentId === $enr->id || $reopeningEnrollmentId === $enr->id) ? 'bg-slate-50/80' : '' }}">
                             <td class="py-2.5 pr-3 font-mono text-xs font-bold">{{ $enr->enrollment_code }}<div class="text-[11px] text-slate-400">{{ $enr->source }}</div></td>
                             <td class="py-2.5 pr-3 font-semibold text-slate-900">{{ $enr->student?->full_name }}<div class="text-xs text-slate-500">{{ $enr->student?->identification_number }} · {{ $enr->student?->email }}</div></td>
                             <td class="py-2.5 pr-3 text-xs">{{ $enr->edition?->course?->name }}<div class="text-slate-500">{{ $enr->edition?->name }}</div></td>
@@ -66,6 +66,12 @@
                                     @if(in_array($enr->status, ['preinscrita', 'documentacion_pendiente', 'lista_espera'], true) && auth()->user()->hasEffectivePermission('admisiones.manage'))
                                         <button type="button" wire:click="startConfirmEnrollment({{ $enr->id }})" class="cecap-btn-primary !min-h-9 !px-3 text-xs">Confirmar</button>
                                         <button type="button" wire:click="startRejectEnrollment({{ $enr->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-rose-300 bg-white px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50 cursor-pointer">Rechazar</button>
+                                    @endif
+                                    @if($enr->status === 'rechazada' && auth()->user()->hasEffectivePermission('admisiones.manage'))
+                                        <button type="button" wire:click="startReopenEnrollment({{ $enr->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-emerald-400 bg-emerald-50 px-3 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 cursor-pointer">Reabrir</button>
+                                    @endif
+                                    @if(auth()->user()->hasEffectivePermission('admisiones.manage'))
+                                        <button type="button" wire:click="startAttachEnrollment({{ $enr->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-amber-300 bg-amber-50 px-3 text-xs font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer">Adjuntos</button>
                                     @endif
                                     <button type="button"
                                             data-pdf-modal-url="{{ route('pdf.planilla', $enr) }}"
@@ -190,6 +196,176 @@
                                             </button>
                                             <button type="button" wire:click="cancelRejectEnrollment" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
                                         </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        @endif
+
+                        @if($attachingEnrollment && $attachingEnrollment->id === $enr->id)
+                            <tr wire:key="enr-attach-{{ $enr->id }}">
+                                <td colspan="6" class="py-3 px-1">
+                                    <div class="rounded-2xl border-2 border-amber-400 bg-amber-50/80 p-4 space-y-4">
+                                        <div class="flex flex-wrap items-center justify-between gap-2">
+                                            <div>
+                                                <h3 class="text-sm sm:text-base font-bold text-amber-950">Adjuntos de Solicitud {{ $attachingEnrollment->enrollment_code }} — {{ $attachingEnrollment->student?->full_name }}</h3>
+                                                <p class="text-xs text-amber-900">Suba los documentos faltantes (PDF, JPG, PNG o WebP hasta 25 MB). El checklist y la Planilla PDF se actualizarán automáticamente.</p>
+                                            </div>
+                                            <button type="button" wire:click="cancelAttachEnrollment" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cerrar</button>
+                                        </div>
+
+                                        @if($errors->any())
+                                            <div class="rounded-xl border border-rose-300 bg-white px-3 py-2 text-xs font-medium text-rose-800">
+                                                <ul class="list-disc pl-4 space-y-0.5">
+                                                    @foreach($errors->all() as $error)
+                                                        <li>{{ $error }}</li>
+                                                    @endforeach
+                                                </ul>
+                                            </div>
+                                        @endif
+
+                                        @php $attachMissing = $attachingEnrollment->missingDocumentLabels(); @endphp
+                                        <div class="rounded-xl border {{ empty($attachMissing) ? 'border-emerald-300 bg-emerald-50 text-emerald-900' : 'border-rose-200 bg-white text-rose-900' }} px-3 py-2 text-xs">
+                                            @if(empty($attachMissing))
+                                                <strong>Documentación completa.</strong> Puede subir una nueva versión si requiere reemplazar algún archivo.
+                                            @else
+                                                <strong>Documentos faltantes actuales:</strong> {{ implode(', ', $attachMissing) }}
+                                            @endif
+                                        </div>
+
+                                        @php $activeAtts = $attachingEnrollment->student?->attachments?->where('status', 'activo') ?? collect(); @endphp
+                                        @if($activeAtts->isNotEmpty())
+                                            <div class="rounded-xl border border-slate-200 bg-white p-3 space-y-1.5">
+                                                <div class="text-[11px] font-bold uppercase text-slate-500">Adjuntos vigentes en el expediente</div>
+                                                <div class="flex flex-wrap gap-3 text-xs">
+                                                    @foreach($activeAtts as $att)
+                                                        <a href="{{ route('attachments.download', $att->uuid) }}" class="inline-flex items-center gap-1 rounded-lg border border-brand-200 bg-brand-50 px-2.5 py-1 font-semibold text-brand-900 hover:bg-brand-100">
+                                                            {{ $att->document_type_label }} (v{{ $att->version }})
+                                                        </a>
+                                                    @endforeach
+                                                </div>
+                                            </div>
+                                        @endif
+
+                                        <form wire:submit="uploadEnrollmentAttachment" class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Tipo de Documento *</label>
+                                                <select wire:model="enr_attachment_doc_type" class="cecap-input">
+                                                    @foreach($documentTypes as $dk => $dl)
+                                                        <option value="{{ $dk }}">{{ $dl }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Archivo (PDF/Imagen máx 25 MB) *</label>
+                                                <input wire:model="enr_attachment_file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
+                                                <div wire:loading wire:target="enr_attachment_file" class="mt-1 text-xs font-semibold text-brand-800">Subiendo archivo... espere un momento.</div>
+                                                @if($enr_attachment_file)
+                                                    <div wire:loading.remove wire:target="enr_attachment_file" class="mt-1 text-xs font-semibold text-emerald-700">✓ Archivo listo: {{ $enr_attachment_file->getClientOriginalName() }}</div>
+                                                @endif
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Observación (opcional)</label>
+                                                <input wire:model="enr_attachment_notes" type="text" class="cecap-input" placeholder="Ej. Entregado en recepción">
+                                            </div>
+                                            <div class="md:col-span-3 flex flex-wrap gap-2">
+                                                <button type="submit" wire:loading.attr="disabled" wire:target="enr_attachment_file,uploadEnrollmentAttachment" class="cecap-btn-primary text-xs sm:text-sm disabled:opacity-60">
+                                                    <span wire:loading.remove wire:target="enr_attachment_file,uploadEnrollmentAttachment">Guardar Adjunto y Actualizar Checklist</span>
+                                                    <span wire:loading wire:target="enr_attachment_file,uploadEnrollmentAttachment">Procesando archivo...</span>
+                                                </button>
+                                                <button type="button" wire:click="cancelAttachEnrollment" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        @endif
+
+                        @if($reopeningEnrollment && $reopeningEnrollment->id === $enr->id)
+                            <tr wire:key="enr-reopen-{{ $enr->id }}">
+                                <td colspan="6" class="py-3 px-1">
+                                    @php
+                                        $reopenEd = $reopeningEnrollment->edition;
+                                        $reopenAvail = $reopenEd ? $reopenEd->availableSeats() : 0;
+                                        $reopenActive = $reopenEd ? $reopenEd->activeEnrollmentsCount() : 0;
+                                        $reopenMax = $reopenEd ? (int) $reopenEd->max_capacity : 0;
+                                        $reopenMissing = $reopeningEnrollment->missingDocumentLabels();
+                                    @endphp
+                                    <div class="rounded-2xl border-2 border-emerald-500 bg-emerald-50/70 p-4 space-y-4">
+                                        <div class="flex flex-wrap items-center justify-between gap-2">
+                                            <div>
+                                                <h3 class="text-sm sm:text-base font-bold text-emerald-950">Reabrir Solicitud Rechazada {{ $reopeningEnrollment->enrollment_code }} — {{ $reopeningEnrollment->student?->full_name }}</h3>
+                                                <p class="text-xs text-emerald-900">Reactiva esta misma solicitud sin duplicarla, conservando el historial previo en auditoría.</p>
+                                            </div>
+                                            <button type="button" wire:click="cancelReopenEnrollment" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar</button>
+                                        </div>
+
+                                        @if($errors->any())
+                                            <div class="rounded-xl border border-rose-300 bg-white px-3 py-2 text-xs font-medium text-rose-800">
+                                                <ul class="list-disc pl-4 space-y-0.5">
+                                                    @foreach($errors->all() as $error)
+                                                        <li>{{ $error }}</li>
+                                                    @endforeach
+                                                </ul>
+                                            </div>
+                                        @endif
+
+                                        <div class="rounded-xl border {{ $reopenAvail > 0 ? 'border-emerald-300 bg-white text-emerald-950' : 'border-indigo-300 bg-indigo-50 text-indigo-950' }} px-3 py-2.5 text-xs space-y-1">
+                                            <div>
+                                                <strong>Disponibilidad actual de {{ $reopenEd?->code }}:</strong>
+                                                @if($reopenAvail > 0)
+                                                    {{ $reopenAvail }} cupo(s) libre(s) ({{ $reopenActive }} / {{ $reopenMax }} ocupados) — se reabrirá en estado {{ empty($reopenMissing) ? 'PREINSCRITA' : 'DOCUMENTACIÓN PENDIENTE' }}.
+                                                @else
+                                                    CUPO MÁXIMO ALCANZADO ({{ $reopenActive }} / {{ $reopenMax }} ocupados) — se reabrirá automáticamente en <strong>LISTA DE ESPERA</strong> (a menos que autorice sobrecupo).
+                                                @endif
+                                            </div>
+                                            @if($reopeningEnrollment->rejection_reason_label)
+                                                <div class="text-rose-800"><strong>Motivo del rechazo anterior:</strong> {{ $reopeningEnrollment->rejection_reason_label }}</div>
+                                            @endif
+                                            @if(! empty($reopenMissing))
+                                                <div class="text-amber-900"><strong>Documentos aún faltantes:</strong> {{ implode(', ', $reopenMissing) }} (puede subir un archivo abajo al mismo tiempo).</div>
+                                            @endif
+                                        </div>
+
+                                        <form wire:submit="submitReopenEnrollment" class="space-y-3">
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Motivo de Reapertura (Obligatorio para Auditoría) *</label>
+                                                <input wire:model="reopen_reason" type="text" required class="cecap-input" placeholder="Ej. Solicitante presentó atestado académico faltante">
+                                            </div>
+
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Subir documento faltante ahora (opcional)</label>
+                                                    <select wire:model="reopen_attachment_doc_type" class="cecap-input">
+                                                        @foreach($documentTypes as $dk => $dl)
+                                                            <option value="{{ $dk }}">{{ $dl }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Archivo (PDF/Imagen máx 25 MB)</label>
+                                                    <input wire:model="reopen_attachment_file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
+                                                    <div wire:loading wire:target="reopen_attachment_file" class="mt-1 text-xs font-semibold text-brand-800">Subiendo archivo...</div>
+                                                    @if($reopen_attachment_file)
+                                                        <div wire:loading.remove wire:target="reopen_attachment_file" class="mt-1 text-xs font-semibold text-emerald-700">✓ Listo: {{ $reopen_attachment_file->getClientOriginalName() }}</div>
+                                                    @endif
+                                                </div>
+                                            </div>
+
+                                            @if($reopenAvail <= 0 && auth()->user()->hasEffectivePermission('admisiones.exceptions.authorize'))
+                                                <label class="inline-flex items-center gap-2 text-xs font-semibold text-indigo-950 cursor-pointer">
+                                                    <input type="checkbox" wire:model="reopen_authorize_overcapacity" class="h-4 w-4 rounded text-indigo-700">
+                                                    <span>Autorizar sobrecupo auditado (reabrir directo a Preinscrita en lugar de Lista de Espera)</span>
+                                                </label>
+                                            @endif
+
+                                            <div class="flex flex-wrap gap-2">
+                                                <button type="submit" wire:loading.attr="disabled" wire:target="reopen_attachment_file,submitReopenEnrollment" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-700 px-4 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-emerald-800 cursor-pointer disabled:opacity-60">
+                                                    <span wire:loading.remove wire:target="reopen_attachment_file,submitReopenEnrollment">Reabrir Solicitud</span>
+                                                    <span wire:loading wire:target="reopen_attachment_file,submitReopenEnrollment">Procesando...</span>
+                                                </button>
+                                                <button type="button" wire:click="cancelReopenEnrollment" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
+                                            </div>
+                                        </form>
                                     </div>
                                 </td>
                             </tr>
@@ -492,22 +668,85 @@
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                     @forelse($students as $st)
-                        <tr wire:key="student-row-{{ $st->id }}" class="{{ $editingStudentId === $st->id ? 'bg-slate-50/80' : '' }}">
+                        <tr wire:key="student-row-{{ $st->id }}" class="{{ ($editingStudentId === $st->id || $attachingStudentId === $st->id) ? 'bg-slate-50/80' : '' }}">
                             <td class="py-2.5 pr-3 font-mono text-xs font-bold">{{ $st->student_code }}</td>
                             <td class="py-2.5 pr-3 font-semibold">{{ $st->full_name }}<div class="text-xs text-slate-500">{{ $st->identification_number }}</div></td>
                             <td class="py-2.5 pr-3 text-xs">{{ $st->email }}<div>{{ $st->phone }}</div></td>
                             <td class="py-2.5 pr-3 text-xs">
-                                @foreach($st->attachments->where('status', 'activo') as $att)
+                                @forelse($st->attachments->where('status', 'activo') as $att)
                                     <div class="flex items-center gap-2">
                                         <a href="{{ route('attachments.download', $att->uuid) }}" class="text-brand-800 underline">{{ $att->document_type_label }} v{{ $att->version }}</a>
                                         <button type="button" wire:click="archiveAttachment({{ $att->id }})" class="text-[11px] text-amber-700 hover:underline cursor-pointer">Archivar</button>
                                     </div>
-                                @endforeach
+                                @empty
+                                    <span class="text-slate-400">Sin adjuntos</span>
+                                @endforelse
                             </td>
                             <td class="py-2.5">
-                                <button type="button" wire:click="editStudent({{ $st->id }})" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Edición Controlada</button>
+                                <div class="flex flex-wrap gap-1.5">
+                                    @if(auth()->user()->hasEffectivePermission('admisiones.manage'))
+                                        <button type="button" wire:click="startAttachStudent({{ $st->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-amber-300 bg-amber-50 px-3 text-xs font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer">+ Adjunto</button>
+                                    @endif
+                                    <button type="button" wire:click="editStudent({{ $st->id }})" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Edición Controlada</button>
+                                </div>
                             </td>
                         </tr>
+                        @if($attachingStudent && $attachingStudent->id === $st->id)
+                            <tr wire:key="student-attach-{{ $st->id }}">
+                                <td colspan="5" class="py-3 px-1">
+                                    <form wire:submit="uploadStudentAttachment" class="rounded-2xl border-2 border-amber-400 bg-amber-50/80 p-4 space-y-3">
+                                        <div class="flex flex-wrap items-center justify-between gap-2">
+                                            <div>
+                                                <h3 class="text-sm sm:text-base font-bold text-amber-950">Agregar Adjunto al Expediente — {{ $st->full_name }} ({{ $st->student_code }})</h3>
+                                                <p class="text-xs text-amber-900">Se guarda versionado con SHA-256 y actualiza automáticamente el checklist de sus solicitudes abiertas.</p>
+                                            </div>
+                                            <button type="button" wire:click="cancelAttachStudent" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar</button>
+                                        </div>
+
+                                        @if($errors->any())
+                                            <div class="rounded-xl border border-rose-300 bg-white px-3 py-2 text-xs text-rose-800">
+                                                <ul class="list-disc pl-4 space-y-0.5">
+                                                    @foreach($errors->all() as $error)
+                                                        <li>{{ $error }}</li>
+                                                    @endforeach
+                                                </ul>
+                                            </div>
+                                        @endif
+
+                                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Tipo de Documento *</label>
+                                                <select wire:model="student_attachment_doc_type" class="cecap-input">
+                                                    @foreach($documentTypes as $dk => $dl)
+                                                        <option value="{{ $dk }}">{{ $dl }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Archivo (PDF/Imagen máx 25 MB) *</label>
+                                                <input wire:model="student_attachment_file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
+                                                <div wire:loading wire:target="student_attachment_file" class="mt-1 text-xs font-semibold text-brand-800">Subiendo archivo...</div>
+                                                @if($student_attachment_file)
+                                                    <div wire:loading.remove wire:target="student_attachment_file" class="mt-1 text-xs font-semibold text-emerald-700">✓ Listo: {{ $student_attachment_file->getClientOriginalName() }}</div>
+                                                @endif
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Observación (opcional)</label>
+                                                <input wire:model="student_attachment_notes" type="text" class="cecap-input" placeholder="Ej. Atestado recibido por correo">
+                                            </div>
+                                        </div>
+
+                                        <div class="flex flex-wrap gap-2">
+                                            <button type="submit" wire:loading.attr="disabled" wire:target="student_attachment_file,uploadStudentAttachment" class="cecap-btn-primary text-xs sm:text-sm disabled:opacity-60">
+                                                <span wire:loading.remove wire:target="student_attachment_file,uploadStudentAttachment">Subir Adjunto al Expediente</span>
+                                                <span wire:loading wire:target="student_attachment_file,uploadStudentAttachment">Subiendo...</span>
+                                            </button>
+                                            <button type="button" wire:click="cancelAttachStudent" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
+                                        </div>
+                                    </form>
+                                </td>
+                            </tr>
+                        @endif
                         @if($editingStudentId === $st->id)
                             <tr wire:key="student-edit-{{ $st->id }}">
                                 <td colspan="5" class="py-3 px-1">

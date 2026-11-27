@@ -103,6 +103,13 @@ class PublicEnrollmentPage extends Component
 
     public $pending_file_atestado = null;
 
+    // Retomar carga de adjuntos faltantes para solicitantes que regresan posteriormente
+    public bool $showResumeLookup = false;
+
+    public string $lookup_identification = '';
+
+    public string $lookup_enrollment_code = '';
+
     public function updatedGender(string $value): void
     {
         $settings = InstitutionSetting::current();
@@ -392,8 +399,64 @@ class PublicEnrollmentPage extends Component
         $this->reset(['pending_file_cedula', 'pending_file_atestado']);
         $this->showPendingUploadForm = false;
         $this->uploadFeedback = $updated->documents_complete
-            ? sprintf('Documentos guardados en la solicitud %s. Su documentación está ahora completa (estado: Preinscrita Provisional) y su Planilla PDF se ha actualizado.', $updated->enrollment_code)
+            ? sprintf('Documentos guardados en la solicitud %s. Su documentación está ahora completa (estado: %s) y su Planilla PDF se ha actualizado.', $updated->enrollment_code, strtoupper(str_replace('_', ' ', $updated->status)))
             : sprintf('Documento(s) guardados en la solicitud %s. Aún quedan documentos pendientes indicados abajo.', $updated->enrollment_code);
+    }
+
+    public function toggleResumeLookup(): void
+    {
+        $this->showResumeLookup = ! $this->showResumeLookup;
+        $this->resetValidation();
+    }
+
+    public function resumePendingEnrollment(): void
+    {
+        $this->validate([
+            'lookup_identification' => ['required', 'string', 'max:40'],
+            'lookup_enrollment_code' => ['required', 'string', 'max:40'],
+        ], [
+            'lookup_identification.required' => 'Ingrese su número de cédula o DIMEX.',
+            'lookup_enrollment_code.required' => 'Ingrese su código de solicitud (ej. MAT-2026-0001).',
+        ]);
+
+        $idNum = trim($this->lookup_identification);
+        $code = strtoupper(trim($this->lookup_enrollment_code));
+
+        $enrollment = Enrollment::with('student')
+            ->whereRaw('UPPER(enrollment_code) = ?', [$code])
+            ->whereHas('student', fn ($q) => $q->where('identification_number', $idNum))
+            ->first();
+
+        if (! $enrollment) {
+            $this->addError('lookup_enrollment_code', 'No se encontró ninguna solicitud que coincida con esa cédula y código. Verifique los datos en su comprobante o Planilla PDF.');
+
+            return;
+        }
+
+        if ($enrollment->status === 'rechazada') {
+            $this->addError('lookup_enrollment_code', 'Esta solicitud se encuentra rechazada. Por favor acuda o comuníquese con Secretaría / Admisiones para presentar sus adjuntos y solicitar su reapertura.');
+
+            return;
+        }
+
+        $settings = InstitutionSetting::current();
+        $this->createdEnrollmentId = $enrollment->id;
+        $this->successCode = $enrollment->enrollment_code;
+        $this->successStatus = $enrollment->status;
+        $this->provisionalExpiresAt = $enrollment->provisional_expires_at?->format('d/m/Y H:i') ?? 'Vigente';
+        $this->missingDocumentKeys = $enrollment->missingDocuments();
+        $this->missingDocumentLabels = $enrollment->missingDocumentLabels();
+        $this->showPendingUploadForm = ! empty($this->missingDocumentKeys);
+        $this->showResumeLookup = false;
+        $this->uploadFeedback = empty($this->missingDocumentKeys)
+            ? sprintf('Solicitud %s encontrada: su documentación ya se encuentra completa.', $enrollment->enrollment_code)
+            : null;
+        $this->signedPlanillaUrl = URL::temporarySignedRoute(
+            'inscripcion.planilla.publica',
+            now()->addDays(max(1, (int) $settings->online_enrollment_provisional_days)),
+            ['enrollment' => $enrollment->id],
+            absolute: false
+        );
     }
 
     public function resetForm(): void
@@ -406,6 +469,7 @@ class PublicEnrollmentPage extends Component
             'createdEnrollmentId', 'successCode', 'successStatus', 'signedPlanillaUrl',
             'provisionalExpiresAt', 'missingDocumentLabels', 'missingDocumentKeys',
             'showPendingUploadForm', 'uploadFeedback', 'pending_file_cedula', 'pending_file_atestado',
+            'showResumeLookup', 'lookup_identification', 'lookup_enrollment_code',
         ]);
         $this->gender = 'femenino';
         $this->genderBlocked = false;
