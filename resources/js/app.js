@@ -73,6 +73,56 @@
     // 4. Visor PDF Modal seguro (usa ?vista=html para vista previa instantánea CSP-safe + descarga Blob PDF)
     let activeBlobUrl = null;
 
+    function getAppBaseUrl() {
+        const lwScript = document.querySelector('script[data-update-uri]');
+        const updateUri = lwScript?.getAttribute('data-update-uri');
+        if (updateUri) {
+            try {
+                const u = new URL(updateUri, window.location.href);
+                const basePath = u.pathname.replace(/\/livewire[^/]*\/update\/?$/i, '');
+                return u.origin + basePath;
+            } catch {}
+        }
+        return window.location.origin;
+    }
+
+    function buildRelativePath(rawUrl, setParams = {}, deleteParams = []) {
+        const u = new URL(rawUrl, 'http://cecap.local');
+        for (const key of deleteParams) {
+            u.searchParams.delete(key);
+        }
+        for (const [k, v] of Object.entries(setParams)) {
+            u.searchParams.set(k, v);
+        }
+        return u.pathname + u.search + u.hash;
+    }
+
+    function buildUrlCandidates(rawUrl, setParams = {}, deleteParams = []) {
+        const rel = buildRelativePath(rawUrl, setParams, deleteParams);
+        const appBase = getAppBaseUrl().replace(/\/+$/, '');
+        const list = [appBase + rel, rel];
+        if (window.location.origin && window.location.origin !== 'null') {
+            list.push(window.location.origin + rel);
+        }
+        return [...new Set(list)];
+    }
+
+    async function fetchFirstOk(candidates) {
+        let lastErr = 'Error de red';
+        for (const candidate of candidates) {
+            try {
+                const resp = await fetch(candidate, { credentials: 'same-origin' });
+                if (resp.ok) {
+                    return resp;
+                }
+                lastErr = 'HTTP ' + resp.status + ' (' + candidate + ')';
+            } catch (err) {
+                lastErr = (err?.message || 'Error de red') + ' (' + candidate + ')';
+            }
+        }
+        throw new Error(lastErr);
+    }
+
     function openPdfModal(url, title) {
         const modal = document.getElementById('cecap-pdf-modal');
         const frame = document.getElementById('cecap-pdf-frame');
@@ -88,27 +138,20 @@
             activeBlobUrl = null;
         }
 
-        const rawParsed = new URL(url, window.location.origin);
-        const parsed = new URL(rawParsed.pathname + rawParsed.search + rawParsed.hash, window.location.origin);
-
-        const htmlUrl = new URL(parsed.toString());
-        htmlUrl.searchParams.set('vista', 'html');
-
-        const dlUrl = new URL(parsed.toString());
-        dlUrl.searchParams.delete('vista');
-        dlUrl.searchParams.set('descargar', '1');
-
-        const pdfUrl = new URL(parsed.toString());
-        pdfUrl.searchParams.delete('vista');
+        const htmlRel = buildRelativePath(url, { vista: 'html' });
+        const dlRel = buildRelativePath(url, { descargar: '1' }, ['vista']);
+        const pdfRel = buildRelativePath(url, {}, ['vista', 'descargar']);
+        const appBase = getAppBaseUrl().replace(/\/+$/, '');
 
         if (titleEl) titleEl.textContent = title || 'Documento Oficial CeCap';
         if (downloadBtn) {
-            downloadBtn.setAttribute('href', dlUrl.toString());
+            downloadBtn.setAttribute('href', appBase + dlRel);
+            downloadBtn.dataset.pdfDownloadUrl = dlRel;
             downloadBtn.dataset.pdfFilename = ((title || 'Documento-CeCap').replace(/[^\w\-]+/g, '-')) + '.pdf';
         }
-        if (openTabBtn) openTabBtn.setAttribute('href', htmlUrl.toString());
-        modal.dataset.currentUrl = pdfUrl.toString();
-        modal.dataset.currentHtmlUrl = htmlUrl.toString();
+        if (openTabBtn) openTabBtn.setAttribute('href', appBase + htmlRel);
+        modal.dataset.currentUrl = pdfRel;
+        modal.dataset.currentHtmlUrl = htmlRel;
 
         // Por defecto carga ?vista=html vía fetch -> srcdoc (evita bloqueos de iframes anidados y proxies)
         if (modeHtmlBtn) modeHtmlBtn.setAttribute('aria-pressed', 'true');
@@ -116,28 +159,25 @@
 
         modal.classList.remove('hidden');
         modal.classList.add('flex');
-        loadHtmlIntoModalFrame(htmlUrl.toString());
+        loadHtmlIntoModalFrame(htmlRel);
     }
 
-    async function loadHtmlIntoModalFrame(htmlUrl) {
+    async function loadHtmlIntoModalFrame(htmlRel) {
         const frame = document.getElementById('cecap-pdf-frame');
-        if (!frame || !htmlUrl) return;
+        if (!frame || !htmlRel) return;
 
         frame.removeAttribute('src');
         frame.srcdoc = '<!DOCTYPE html><html lang="es"><body style="font-family:sans-serif;color:#475569;padding:32px;text-align:center;">Cargando vista previa del documento...</body></html>';
 
         try {
-            const resp = await fetch(htmlUrl, {
-                credentials: 'same-origin',
-                headers: { Accept: 'text/html' },
-            });
-            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const resp = await fetchFirstOk(buildUrlCandidates(htmlRel));
             const html = await resp.text();
             frame.removeAttribute('src');
             frame.srcdoc = html;
-        } catch {
+        } catch (err) {
+            const detail = String(err?.message || 'Error desconocido').replace(/[<>&"]/g, '');
             frame.removeAttribute('src');
-            frame.srcdoc = '<!DOCTYPE html><html lang="es"><body style="font-family:sans-serif;color:#9f1239;padding:32px;text-align:center;">No se pudo cargar la vista previa. Utilice el botón <strong>Descargar PDF</strong>.</body></html>';
+            frame.srcdoc = '<!DOCTYPE html><html lang="es"><body style="font-family:sans-serif;color:#9f1239;padding:32px;text-align:center;"><p>No se pudo cargar la vista previa. Utilice el botón <strong>Descargar PDF</strong>.</p><p style="font-size:11px;color:#64748b;margin-top:12px;">Detalle: ' + detail + '</p></body></html>';
         }
     }
 
@@ -161,8 +201,6 @@
 
     async function downloadViaBlob(url, fallbackFilename, triggerEl) {
         if (!url || url === '#') return;
-        const rawParsed = new URL(url, window.location.origin);
-        const normalized = new URL(rawParsed.pathname + rawParsed.search + rawParsed.hash, window.location.origin);
 
         const prevText = triggerEl ? triggerEl.textContent : null;
         if (triggerEl) {
@@ -171,11 +209,7 @@
         }
 
         try {
-            const resp = await fetch(normalized.toString(), {
-                credentials: 'same-origin',
-            });
-            if (!resp.ok) throw new Error('HTTP ' + resp.status);
-
+            const resp = await fetchFirstOk(buildUrlCandidates(url));
             const contentType = resp.headers.get('Content-Type') || 'application/octet-stream';
             const filename = extractFilename(resp.headers.get('Content-Disposition'), fallbackFilename);
             const buffer = await resp.arrayBuffer();
@@ -192,11 +226,8 @@
 
             setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
         } catch {
-            // Fallback seguro: abrir vista HTML imprimible si la descarga directa falla
-            const fallbackUrl = new URL(normalized.toString());
-            fallbackUrl.searchParams.delete('descargar');
-            fallbackUrl.searchParams.set('vista', 'html');
-            window.open(fallbackUrl.toString(), '_blank', 'noopener');
+            const fallbackUrl = getAppBaseUrl().replace(/\/+$/, '') + buildRelativePath(url, { vista: 'html' }, ['descargar']);
+            window.open(fallbackUrl, '_blank', 'noopener');
         } finally {
             if (triggerEl && prevText !== null) {
                 triggerEl.removeAttribute('aria-busy');
@@ -213,11 +244,7 @@
         if (!modal || !frame || !modal.dataset.currentUrl) return;
 
         try {
-            const resp = await fetch(modal.dataset.currentUrl, {
-                headers: { Accept: 'application/pdf' },
-                credentials: 'same-origin',
-            });
-            if (!resp.ok) throw new Error('PDF fetch failed');
+            const resp = await fetchFirstOk(buildUrlCandidates(modal.dataset.currentUrl));
             const buffer = await resp.arrayBuffer();
             const blob = new Blob([buffer], { type: 'application/pdf' });
             if (activeBlobUrl) URL.revokeObjectURL(activeBlobUrl);
