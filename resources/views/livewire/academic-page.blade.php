@@ -276,8 +276,8 @@
                                                     </select>
                                                 </div>
                                                 <div>
-                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Código del Curso *</label>
-                                                    <input wire:model="course_code" type="text" required class="cecap-input">
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Código del Curso (inmutable)</label>
+                                                    <input wire:model="course_code" type="text" readonly class="cecap-input bg-slate-100 text-slate-600 cursor-not-allowed font-mono">
                                                 </div>
                                                 <div>
                                                     <label class="block text-xs font-semibold text-slate-700 mb-1">Tipo de Programa *</label>
@@ -533,7 +533,12 @@
                                 <td class="py-2.5 pr-3 font-semibold">{{ $ed->name }}<div class="text-xs text-slate-500">{{ $ed->start_date?->format('d/m/Y') }} - {{ $ed->end_date?->format('d/m/Y') }}</div></td>
                                 <td class="py-2.5 pr-3 text-xs">{{ $ed->shift?->name }} · {{ $ed->modality?->name }}</td>
                                 <td class="py-2.5 pr-3 text-xs">{{ $ed->teacher?->name ?? 'Por asignar' }}</td>
-                                <td class="py-2.5 pr-3 text-xs font-bold">{{ $ed->activeEnrollmentsCount() }} / {{ $ed->max_capacity }}</td>
+                                <td class="py-2.5 pr-3 text-xs font-bold">
+                                    {{ $ed->activeEnrollmentsCount() }} / {{ $ed->max_capacity }}
+                                    @if($ed->waitlistCount() > 0)
+                                        <div class="text-[11px] font-semibold text-indigo-700">Lista espera: {{ $ed->waitlistCount() }}</div>
+                                    @endif
+                                </td>
                                 <td class="py-2.5 pr-3 text-xs">
                                     @foreach($ed->schedules as $sch)
                                         <div>{{ $sch->formatted_slot }}</div>
@@ -555,13 +560,13 @@
                                     <td colspan="7" class="py-3 px-1">
                                         <form wire:submit="saveEditionEdit" class="rounded-2xl border-2 border-brand-700 bg-brand-50/60 p-4 space-y-4">
                                             <div class="flex flex-wrap items-center justify-between gap-2">
-                                                <h3 class="text-sm sm:text-base font-bold text-brand-950">Editar Edición {{ $ed->code }} (Cambio Auditado — sin duplicar)</h3>
+                                                <h3 class="text-sm sm:text-base font-bold text-brand-950">Editar Edición {{ $ed->code }} (Mantiene mismo código — cambio auditado)</h3>
                                                 <button type="button" wire:click="cancelEditEdition" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar</button>
                                             </div>
                                             <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                                                 <div>
-                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Código Edición *</label>
-                                                    <input wire:model="edit_ed_code" type="text" required class="cecap-input">
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Código Edición (inmutable)</label>
+                                                    <input wire:model="edit_ed_code" type="text" readonly class="cecap-input bg-slate-100 text-slate-600 cursor-not-allowed font-mono">
                                                 </div>
                                                 <div>
                                                     <label class="block text-xs font-semibold text-slate-700 mb-1">Nombre Edición *</label>

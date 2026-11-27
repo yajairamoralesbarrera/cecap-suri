@@ -256,16 +256,17 @@ it('stores private attachments with SHA-256 versioning and protected download', 
     $this->get('/adjuntos/'.$v2->uuid)->assertOk();
 });
 
-it('enforces max_capacity on /inscripcion and allows audited rejection with picklist reason, email notification, and seat release', function () {
+it('routes full editions to online waitlist on /inscripcion, enforces presencial full-capacity picklist decisions, and supports audited rejection with seat release', function () {
     \Illuminate\Support\Facades\Mail::fake();
     $admin = User::where('email', 'superadmin@cecap.or.cr')->firstOrFail();
 
     $edition = createSampleEdition('curso_corto');
     $edition->update(['max_capacity' => 1]);
 
-    // 1ra solicitante ocupa el único cupo (1/1)
+    // 1ra solicitante en línea ocupa el único cupo disponible (1/1)
     Livewire::test(PublicEnrollmentPage::class)
         ->set('course_edition_id', $edition->id)
+        ->assertSet('isWaitlistMode', false)
         ->set('gender', 'femenino')
         ->set('identification_number', '1-7000-0001')
         ->set('first_name', 'Andrea')
@@ -275,14 +276,14 @@ it('enforces max_capacity on /inscripcion and allows audited rejection with pick
         ->call('submit')
         ->assertHasNoErrors();
 
-    $enrollment = Enrollment::firstOrFail();
+    $firstEnrollment = Enrollment::firstOrFail();
     expect($edition->fresh()->availableSeats())->toBe(0);
 
-    // 2da solicitante queda bloqueada en vivo y al enviar por cupo máximo alcanzado
-    Livewire::test(PublicEnrollmentPage::class)
+    // 2da solicitante en línea ve aviso de Lista de Espera en Línea y se registra en lista_espera sin consumir cupo activo
+    $waitlistComp = Livewire::test(PublicEnrollmentPage::class)
         ->set('course_edition_id', $edition->id)
-        ->assertSet('capacityBlocked', true)
-        ->assertSee('Cupo máximo alcanzado')
+        ->assertSet('isWaitlistMode', true)
+        ->assertSee('Lista de Espera en Línea')
         ->set('gender', 'femenino')
         ->set('identification_number', '1-7000-0002')
         ->set('first_name', 'Lucía')
@@ -290,14 +291,88 @@ it('enforces max_capacity on /inscripcion and allows audited rejection with pick
         ->set('email', 'lucia.mendez@correo.cr')
         ->set('phone', '8800-7002')
         ->call('submit')
-        ->assertHasErrors('course_edition_id');
+        ->assertHasNoErrors()
+        ->assertSet('successStatus', 'lista_espera')
+        ->assertSee('LISTA DE ESPERA EN LÍNEA');
 
-    expect(Enrollment::count())->toBe(1);
+    $waitlistedOnline = Enrollment::where('id', '!=', $firstEnrollment->id)->firstOrFail();
+    expect($waitlistedOnline->status)->toBe('lista_espera');
+    expect($waitlistedOnline->capacity_decision_code)->toBe('lista_espera');
+    expect($edition->fresh()->activeEnrollmentsCount())->toBe(1);
+    expect($edition->fresh()->waitlistCount())->toBe(1);
+    expect(AuditLog::where('event', 'enrollment.waitlisted_online')->where('auditable_id', (string) $waitlistedOnline->id)->exists())->toBeTrue();
+
+    // En /admisiones (presencial), al elegir edición llena sin decisión del picklist debe bloquearse
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->set('course_edition_id', $edition->id)
+        ->assertSet('selectedEditionIsFull', true)
+        ->set('identification_number', '1-7000-0003')
+        ->set('first_name', 'Valeria')
+        ->set('last_name', 'Solís')
+        ->set('email', 'valeria.solis@correo.cr')
+        ->set('phone', '8800-7003')
+        ->set('gender', 'femenino')
+        ->set('education_level', 'bachillerato_secundaria')
+        ->set('submitted_documents', ['cedula_dimex'])
+        ->call('createPresencialEnrollment')
+        ->assertHasErrors('full_capacity_decision');
+
+    // Presencial con decisión del picklist = lista_espera
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->set('course_edition_id', $edition->id)
+        ->set('full_capacity_decision', 'lista_espera')
+        ->set('identification_number', '1-7000-0003')
+        ->set('first_name', 'Valeria')
+        ->set('last_name', 'Solís')
+        ->set('email', 'valeria.solis@correo.cr')
+        ->set('phone', '8800-7003')
+        ->set('gender', 'femenino')
+        ->set('education_level', 'bachillerato_secundaria')
+        ->set('submitted_documents', ['cedula_dimex'])
+        ->call('createPresencialEnrollment')
+        ->assertHasNoErrors();
+
+    $waitlistedPresencial = Enrollment::whereHas('student', fn ($q) => $q->where('identification_number', '1-7000-0003'))->firstOrFail();
+    expect($waitlistedPresencial->status)->toBe('lista_espera');
+    expect($waitlistedPresencial->feeCharges()->count())->toBe(0);
+    expect($edition->fresh()->waitlistCount())->toBe(2);
+
+    // Presencial con decisión del picklist = rechazar_cupo_lleno guarda rechazada y envía correo
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->set('course_edition_id', $edition->id)
+        ->set('full_capacity_decision', 'rechazar_cupo_lleno')
+        ->set('full_capacity_notes', 'Se invita a próxima convocatoria de agosto.')
+        ->set('identification_number', '1-7000-0004')
+        ->set('first_name', 'Camila')
+        ->set('last_name', 'Rojas')
+        ->set('email', 'camila.rojas@correo.cr')
+        ->set('phone', '8800-7004')
+        ->set('gender', 'femenino')
+        ->set('education_level', 'bachillerato_secundaria')
+        ->set('submitted_documents', ['cedula_dimex'])
+        ->call('createPresencialEnrollment')
+        ->assertHasNoErrors();
+
+    $rejectedFull = Enrollment::whereHas('student', fn ($q) => $q->where('identification_number', '1-7000-0004'))->firstOrFail();
+    expect($rejectedFull->status)->toBe('rechazada');
+    expect($rejectedFull->rejection_reason_code)->toBe('cupo_agotado');
+    \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\EnrollmentRejectedMail::class, fn ($mail) => $mail->hasTo('camila.rojas@correo.cr'));
+
+    // Intentar confirmar una solicitud en lista_espera mientras el cupo sigue lleno sin excepción debe bloquearse
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->call('startConfirmEnrollment', $waitlistedOnline->id)
+        ->set('confirm_docs', ['cedula_dimex'])
+        ->call('submitConfirmation')
+        ->assertHasErrors('documents');
 
     // Rechazar la 1ra solicitud desde /admisiones exige motivo del picklist, envía correo y libera el cupo
     Livewire::actingAs($admin)
         ->test(\App\Livewire\AdmissionsPage::class)
-        ->call('startRejectEnrollment', $enrollment->id)
+        ->call('startRejectEnrollment', $firstEnrollment->id)
         ->call('submitRejection')
         ->assertHasErrors('rejection_reason_code')
         ->set('rejection_reason_code', 'documentacion_incompleta')
@@ -305,31 +380,59 @@ it('enforces max_capacity on /inscripcion and allows audited rejection with pick
         ->call('submitRejection')
         ->assertHasNoErrors();
 
-    $enrollment->refresh();
-    expect($enrollment->status)->toBe('rechazada');
-    expect($enrollment->rejection_reason_code)->toBe('documentacion_incompleta');
-    expect($enrollment->rejected_at)->not->toBeNull();
-    expect(AuditLog::where('event', 'enrollment.rejected')->where('auditable_id', (string) $enrollment->id)->exists())->toBeTrue();
+    $firstEnrollment->refresh();
+    expect($firstEnrollment->status)->toBe('rechazada');
+    expect($firstEnrollment->rejection_reason_code)->toBe('documentacion_incompleta');
+    expect($firstEnrollment->rejected_at)->not->toBeNull();
+    expect(AuditLog::where('event', 'enrollment.rejected')->where('auditable_id', (string) $firstEnrollment->id)->exists())->toBeTrue();
 
     \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\EnrollmentRejectedMail::class, function ($mail) {
         return $mail->hasTo('andrea.castro@correo.cr')
             && str_contains($mail->reasonLabel, 'Documentación incompleta');
     });
 
-    // Al rechazarse, el cupo queda nuevamente disponible (1/1) y la 2da solicitante puede inscribirse
+    // Al liberarse el cupo (1/1 disponible), ahora sí se puede confirmar a Lucía desde la lista de espera
     expect($edition->fresh()->availableSeats())->toBe(1);
-    Livewire::test(PublicEnrollmentPage::class)
-        ->set('course_edition_id', $edition->id)
-        ->assertSet('capacityBlocked', false)
-        ->set('gender', 'femenino')
-        ->set('identification_number', '1-7000-0002')
-        ->set('first_name', 'Lucía')
-        ->set('last_name', 'Méndez')
-        ->set('email', 'lucia.mendez@correo.cr')
-        ->set('phone', '8800-7002')
-        ->call('submit')
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->call('startConfirmEnrollment', $waitlistedOnline->id)
+        ->set('confirm_docs', ['cedula_dimex'])
+        ->call('submitConfirmation')
         ->assertHasNoErrors();
 
-    expect(Enrollment::where('status', '!=', 'rechazada')->count())->toBe(1);
+    expect($waitlistedOnline->fresh()->status)->toBe('confirmada');
+    expect($edition->fresh()->availableSeats())->toBe(0);
+
+    // Presencial con decisión del picklist = autorizar_sobrecupo exige justificación y luego permite sobrecupo auditado
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->set('course_edition_id', $edition->id)
+        ->set('full_capacity_decision', 'autorizar_sobrecupo')
+        ->set('full_capacity_notes', '')
+        ->set('identification_number', '1-7000-0005')
+        ->set('first_name', 'Natalia')
+        ->set('last_name', 'Quesada')
+        ->set('email', 'natalia.quesada@correo.cr')
+        ->set('phone', '8800-7005')
+        ->set('gender', 'femenino')
+        ->set('education_level', 'bachillerato_secundaria')
+        ->set('submitted_documents', ['cedula_dimex'])
+        ->call('createPresencialEnrollment')
+        ->assertHasErrors('full_capacity_notes')
+        ->set('full_capacity_notes', 'Autorizado por Dirección Académica por beca institucional.')
+        ->call('createPresencialEnrollment')
+        ->assertHasNoErrors();
+
+    $overcap = Enrollment::whereHas('student', fn ($q) => $q->where('identification_number', '1-7000-0005'))->firstOrFail();
+    expect($overcap->status)->toBe('confirmada');
+    expect($overcap->capacity_decision_code)->toBe('autorizar_sobrecupo');
+    expect(AuditLog::where('event', 'enrollment.presencial_overcapacity_authorized')->where('auditable_id', (string) $overcap->id)->exists())->toBeTrue();
+
+    // Planilla PDF en modo HTML de una inscripción en lista_espera muestra el aviso correspondiente
+    $signedWaitlistUrl = URL::temporarySignedRoute('inscripcion.planilla.publica', now()->addDays(7), ['enrollment' => $waitlistedPresencial->id], false);
+    $this->get($signedWaitlistUrl.'&vista=html')
+        ->assertOk()
+        ->assertSee('LISTA DE ESPERA');
 });
+
 

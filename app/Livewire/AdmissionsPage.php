@@ -95,11 +95,43 @@ class AdmissionsPage extends Component
 
     public string $rejection_notes = '';
 
+    // Decisión del funcionario cuando la edición presencial alcanzó su cupo máximo
+    public string $full_capacity_decision = '';
+
+    public string $full_capacity_notes = '';
+
+    public bool $selectedEditionIsFull = false;
+
+    public string $selectedEditionCapacityInfo = '';
+
     public function setTab(string $tab): void
     {
         $this->tab = $tab;
         $this->feedback = null;
         $this->resetValidation();
+    }
+
+    public function updatedCourseEditionId(): void
+    {
+        $this->full_capacity_decision = '';
+        $this->full_capacity_notes = '';
+        if (! $this->course_edition_id) {
+            $this->selectedEditionIsFull = false;
+            $this->selectedEditionCapacityInfo = '';
+
+            return;
+        }
+        $edition = CourseEdition::find($this->course_edition_id);
+        if (! $edition) {
+            $this->selectedEditionIsFull = false;
+            $this->selectedEditionCapacityInfo = '';
+
+            return;
+        }
+        $active = $edition->activeEnrollmentsCount();
+        $max = (int) $edition->max_capacity;
+        $this->selectedEditionIsFull = $edition->availableSeats() <= 0;
+        $this->selectedEditionCapacityInfo = sprintf('%d / %d cupos ocupados', $active, $max);
     }
 
     public function updatedProvinceId(): void
@@ -284,7 +316,9 @@ class AdmissionsPage extends Component
                 confirmImmediately: $this->confirm_immediately,
                 authorizeException: $this->authorize_exception,
                 exceptionReason: $this->exception_reason ?: null,
-                exceptionCommitmentDate: $this->exception_commitment_date ?: null
+                exceptionCommitmentDate: $this->exception_commitment_date ?: null,
+                capacityDecisionCode: $this->full_capacity_decision ?: null,
+                capacityDecisionNotes: $this->full_capacity_notes ?: null
             );
         } catch (ValidationException $e) {
             foreach ($e->errors() as $k => $msgs) {
@@ -294,8 +328,12 @@ class AdmissionsPage extends Component
             return;
         }
 
-        $this->reset(['attachment_file', 'authorize_exception', 'exception_reason', 'exception_commitment_date']);
-        $this->feedback = sprintf('Matrícula %s registrada correctamente (%s).', $enrollment->enrollment_code, $enrollment->status);
+        $this->reset(['attachment_file', 'authorize_exception', 'exception_reason', 'exception_commitment_date', 'full_capacity_decision', 'full_capacity_notes', 'selectedEditionIsFull', 'selectedEditionCapacityInfo']);
+        $this->feedback = match ($enrollment->status) {
+            'lista_espera' => sprintf('Solicitud %s registrada en LISTA DE ESPERA (cupo máximo alcanzado).', $enrollment->enrollment_code),
+            'rechazada' => sprintf('Solicitud %s registrada como RECHAZADA por cupo agotado y notificada por correo.', $enrollment->enrollment_code),
+            default => sprintf('Matrícula %s registrada correctamente (%s).', $enrollment->enrollment_code, strtoupper(str_replace('_', ' ', $enrollment->status))),
+        };
         $this->tab = 'queue';
     }
 
@@ -425,6 +463,7 @@ class AdmissionsPage extends Component
             'confirmingEnrollment' => $this->confirmingEnrollmentId ? Enrollment::with(['student', 'edition.course'])->find($this->confirmingEnrollmentId) : null,
             'rejectingEnrollment' => $this->rejectingEnrollmentId ? Enrollment::with(['student', 'edition.course'])->find($this->rejectingEnrollmentId) : null,
             'rejectionReasons' => Picklist::optionsFor('enrollment_rejection_reason'),
+            'fullCapacityDecisions' => Picklist::optionsFor('full_capacity_decision'),
             'documentTypes' => config('cecap.document_types'),
             'idTypes' => Picklist::optionsFor('id_type'),
             'genders' => Picklist::optionsFor('gender'),

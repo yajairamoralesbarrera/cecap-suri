@@ -74,9 +74,9 @@ class PublicEnrollmentPage extends Component
 
     public string $educationBlockedMessage = '';
 
-    public bool $capacityBlocked = false;
+    public bool $isWaitlistMode = false;
 
-    public string $capacityBlockedMessage = '';
+    public string $waitlistNotice = '';
 
     #[Locked]
     public ?int $createdEnrollmentId = null;
@@ -129,30 +129,30 @@ class PublicEnrollmentPage extends Component
     protected function evaluateCapacityRequirement(): void
     {
         if (! $this->course_edition_id) {
-            $this->capacityBlocked = false;
-            $this->capacityBlockedMessage = '';
+            $this->isWaitlistMode = false;
+            $this->waitlistNotice = '';
 
             return;
         }
 
         $edition = CourseEdition::find($this->course_edition_id);
         if (! $edition) {
-            $this->capacityBlocked = false;
-            $this->capacityBlockedMessage = '';
+            $this->isWaitlistMode = false;
+            $this->waitlistNotice = '';
 
             return;
         }
 
         if ($edition->availableSeats() <= 0) {
-            $this->capacityBlocked = true;
-            $this->capacityBlockedMessage = sprintf(
-                'Cupo máximo alcanzado para esta edición (%d / %d cupos ocupados). No es posible registrar más preinscripciones en este grupo.',
+            $this->isWaitlistMode = true;
+            $this->waitlistNotice = sprintf(
+                'Cupo máximo alcanzado (%d / %d cupos ocupados). Puede enviar su solicitud y quedará registrada automáticamente en Lista de Espera en Línea; Secretaría le contactará si se libera un cupo o se abre un nuevo grupo.',
                 $edition->activeEnrollmentsCount(),
                 (int) $edition->max_capacity
             );
         } else {
-            $this->capacityBlocked = false;
-            $this->capacityBlockedMessage = '';
+            $this->isWaitlistMode = false;
+            $this->waitlistNotice = '';
         }
     }
 
@@ -243,13 +243,7 @@ class PublicEnrollmentPage extends Component
         ]);
 
         $edition = CourseEdition::with('course')->findOrFail($this->course_edition_id);
-
-        if ($edition->availableSeats() <= 0) {
-            $this->evaluateCapacityRequirement();
-            $this->addError('course_edition_id', $this->capacityBlockedMessage);
-
-            return;
-        }
+        $this->evaluateCapacityRequirement();
 
         if ($eduError = $edition->course?->educationLevelRequirementError($this->education_level)) {
             $this->educationBlocked = true;
@@ -417,8 +411,8 @@ class PublicEnrollmentPage extends Component
         $this->genderBlocked = false;
         $this->educationBlocked = false;
         $this->educationBlockedMessage = '';
-        $this->capacityBlocked = false;
-        $this->capacityBlockedMessage = '';
+        $this->isWaitlistMode = false;
+        $this->waitlistNotice = '';
     }
 
     public function render()

@@ -15,17 +15,30 @@
     </div>
 
     @if($successCode)
-        <div class="cecap-card border-emerald-300 bg-emerald-50/70 space-y-4">
+        <div class="cecap-card {{ $successStatus === 'lista_espera' ? 'border-indigo-300 bg-indigo-50/70' : 'border-emerald-300 bg-emerald-50/70' }} space-y-4">
             <div class="flex items-start justify-between gap-3">
                 <div>
-                    <span class="cecap-badge bg-emerald-700 text-white">PREINSCRIPCIÓN REGISTRADA</span>
-                    <h2 class="mt-2 text-xl font-bold text-emerald-950">Código de Solicitud: {{ $successCode }}</h2>
-                    <p class="text-sm text-emerald-900 mt-1">
-                        Estado actual: <strong>{{ $successStatus === 'documentacion_pendiente' ? 'Documentación Pendiente' : 'Preinscrita (Provisional)' }}</strong>
+                    @if($successStatus === 'lista_espera')
+                        <span class="cecap-badge bg-indigo-700 text-white">LISTA DE ESPERA EN LÍNEA</span>
+                    @else
+                        <span class="cecap-badge bg-emerald-700 text-white">PREINSCRIPCIÓN REGISTRADA</span>
+                    @endif
+                    <h2 class="mt-2 text-xl font-bold {{ $successStatus === 'lista_espera' ? 'text-indigo-950' : 'text-emerald-950' }}">Código de Solicitud: {{ $successCode }}</h2>
+                    <p class="text-sm {{ $successStatus === 'lista_espera' ? 'text-indigo-900' : 'text-emerald-900' }} mt-1">
+                        Estado actual:
+                        <strong>
+                            {{ $successStatus === 'lista_espera' ? 'Lista de Espera en Línea (Cupo máximo alcanzado)' : ($successStatus === 'documentacion_pendiente' ? 'Documentación Pendiente' : 'Preinscrita (Provisional)') }}
+                        </strong>
                         · Válida hasta: <strong>{{ $provisionalExpiresAt }}</strong>.
                     </p>
                 </div>
             </div>
+
+            @if($successStatus === 'lista_espera')
+                <div class="rounded-xl border border-indigo-300 bg-white px-4 py-3 text-sm text-indigo-950">
+                    <strong>Importante (Lista de Espera):</strong> El grupo seleccionado ya completó su matrícula máxima. Su solicitud quedó registrada en orden de ingreso y Secretaría le contactará por correo o teléfono si se libera un cupo o se habilita una nueva edición.
+                </div>
+            @endif
 
             @if($uploadFeedback)
                 <div class="rounded-xl border border-emerald-300 bg-white px-4 py-3 text-sm font-semibold text-emerald-900">
@@ -176,8 +189,8 @@
                             <div class="text-xs font-semibold uppercase text-brand-800">Tipo, Cupo y Requisito</div>
                             <div class="font-bold text-brand-950">{{ $selectedEdition->course?->program_type_label }}</div>
                             <div class="text-xs text-slate-600">Nivel previo: {{ $educationLevels[$selectedEdition->course?->required_education_level] ?? $selectedEdition->course?->required_education_level }}</div>
-                            <div class="mt-1 text-xs font-bold {{ $availSeats > 0 ? 'text-emerald-700' : 'text-rose-700' }}">
-                                {{ $availSeats > 0 ? "Cupos disponibles: {$availSeats} de {$maxSeats}" : "CUPO AGOTADO (0 de {$maxSeats})" }}
+                            <div class="mt-1 text-xs font-bold {{ $availSeats > 0 ? 'text-emerald-700' : 'text-indigo-700' }}">
+                                {{ $availSeats > 0 ? "Cupos disponibles: {$availSeats} de {$maxSeats}" : "CUPO LLENO (0 de {$maxSeats}) · Lista de Espera en Línea" }}
                             </div>
                         </div>
                         <div>
@@ -196,9 +209,10 @@
                     </div>
                 @endif
 
-                @if($capacityBlocked)
-                    <div role="alert" class="rounded-xl border-2 border-rose-300 bg-rose-50 p-4 text-sm font-semibold text-rose-900">
-                        {{ $capacityBlockedMessage }}
+                @if($isWaitlistMode)
+                    <div role="status" class="rounded-xl border-2 border-indigo-300 bg-indigo-50 p-4 text-sm font-semibold text-indigo-950">
+                        <div class="font-bold text-indigo-900">Lista de Espera en Línea</div>
+                        <p class="mt-1 font-normal">{{ $waitlistNotice }}</p>
                     </div>
                 @endif
             </div>
@@ -337,11 +351,13 @@
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-slate-200 pt-4">
                 <p class="text-xs text-slate-500">Al enviar, se generará su Planilla de Inscripción PDF descargable e imprimible (enlace seguro válido por {{ $settings->online_enrollment_provisional_days }} días).</p>
                 <button type="submit"
-                        @disabled($genderBlocked || $educationBlocked || $capacityBlocked)
+                        @disabled($genderBlocked || $educationBlocked)
                         wire:loading.attr="disabled"
                         wire:target="file_cedula,file_atestado,submit"
                         class="cecap-btn-primary shrink-0">
-                    <span wire:loading.remove wire:target="file_cedula,file_atestado,submit">Enviar Preinscripción Provisional</span>
+                    <span wire:loading.remove wire:target="file_cedula,file_atestado,submit">
+                        {{ $isWaitlistMode ? 'Registrarme en Lista de Espera' : 'Enviar Preinscripción Provisional' }}
+                    </span>
                     <span wire:loading wire:target="file_cedula,file_atestado">Subiendo documentos...</span>
                     <span wire:loading wire:target="submit">Enviando solicitud...</span>
                 </button>

@@ -41,7 +41,7 @@
                             <td class="py-2.5 pr-3 font-semibold text-slate-900">{{ $enr->student?->full_name }}<div class="text-xs text-slate-500">{{ $enr->student?->identification_number }} · {{ $enr->student?->email }}</div></td>
                             <td class="py-2.5 pr-3 text-xs">{{ $enr->edition?->course?->name }}<div class="text-slate-500">{{ $enr->edition?->name }}</div></td>
                             <td class="py-2.5 pr-3">
-                                <span class="cecap-badge {{ $enr->status === 'confirmada' ? 'bg-emerald-100 text-emerald-900' : ($enr->status === 'rechazada' ? 'bg-rose-100 text-rose-900' : ($enr->status === 'documentacion_pendiente' ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-800')) }}">
+                                <span class="cecap-badge {{ $enr->status === 'confirmada' ? 'bg-emerald-100 text-emerald-900' : ($enr->status === 'rechazada' ? 'bg-rose-100 text-rose-900' : ($enr->status === 'lista_espera' ? 'bg-indigo-100 text-indigo-900' : ($enr->status === 'documentacion_pendiente' ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-800'))) }}">
                                     {{ strtoupper(str_replace('_', ' ', $enr->status)) }}
                                 </span>
                                 @if($enr->exception_authorized)
@@ -49,6 +49,9 @@
                                 @endif
                                 @if($enr->status === 'rechazada' && $enr->rejection_reason_label)
                                     <div class="text-[11px] text-rose-700 font-medium mt-0.5">Motivo: {{ $enr->rejection_reason_label }}</div>
+                                @endif
+                                @if($enr->capacity_decision_label && $enr->status !== 'rechazada')
+                                    <div class="text-[11px] text-indigo-700 font-medium mt-0.5">Cupo: {{ $enr->capacity_decision_label }}</div>
                                 @endif
                             </td>
                             <td class="py-2.5 pr-3 text-xs">
@@ -60,7 +63,7 @@
                             </td>
                             <td class="py-2.5">
                                 <div class="flex flex-wrap gap-1.5">
-                                    @if(in_array($enr->status, ['preinscrita', 'documentacion_pendiente'], true) && auth()->user()->hasEffectivePermission('admisiones.manage'))
+                                    @if(in_array($enr->status, ['preinscrita', 'documentacion_pendiente', 'lista_espera'], true) && auth()->user()->hasEffectivePermission('admisiones.manage'))
                                         <button type="button" wire:click="startConfirmEnrollment({{ $enr->id }})" class="cecap-btn-primary !min-h-9 !px-3 text-xs">Confirmar</button>
                                         <button type="button" wire:click="startRejectEnrollment({{ $enr->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-rose-300 bg-white px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50 cursor-pointer">Rechazar</button>
                                     @endif
@@ -295,10 +298,10 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Edición a Matricular *</label>
-                            <select wire:model="course_edition_id" class="cecap-input">
+                            <select wire:model.live="course_edition_id" class="cecap-input">
                                 <option value="">-- Seleccione edición --</option>
                                 @foreach($editions as $ed)
-                                    <option value="{{ $ed->id }}">{{ $ed->course?->name }} — {{ $ed->name }} (Cupos: {{ $ed->availableSeats() }})</option>
+                                    <option value="{{ $ed->id }}">{{ $ed->course?->name }} [{{ $ed->code }}] — {{ $ed->name }} (Cupos: {{ $ed->availableSeats() }} / {{ $ed->max_capacity }})</option>
                                 @endforeach
                             </select>
                         </div>
@@ -313,6 +316,32 @@
                             </div>
                         </div>
                     </div>
+
+                    @if($selectedEditionIsFull)
+                        <div class="rounded-xl border-2 border-indigo-400 bg-indigo-50 p-4 space-y-3">
+                            <div>
+                                <div class="text-sm font-bold text-indigo-950">Cupo Máximo Alcanzado ({{ $selectedEditionCapacityInfo }}) — Decisión del Funcionario *</div>
+                                <p class="text-xs text-indigo-800 mt-0.5">Esta edición ya está llena. Seleccione del picklist cómo proceder con esta solicitante:</p>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Decisión por Cupo Lleno (Picklist) *</label>
+                                    <select wire:model.live="full_capacity_decision" class="cecap-input">
+                                        <option value="">-- Seleccione una decisión --</option>
+                                        @foreach($fullCapacityDecisions as $code => $label)
+                                            <option value="{{ $code }}">{{ $label }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-700 mb-1">
+                                        Observación / Justificación {{ $full_capacity_decision === 'autorizar_sobrecupo' ? '(Obligatoria para sobrecupo) *' : '(opcional)' }}
+                                    </label>
+                                    <input wire:model="full_capacity_notes" type="text" class="cecap-input" placeholder="Ej. Se coordina cupo adicional o ingreso a lista de espera">
+                                </div>
+                            </div>
+                        </div>
+                    @endif
 
                     <div class="flex flex-wrap gap-6 text-sm">
                         <label class="inline-flex items-center gap-2 cursor-pointer">

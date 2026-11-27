@@ -128,6 +128,12 @@ class CostaRicaCatalogSeeder extends Seeder
                 ['solicitud_duplicada', 'Solicitud duplicada o desistimiento de la solicitante'],
                 ['otro_motivo', 'Otro motivo (detallado en observaciones)'],
             ],
+            'full_capacity_decision' => [
+                ['lista_espera', 'Ingresar en Lista de Espera'],
+                ['autorizar_sobrecupo', 'Autorizar Sobrecupo Excepcional (Auditado)'],
+                ['trasladar_otra_edicion', 'Reubicar en otra edición con cupo disponible'],
+                ['rechazar_cupo_lleno', 'No matricular — Cupo agotado (notificar por correo)'],
+            ],
         ];
 
         foreach ($picklists as $group => $items) {

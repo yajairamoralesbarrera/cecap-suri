@@ -358,9 +358,9 @@ class AcademicPage extends Component
                 return;
             }
 
+            // El código del curso se mantiene inmutable al editar para conservar integridad y evitar duplicados
             $course->update([
                 'academic_category_id' => $this->course_category_id,
-                'code' => strtoupper(trim($this->course_code)),
                 'name' => trim($this->course_name),
                 'program_type' => $this->course_program_type,
                 'description' => $this->course_description ?: null,
@@ -373,9 +373,23 @@ class AcademicPage extends Component
                 'required_documents' => $docs,
             ]);
 
+            // Sincronizar capacidad máxima en ediciones abiertas de este curso cuando cambia default_max_capacity
+            $syncedEditions = 0;
+            if ((int) $old['default_max_capacity'] !== (int) $this->course_default_max_capacity) {
+                $openEditions = $course->editions()->whereIn('status', ['abierta', 'planificada'])->get();
+                foreach ($openEditions as $openEd) {
+                    if ($this->course_default_max_capacity >= $openEd->activeEnrollmentsCount()) {
+                        $openEd->update(['max_capacity' => $this->course_default_max_capacity]);
+                        $syncedEditions++;
+                    }
+                }
+            }
+
             AuditService::log('academic.course_updated', 'academico', $course, $old, $course->only(array_keys($old)));
             $this->cancelEditCourse();
-            $this->feedback = sprintf('Curso %s actualizado correctamente (cambio auditado).', $course->code);
+            $this->feedback = $syncedEditions > 0
+                ? sprintf('Curso %s actualizado con el mismo código (capacidad sincronizada en %d edición(es) abierta(s)).', $course->code, $syncedEditions)
+                : sprintf('Curso %s actualizado correctamente manteniendo su mismo código (cambio auditado).', $course->code);
 
             return;
         }
@@ -639,8 +653,8 @@ class AcademicPage extends Component
 
         $old = $edition->only(['code', 'name', 'shift_id', 'modality_id', 'classroom_id', 'teacher_id', 'start_date', 'end_date', 'max_capacity', 'enrollment_fee', 'monthly_fee', 'installments_count', 'is_public_enrollment_open']);
 
+        // El código de la edición permanece inmutable al editar
         $edition->update([
-            'code' => strtoupper(trim($this->edit_ed_code)),
             'name' => trim($this->edit_ed_name),
             'shift_id' => $this->edit_ed_shift_id,
             'modality_id' => $this->edit_ed_modality_id,
@@ -657,7 +671,7 @@ class AcademicPage extends Component
 
         AuditService::log('academic.edition_updated', 'academico', $edition, $old, $edition->only(array_keys($old)));
         $this->editingEditionId = null;
-        $this->feedback = sprintf('Edición %s actualizada correctamente (cambio auditado, sin duplicar).', $edition->code);
+        $this->feedback = sprintf('Edición %s actualizada manteniendo su mismo código (cambio auditado).', $edition->code);
     }
 
     public function toggleEditionPublicOpen(int $editionId): void

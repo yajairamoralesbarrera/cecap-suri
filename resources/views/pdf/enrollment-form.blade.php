@@ -133,7 +133,16 @@
         </table>
     </div>
 
-    @if(in_array($enrollment->status, ['preinscrita', 'documentacion_pendiente'], true))
+    @if($enrollment->status === 'lista_espera')
+        <div class="notice" style="background:#eef2ff; border-color:#6366f1;">
+            <strong>SOLICITUD REGISTRADA EN LISTA DE ESPERA:</strong><br>
+            El grupo seleccionado ya alcanzó su cupo máximo ({{ (int) $enrollment->edition?->max_capacity }} estudiantes). Su solicitud ha quedado registrada en orden de ingreso y Secretaría le contactará si se libera un cupo o se habilita una nueva edición.<br>
+            @if(! empty($missingDocLabels))
+                <strong>Documentos pendientes por entregar:</strong> {{ implode(', ', $missingDocLabels) }}<br>
+            @endif
+            <strong>Horario de atención CeCap:</strong> {{ $settings->attention_hours }}
+        </div>
+    @elseif(in_array($enrollment->status, ['preinscrita', 'documentacion_pendiente'], true))
         <div class="notice">
             <strong>AVISO DE INSCRIPCIÓN PROVISIONAL (PLAZO {{ $settings->online_enrollment_provisional_days }} DÍAS):</strong><br>
             {{ $settings->online_enrollment_notice }}<br>

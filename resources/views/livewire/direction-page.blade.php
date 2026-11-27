@@ -264,6 +264,8 @@
                     <option value="id_type">Tipo de Identificación</option>
                     <option value="payment_method">Método de Pago</option>
                     <option value="grade_rectification_reason">Motivo Rectificación Nota</option>
+                    <option value="enrollment_rejection_reason">Motivo de Rechazo de Admisión</option>
+                    <option value="full_capacity_decision">Decisión por Cupo Máximo Alcanzado</option>
                     <option value="document_category">Categoría Documental</option>
                     <option value="workshop_type">Tipo de Taller</option>
                 </select>

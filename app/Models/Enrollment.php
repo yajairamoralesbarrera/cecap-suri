@@ -34,6 +34,7 @@ class Enrollment extends Model
         'rejection_notes',
         'rejected_at',
         'rejected_by',
+        'capacity_decision_code',
         'notes',
         'created_by',
         'updated_by',
@@ -86,6 +87,15 @@ class Enrollment extends Model
         }
 
         return Picklist::labelFor('enrollment_rejection_reason', $this->rejection_reason_code);
+    }
+
+    public function getCapacityDecisionLabelAttribute(): ?string
+    {
+        if (! $this->capacity_decision_code) {
+            return null;
+        }
+
+        return Picklist::labelFor('full_capacity_decision', $this->capacity_decision_code);
     }
 
     public function attendanceRecords(): HasMany

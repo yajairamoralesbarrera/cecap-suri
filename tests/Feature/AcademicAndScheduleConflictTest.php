@@ -174,11 +174,27 @@ it('allows audited editing of course attributes, adding subjects with sessions, 
         ->call('createCourse')
         ->assertHasErrors('course_program_type');
 
-    // Editar características del curso y auditar
+    // Crear una edición abierta para verificar sincronización automática de capacidad al editar el curso
+    $openEdition = CourseEdition::create([
+        'course_id' => $course->id,
+        'code' => 'ED-SYNC-01',
+        'name' => 'Cohorte Abierta',
+        'shift_id' => AcademicShift::firstOrFail()->id,
+        'modality_id' => AcademicModality::firstOrFail()->id,
+        'start_date' => '2026-06-01',
+        'end_date' => '2026-08-31',
+        'max_capacity' => 20,
+        'status' => 'abierta',
+        'is_public_enrollment_open' => true,
+        'created_by' => $admin->id,
+    ]);
+
+    // Editar características del curso: el código debe permanecer inmutable y sincronizar capacidad en ediciones abiertas
     Livewire::actingAs($admin)
         ->test(AcademicPage::class)
         ->call('editCourse', $course->id)
         ->assertSet('editingCourseId', $course->id)
+        ->set('course_code', 'INTENTO-CAMBIO-999')
         ->set('course_name', 'Ofimática Intermedia')
         ->set('course_default_max_capacity', 28)
         ->set('course_duration_hours', 48)
@@ -187,9 +203,13 @@ it('allows audited editing of course attributes, adding subjects with sessions, 
         ->assertHasNoErrors()
         ->assertSet('editingCourseId', null);
 
+    expect(Course::count())->toBe(1);
     $course->refresh();
+    $openEdition->refresh();
+    expect($course->code)->toBe('CUR-EDIT-01');
     expect($course->name)->toBe('Ofimática Intermedia');
     expect($course->default_max_capacity)->toBe(28);
+    expect($openEdition->max_capacity)->toBe(28);
     expect($course->duration_hours)->toBe(48);
     expect($course->description)->toBe('Perfil actualizado del curso');
     expect(\App\Models\AuditLog::where('event', 'academic.course_updated')->where('auditable_id', (string) $course->id)->exists())->toBeTrue();
@@ -242,6 +262,7 @@ it('allows audited inline editing of course editions without duplicating and tog
         ->test(AcademicPage::class)
         ->call('editEdition', $edition->id)
         ->assertSet('editingEditionId', $edition->id)
+        ->set('edit_ed_code', 'INTENTO-CAMBIO-ED')
         ->set('edit_ed_max_capacity', 12)
         ->set('edit_ed_name', 'Cohorte 1 Actualizada')
         ->call('saveEditionEdit')
@@ -251,6 +272,7 @@ it('allows audited inline editing of course editions without duplicating and tog
 
     expect(CourseEdition::count())->toBe(1);
     $edition->refresh();
+    expect($edition->code)->toBe('ED-ADMIN-01');
     expect($edition->max_capacity)->toBe(12);
     expect($edition->name)->toBe('Cohorte 1 Actualizada');
     expect($edition->is_public_enrollment_open)->toBeFalse();

@@ -87,4 +87,11 @@ class CourseEdition extends Model
     {
         return max(0, (int) $this->max_capacity - $this->activeEnrollmentsCount());
     }
+
+    public function waitlistCount(): int
+    {
+        return $this->enrollments()
+            ->where('status', 'lista_espera')
+            ->count();
+    }
 }
