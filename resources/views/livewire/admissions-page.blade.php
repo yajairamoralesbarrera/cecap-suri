@@ -882,6 +882,9 @@
                             </td>
                             <td class="py-2.5">
                                 <div class="flex flex-wrap gap-1.5">
+                                    @if(auth()->user()->hasEffectivePermission('consultas.view'))
+                                        <a href="{{ route('consultas', ['alumna' => $st->id]) }}" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-brand-200 bg-brand-50 px-3 text-xs font-semibold text-brand-900 hover:bg-brand-100">Ver Expediente</a>
+                                    @endif
                                     @if(auth()->user()->hasEffectivePermission('admisiones.manage'))
                                         <button type="button" wire:click="startAttachStudent({{ $st->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-amber-300 bg-amber-50 px-3 text-xs font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer">+ Adjunto</button>
                                     @endif

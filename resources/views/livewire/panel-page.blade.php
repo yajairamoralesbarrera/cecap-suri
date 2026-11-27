@@ -9,7 +9,7 @@
             <div class="flex flex-wrap gap-2">
                 <a href="{{ route('inscripcion.publica') }}" class="cecap-btn-accent">Portal de Inscripción</a>
                 @if($user->hasEffectivePermission('consultas.view'))
-                    <a href="{{ route('consultas') }}" class="inline-flex min-h-11 items-center rounded-xl bg-white/15 px-4 text-sm font-semibold text-white hover:bg-white/25">Ventanilla 360°</a>
+                    <a href="{{ route('consultas') }}" class="inline-flex min-h-11 items-center rounded-xl bg-white/15 px-4 text-sm font-semibold text-white hover:bg-white/25">Expediente Alumnas</a>
                 @endif
             </div>
         </div>

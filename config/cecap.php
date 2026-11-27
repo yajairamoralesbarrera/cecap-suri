@@ -14,7 +14,7 @@ return [
         ],
         'secretaria' => [
             'label' => 'Secretaría',
-            'description' => 'Admisiones, matrícula presencial, revisión documental, planillas PDF, consultas 360° y repositorio documental.',
+            'description' => 'Admisiones, matrícula presencial, revisión documental, planillas PDF, expediente de alumnas y repositorio documental.',
             'is_critical' => false,
         ],
         'administracion_caja' => [
@@ -64,7 +64,7 @@ return [
         'personal' => 'Personal y Contratos CR',
         'actividades' => 'Talleres y Actividades',
         'documentos' => 'Repositorio Documental',
-        'consultas' => 'Ventanilla Única 360°',
+        'consultas' => 'Expediente Alumnas',
         'direccion' => 'Dirección y Gobernanza',
     ],
 

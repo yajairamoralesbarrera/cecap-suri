@@ -10,12 +10,20 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 
 #[Layout('layouts.app')]
-#[Title('Ventanilla Única 360°')]
+#[Title('Expediente Alumnas')]
 class QueriesPage extends Component
 {
     public string $search = '';
 
     public ?int $selected_student_id = null;
+
+    public function mount(): void
+    {
+        $alumnaId = request()->integer('alumna');
+        if ($alumnaId > 0 && Student::whereKey($alumnaId)->exists()) {
+            $this->selected_student_id = $alumnaId;
+        }
+    }
 
     public function selectStudent(int $id): void
     {
@@ -29,11 +37,12 @@ class QueriesPage extends Component
 
         if ($term !== '') {
             $like = '%'.strtolower($term).'%';
+            $normalizedId = strtoupper((string) preg_replace('/[^0-9A-Za-z]/', '', $term));
             $studentIdsFromEnroll = Enrollment::whereRaw('LOWER(enrollment_code) LIKE ?', [$like])->pluck('student_id');
             $studentIdsFromReceipt = PaymentReceipt::whereRaw('LOWER(receipt_number) LIKE ?', [$like])->pluck('student_id');
 
             $matches = Student::query()
-                ->where(function ($q) use ($like, $studentIdsFromEnroll, $studentIdsFromReceipt): void {
+                ->where(function ($q) use ($like, $normalizedId, $studentIdsFromEnroll, $studentIdsFromReceipt): void {
                     $q->whereRaw('LOWER(first_name) LIKE ?', [$like])
                         ->orWhereRaw('LOWER(last_name) LIKE ?', [$like])
                         ->orWhereRaw('LOWER(identification_number) LIKE ?', [$like])
@@ -41,6 +50,10 @@ class QueriesPage extends Component
                         ->orWhereRaw('LOWER(student_code) LIKE ?', [$like])
                         ->orWhereIn('id', $studentIdsFromEnroll)
                         ->orWhereIn('id', $studentIdsFromReceipt);
+
+                    if ($normalizedId !== '') {
+                        $q->orWhereRaw("UPPER(REGEXP_REPLACE(identification_number, '[^0-9A-Za-z]', '', 'g')) LIKE ?", ['%'.$normalizedId.'%']);
+                    }
                 })
                 ->limit(25)
                 ->get();

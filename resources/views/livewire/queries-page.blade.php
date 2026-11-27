@@ -1,12 +1,12 @@
 <div class="space-y-6">
     <div class="cecap-card space-y-3">
-        <h2 class="text-base font-bold text-brand-950">Ventanilla Única de Consultas Rápidas 360°</h2>
-        <input wire:model.live.debounce.250ms="search" type="search" class="cecap-input" placeholder="Buscar por nombre, Cédula/DIMEX, correo, código de matrícula (MAT-...) o recibo (REC-...)...">
+        <h2 class="text-base font-bold text-brand-950">Expediente de Alumnas</h2>
+        <input wire:model.live.debounce.250ms="search" type="search" class="cecap-input" placeholder="Buscar alumna por nombre, Cédula/DIMEX, correo, código de matrícula (MAT-...) o recibo (REC-...)...">
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div class="cecap-card space-y-2">
-            <h3 class="text-sm font-bold text-slate-800">Resultados ({{ $matches->count() }})</h3>
+            <h3 class="text-sm font-bold text-slate-800">Alumnas ({{ $matches->count() }})</h3>
             <div class="divide-y divide-slate-100">
                 @forelse($matches as $m)
                     <button type="button"
@@ -25,9 +25,14 @@
             @if($selected)
                 <div class="cecap-card space-y-4">
                     <div class="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 pb-3">
-                        <div>
+                        <div class="space-y-0.5">
                             <h3 class="text-lg font-bold text-brand-950">{{ $selected->full_name }}</h3>
                             <p class="text-xs text-slate-600">{{ $selected->student_code }} · {{ $selected->identification_number }} · {{ $selected->email }} · {{ $selected->phone }}</p>
+                            @if($selected->birth_date)
+                                <p class="text-xs text-slate-600">
+                                    Fecha de nacimiento: <strong>{{ $selected->birth_date->format('d/m/Y') }}</strong> ({{ $selected->birth_date->age }} años{{ $selected->isMinor() ? ' · Menor de edad' : '' }})
+                                </p>
+                            @endif
                             <p class="text-xs text-slate-500">{{ collect([$selected->province?->name, $selected->canton?->name, $selected->district?->name])->filter()->implode(', ') }}</p>
                         </div>
                         <div class="flex flex-wrap gap-2">
@@ -37,6 +42,18 @@
                             <button type="button" data-pdf-modal-url="{{ route('pdf.habilidades', $selected) }}" data-pdf-modal-title="Constancia Habilidades Blandas" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Habilidades PDF</button>
                         </div>
                     </div>
+
+                    @if($selected->guardian_full_name)
+                        <div class="rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2 text-xs text-amber-950">
+                            <div class="font-bold">Representante Legal{{ $selected->guardian_relationship ? ' ('.$selected->guardian_relationship.')' : '' }}</div>
+                            <div>
+                                {{ $selected->guardian_full_name }}
+                                @if($selected->guardian_identification_number) · Cédula/DIMEX: {{ $selected->guardian_identification_number }} @endif
+                                @if($selected->guardian_phone) · Tel: {{ $selected->guardian_phone }} @endif
+                                @if($selected->guardian_email) · {{ $selected->guardian_email }} @endif
+                            </div>
+                        </div>
+                    @endif
 
                     <div class="space-y-2">
                         <h4 class="text-sm font-bold text-slate-800">Matrículas y Rendimiento</h4>
@@ -96,7 +113,7 @@
                 </div>
             @else
                 <div class="cecap-card py-12 text-center text-sm text-slate-500">
-                    Seleccione un expediente de la lista para visualizar su ficha 360° completa.
+                    Seleccione una alumna de la lista para visualizar su expediente completo.
                 </div>
             @endif
         </div>
