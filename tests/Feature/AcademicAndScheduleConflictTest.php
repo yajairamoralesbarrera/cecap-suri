@@ -370,5 +370,120 @@ it('duplicates courses with incremental codes and copied/editable/duplicable sub
     expect(\App\Models\AuditLog::where('event', 'academic.subject_duplicated')->exists())->toBeTrue();
 });
 
+it('allows logical deletion of courses only when 0 students are enrolled, and supports manual institutional closure with student email notification', function () {
+    \Illuminate\Support\Facades\Mail::fake();
+    $admin = User::where('email', 'superadmin@cecap.or.cr')->firstOrFail();
+    $cat = AcademicCategory::create(['code' => 'CAT-CLS', 'name' => 'Cierre', 'created_by' => $admin->id]);
+
+    $emptyCourse = Course::create([
+        'academic_category_id' => $cat->id,
+        'code' => 'VACIO-01',
+        'name' => 'Curso Vacío',
+        'program_type' => 'curso_corto',
+        'required_education_level' => 'primaria_completa',
+        'default_max_capacity' => 15,
+        'required_documents' => ['cedula_dimex'],
+        'created_by' => $admin->id,
+    ]);
+
+    $enrolledCourse = Course::create([
+        'academic_category_id' => $cat->id,
+        'code' => 'ACTIVO-01',
+        'name' => 'Curso Con Alumnas',
+        'program_type' => 'curso_corto',
+        'required_education_level' => 'primaria_completa',
+        'default_max_capacity' => 15,
+        'required_documents' => ['cedula_dimex'],
+        'created_by' => $admin->id,
+    ]);
+
+    $edition = CourseEdition::create([
+        'course_id' => $enrolledCourse->id,
+        'code' => 'ED-ACTIVO-01',
+        'name' => 'Cohorte Única',
+        'shift_id' => AcademicShift::firstOrFail()->id,
+        'modality_id' => AcademicModality::firstOrFail()->id,
+        'start_date' => '2026-07-01',
+        'end_date' => '2026-09-30',
+        'max_capacity' => 15,
+        'status' => 'abierta',
+        'is_public_enrollment_open' => true,
+        'created_by' => $admin->id,
+    ]);
+
+    $student = \App\Models\Student::create([
+        'student_code' => \App\Models\Student::nextCode(),
+        'first_name' => 'Silvia',
+        'last_name' => 'Gómez',
+        'identification_type' => 'cedula_nacional',
+        'identification_number' => '1-5500-0001',
+        'email' => 'silvia.gomez@correo.cr',
+        'phone' => '8800-5501',
+        'gender' => 'femenino',
+    ]);
+
+    \App\Models\Enrollment::create([
+        'enrollment_code' => \App\Models\Enrollment::nextCode(),
+        'student_id' => $student->id,
+        'course_edition_id' => $edition->id,
+        'source' => 'presencial',
+        'status' => 'confirmada',
+        'required_documents_snapshot' => ['cedula_dimex'],
+        'submitted_documents' => ['cedula_dimex'],
+        'documents_complete' => true,
+        'created_by' => $admin->id,
+    ]);
+
+    // 1. Curso sin alumnas inscritas SÍ se puede eliminar (archivado lógico auditado, desaparece de la lista)
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->call('startDeleteCourse', $emptyCourse->id)
+        ->assertSet('deletingCourseId', $emptyCourse->id)
+        ->set('course_delete_reason', 'Curso creado de prueba sin matrícula')
+        ->call('confirmDeleteCourse')
+        ->assertHasNoErrors()
+        ->assertDontSee('Curso Vacío');
+
+    $emptyCourse->refresh();
+    expect($emptyCourse->archived_at)->not->toBeNull();
+    expect($emptyCourse->is_active)->toBeFalse();
+    expect(\App\Models\AuditLog::where('event', 'academic.course_deleted_empty')->where('auditable_id', (string) $emptyCourse->id)->exists())->toBeTrue();
+
+    // 2. Curso CON alumnas inscritas NO se puede eliminar
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->call('startDeleteCourse', $enrolledCourse->id)
+        ->assertHasErrors('course_delete_reason')
+        ->assertSet('deletingCourseId', null);
+
+    expect($enrolledCourse->fresh()->archived_at)->toBeNull();
+
+    // 3. Curso CON alumnas inscritas SÍ se puede cerrar manualmente por decisión institucional enviando correo a las alumnas
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->call('startCloseCourse', $enrolledCourse->id)
+        ->assertSet('closingCourseId', $enrolledCourse->id)
+        ->set('course_closure_reason', 'Reprogramación por decisión de Dirección Académica')
+        ->set('course_closure_message', 'Por decisión institucional este curso fue cerrado. Por favor manténgase pendiente para la nueva oferta académica.')
+        ->set('course_closure_notify_students', true)
+        ->call('confirmCloseCourse')
+        ->assertHasNoErrors()
+        ->assertSet('closingCourseId', null);
+
+    $enrolledCourse->refresh();
+    $edition->refresh();
+    expect($enrolledCourse->isClosed())->toBeTrue();
+    expect($enrolledCourse->is_active)->toBeFalse();
+    expect($edition->status)->toBe('cancelada');
+    expect($edition->is_public_enrollment_open)->toBeFalse();
+    expect(\App\Models\AuditLog::where('event', 'academic.course_closed_institutional')->where('auditable_id', (string) $enrolledCourse->id)->exists())->toBeTrue();
+
+    \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\CourseClosedInstitutionalMail::class, function ($mail) {
+        return $mail->hasTo('silvia.gomez@correo.cr')
+            && str_contains($mail->studentMessage, 'nueva oferta');
+    });
+});
+
+
 
 

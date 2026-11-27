@@ -27,6 +27,12 @@ class Course extends Model
         'min_passing_grade',
         'min_attendance_percent',
         'is_active',
+        'closed_at',
+        'closed_by',
+        'closure_reason',
+        'archived_at',
+        'archived_by',
+        'archive_reason',
         'created_by',
     ];
 
@@ -39,6 +45,8 @@ class Course extends Model
             'min_passing_grade' => 'decimal:2',
             'min_attendance_percent' => 'decimal:2',
             'is_active' => 'boolean',
+            'closed_at' => 'datetime',
+            'archived_at' => 'datetime',
         ];
     }
 
@@ -90,6 +98,35 @@ class Course extends Model
     public function editions(): HasMany
     {
         return $this->hasMany(CourseEdition::class);
+    }
+
+    public function totalEnrollmentsCount(): int
+    {
+        return Enrollment::query()
+            ->whereHas('edition', fn ($q) => $q->where('course_id', $this->id))
+            ->count();
+    }
+
+    /**
+     * Inscripciones activas o en espera asociadas a las ediciones de este curso que deben ser notificadas en un cierre institucional.
+     */
+    public function activeNotifiableEnrollments()
+    {
+        return Enrollment::query()
+            ->with(['student', 'edition'])
+            ->whereHas('edition', fn ($q) => $q->where('course_id', $this->id))
+            ->whereIn('status', ['confirmada', 'preinscrita', 'documentacion_pendiente', 'lista_espera'])
+            ->get();
+    }
+
+    public function isClosed(): bool
+    {
+        return $this->closed_at !== null;
+    }
+
+    public function isArchived(): bool
+    {
+        return $this->archived_at !== null;
     }
 
     public function getProgramTypeLabelAttribute(): string

@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Mail\CourseClosedInstitutionalMail;
 use App\Models\AcademicCategory;
 use App\Models\AcademicModality;
 use App\Models\AcademicShift;
@@ -10,13 +11,17 @@ use App\Models\Course;
 use App\Models\CourseEdition;
 use App\Models\CourseSubject;
 use App\Models\EditionSchedule;
+use App\Models\InstitutionSetting;
 use App\Models\Picklist;
+use App\Models\StudentLifecycleEvent;
 use App\Models\User;
 use App\Services\AuditService;
 use App\Services\ScheduleConflictService;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Title;
@@ -96,6 +101,20 @@ class AcademicPage extends Component
     public string $dup_description = '';
 
     public array $dup_subjects = [];
+
+    // Cierre manual institucional de curso (con correo a alumnas inscritas)
+    public ?int $closingCourseId = null;
+
+    public string $course_closure_reason = '';
+
+    public string $course_closure_message = 'Por decisión institucional este curso ha sido cerrado. Por favor manténgase pendiente de nuestra nueva oferta académica y próximas convocatorias de CeCap SURÍ.';
+
+    public bool $course_closure_notify_students = true;
+
+    // Eliminación lógica de curso (solo permitida si no tiene alumnas inscritas)
+    public ?int $deletingCourseId = null;
+
+    public string $course_delete_reason = '';
 
     // Gestión de materias en un curso ya existente
     public ?int $managingSubjectsCourseId = null;
@@ -315,6 +334,8 @@ class AcademicPage extends Component
 
         $this->managingSubjectsCourseId = null;
         $this->duplicatingCourseId = null;
+        $this->closingCourseId = null;
+        $this->deletingCourseId = null;
         $this->editingCourseId = $course->id;
         $this->course_category_id = $course->academic_category_id;
         $this->course_code = $course->code;
@@ -508,6 +529,8 @@ class AcademicPage extends Component
 
         $this->editingCourseId = null;
         $this->managingSubjectsCourseId = null;
+        $this->closingCourseId = null;
+        $this->deletingCourseId = null;
         $this->duplicatingCourseId = $course->id;
         $this->dup_category_id = $course->academic_category_id;
         $this->dup_code = Course::nextIncrementalCode($course->code);
@@ -709,6 +732,295 @@ class AcademicPage extends Component
         );
     }
 
+    public function startCloseCourse(int $courseId): void
+    {
+        $this->authorizeManage();
+        $course = Course::findOrFail($courseId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $course->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('course_closure_reason', 'No tiene autorización sobre la categoría de este curso.');
+
+            return;
+        }
+
+        $this->editingCourseId = null;
+        $this->duplicatingCourseId = null;
+        $this->managingSubjectsCourseId = null;
+        $this->deletingCourseId = null;
+        $this->closingCourseId = $course->id;
+        $this->course_closure_reason = '';
+        $this->course_closure_message = 'Por decisión institucional este curso ha sido cerrado. Por favor manténgase pendiente de nuestra nueva oferta académica y próximas convocatorias de CeCap SURÍ.';
+        $this->course_closure_notify_students = true;
+        $this->resetValidation();
+        $this->feedback = null;
+    }
+
+    public function cancelCloseCourse(): void
+    {
+        $this->closingCourseId = null;
+        $this->course_closure_reason = '';
+        $this->resetValidation();
+    }
+
+    public function confirmCloseCourse(): void
+    {
+        $this->authorizeManage();
+        if (! $this->closingCourseId) {
+            return;
+        }
+
+        $course = Course::with('editions')->findOrFail($this->closingCourseId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $course->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('course_closure_reason', 'No tiene autorización sobre la categoría de este curso.');
+
+            return;
+        }
+
+        $this->validate([
+            'course_closure_reason' => ['required', 'string', 'min:5', 'max:500'],
+            'course_closure_message' => ['required', 'string', 'min:5', 'max:1000'],
+        ], [
+            'course_closure_reason.required' => 'Debe indicar el motivo del cierre institucional del curso.',
+            'course_closure_reason.min' => 'El motivo del cierre debe tener al menos 5 caracteres.',
+            'course_closure_message.required' => 'Debe indicar el mensaje que se enviará a las alumnas inscritas.',
+        ]);
+
+        $cleanReason = trim($this->course_closure_reason);
+        $cleanMessage = trim($this->course_closure_message);
+        $notifiableEnrollments = $course->activeNotifiableEnrollments();
+
+        $closedEditionsCount = DB::transaction(function () use ($course, $cleanReason, $notifiableEnrollments): int {
+            $old = $course->only(['is_active', 'closed_at', 'closure_reason']);
+            $course->update([
+                'is_active' => false,
+                'closed_at' => now(),
+                'closed_by' => Auth::id(),
+                'closure_reason' => $cleanReason,
+            ]);
+
+            $openEditions = $course->editions()->whereIn('status', ['abierta', 'planificada', 'en_curso'])->get();
+            foreach ($openEditions as $ed) {
+                $ed->update([
+                    'status' => 'cancelada',
+                    'is_public_enrollment_open' => false,
+                ]);
+            }
+
+            foreach ($notifiableEnrollments as $enr) {
+                StudentLifecycleEvent::create([
+                    'student_id' => $enr->student_id,
+                    'enrollment_id' => $enr->id,
+                    'event_type' => 'curso_cerrado_institucional',
+                    'from_status' => $enr->status,
+                    'to_status' => $enr->status,
+                    'description' => sprintf(
+                        'Curso %s (%s) cerrado manualmente por decisión institucional. Motivo: %s',
+                        $course->name,
+                        $course->code,
+                        $cleanReason
+                    ),
+                    'metadata' => [
+                        'course_id' => $course->id,
+                        'course_code' => $course->code,
+                        'closure_reason' => $cleanReason,
+                    ],
+                    'recorded_by' => Auth::id(),
+                    'created_at' => now(),
+                ]);
+            }
+
+            AuditService::log(
+                event: 'academic.course_closed_institutional',
+                module: 'academico',
+                auditable: $course,
+                oldValues: $old,
+                newValues: [
+                    'is_active' => false,
+                    'closed_at' => $course->closed_at?->toDateTimeString(),
+                    'closure_reason' => $cleanReason,
+                    'closed_editions' => $openEditions->count(),
+                    'affected_enrollments' => $notifiableEnrollments->count(),
+                ],
+                reason: $cleanReason
+            );
+
+            return $openEditions->count();
+        });
+
+        $emailsSent = 0;
+        if ($this->course_closure_notify_students && $notifiableEnrollments->isNotEmpty()) {
+            $settings = InstitutionSetting::current();
+            $emailedAddresses = [];
+            foreach ($notifiableEnrollments as $enr) {
+                $email = strtolower(trim((string) ($enr->student?->email ?? '')));
+                if ($email === '' || isset($emailedAddresses[$email])) {
+                    continue;
+                }
+                $emailedAddresses[$email] = true;
+                try {
+                    Mail::to($email)->send(new CourseClosedInstitutionalMail(
+                        course: $course->fresh(),
+                        enrollment: $enr,
+                        closureReason: $cleanReason,
+                        studentMessage: $cleanMessage,
+                        settings: $settings
+                    ));
+                    $emailsSent++;
+                } catch (\Throwable $e) {
+                    Log::warning('No se pudo enviar correo de cierre institucional de curso', [
+                        'course_id' => $course->id,
+                        'enrollment_id' => $enr->id,
+                        'email' => $email,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+        }
+
+        $courseCode = $course->code;
+        $this->cancelCloseCourse();
+        $this->feedback = sprintf(
+            'Curso %s cerrado por decisión institucional (%d edición(es) cerrada(s), %d correo(s) enviado(s) a alumnas inscritas).',
+            $courseCode,
+            $closedEditionsCount,
+            $emailsSent
+        );
+    }
+
+    public function reopenClosedCourse(int $courseId): void
+    {
+        $this->authorizeManage();
+        $course = Course::findOrFail($courseId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $course->academic_category_id, $allowedCategoryIds, true)) {
+            return;
+        }
+
+        $old = $course->only(['is_active', 'closed_at', 'closure_reason']);
+        $course->update([
+            'is_active' => true,
+            'closed_at' => null,
+            'closed_by' => null,
+        ]);
+
+        AuditService::log(
+            event: 'academic.course_reopened',
+            module: 'academico',
+            auditable: $course,
+            oldValues: $old,
+            newValues: ['is_active' => true, 'closed_at' => null]
+        );
+
+        $this->feedback = sprintf('Curso %s reabierto y activo nuevamente.', $course->code);
+    }
+
+    public function startDeleteCourse(int $courseId): void
+    {
+        $this->authorizeManage();
+        $course = Course::findOrFail($courseId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $course->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('course_delete_reason', 'No tiene autorización sobre la categoría de este curso.');
+
+            return;
+        }
+
+        $enrolledCount = $course->totalEnrollmentsCount();
+        if ($enrolledCount > 0) {
+            $this->addError(
+                'course_delete_reason',
+                sprintf(
+                    'No se puede eliminar el curso %s porque tiene %d alumna(s) inscrita(s) en sus ediciones. Utilice el botón «Cerrar Curso» para cerrarlo por decisión institucional y notificar a las alumnas.',
+                    $course->code,
+                    $enrolledCount
+                )
+            );
+
+            return;
+        }
+
+        $this->editingCourseId = null;
+        $this->duplicatingCourseId = null;
+        $this->managingSubjectsCourseId = null;
+        $this->closingCourseId = null;
+        $this->deletingCourseId = $course->id;
+        $this->course_delete_reason = '';
+        $this->resetValidation();
+        $this->feedback = null;
+    }
+
+    public function cancelDeleteCourse(): void
+    {
+        $this->deletingCourseId = null;
+        $this->course_delete_reason = '';
+        $this->resetValidation();
+    }
+
+    public function confirmDeleteCourse(): void
+    {
+        $this->authorizeManage();
+        if (! $this->deletingCourseId) {
+            return;
+        }
+
+        $course = Course::with('editions')->findOrFail($this->deletingCourseId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $course->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('course_delete_reason', 'No tiene autorización sobre la categoría de este curso.');
+
+            return;
+        }
+
+        $enrolledCount = $course->totalEnrollmentsCount();
+        if ($enrolledCount > 0) {
+            $this->addError(
+                'course_delete_reason',
+                sprintf(
+                    'No se puede eliminar el curso %s porque ya cuenta con %d alumna(s) inscrita(s). Use «Cerrar Curso» en su lugar.',
+                    $course->code,
+                    $enrolledCount
+                )
+            );
+
+            return;
+        }
+
+        $cleanReason = trim($this->course_delete_reason) !== ''
+            ? trim($this->course_delete_reason)
+            : 'Eliminado por funcionario (curso sin alumnas inscritas)';
+
+        // Eliminación lógica auditada (conserva la política institucional de cero borrado físico en BD)
+        DB::transaction(function () use ($course, $cleanReason): void {
+            $course->update([
+                'is_active' => false,
+                'archived_at' => now(),
+                'archived_by' => Auth::id(),
+                'archive_reason' => $cleanReason,
+            ]);
+
+            foreach ($course->editions as $ed) {
+                $ed->update([
+                    'status' => 'cancelada',
+                    'is_public_enrollment_open' => false,
+                ]);
+            }
+
+            AuditService::log(
+                event: 'academic.course_deleted_empty',
+                module: 'academico',
+                auditable: $course,
+                oldValues: ['is_active' => true, 'archived_at' => null],
+                newValues: ['is_active' => false, 'archived_at' => $course->archived_at?->toDateTimeString()],
+                reason: $cleanReason
+            );
+        });
+
+        $courseCode = $course->code;
+        $this->cancelDeleteCourse();
+        $this->feedback = sprintf('Curso %s eliminado de la oferta (sin alumnas inscritas; registro preservado únicamente en auditoría).', $courseCode);
+    }
+
     public function openCourseSubjects(int $courseId): void
     {
         $course = Course::with('subjects')->findOrFail($courseId);
@@ -721,6 +1033,8 @@ class AcademicPage extends Component
 
         $this->editingCourseId = null;
         $this->duplicatingCourseId = null;
+        $this->closingCourseId = null;
+        $this->deletingCourseId = null;
         $this->editingSubjectId = null;
         $this->duplicatingSubjectId = null;
         $this->managingSubjectsCourseId = $course->id;
@@ -1201,10 +1515,23 @@ class AcademicPage extends Component
     {
         $scopedIds = $this->scopedCategoryIds();
 
-        $categoriesQuery = AcademicCategory::query()->withCount('courses')->orderBy('name');
-        $coursesQuery = Course::query()->with(['category', 'subjects'])->orderByDesc('id');
-        $editionsQuery = CourseEdition::query()->with(['course.category', 'shift', 'modality', 'classroom', 'teacher', 'schedules'])->orderByDesc('id');
-        $schedulesQuery = EditionSchedule::query()->where('is_active', true)->with(['edition.course', 'classroom', 'teacher'])->orderBy('day_of_week')->orderBy('start_minute');
+        $categoriesQuery = AcademicCategory::query()
+            ->withCount(['courses' => fn ($q) => $q->whereNull('archived_at')])
+            ->orderBy('name');
+        $coursesQuery = Course::query()
+            ->whereNull('archived_at')
+            ->with(['category', 'subjects'])
+            ->orderByDesc('id');
+        $editionsQuery = CourseEdition::query()
+            ->whereHas('course', fn ($q) => $q->whereNull('archived_at'))
+            ->with(['course.category', 'shift', 'modality', 'classroom', 'teacher', 'schedules'])
+            ->orderByDesc('id');
+        $schedulesQuery = EditionSchedule::query()
+            ->where('is_active', true)
+            ->whereHas('edition.course', fn ($q) => $q->whereNull('archived_at'))
+            ->with(['edition.course', 'classroom', 'teacher'])
+            ->orderBy('day_of_week')
+            ->orderBy('start_minute');
 
         if ($scopedIds !== null) {
             $categoriesQuery->whereIn('id', $scopedIds);
@@ -1213,11 +1540,17 @@ class AcademicPage extends Component
             $schedulesQuery->whereHas('edition.course', fn ($q) => $q->whereIn('academic_category_id', $scopedIds));
         }
 
+        $closingCourse = $this->closingCourseId ? Course::with('editions')->find($this->closingCourseId) : null;
+        $closingNotifiableCount = $closingCourse ? $closingCourse->activeNotifiableEnrollments()->count() : 0;
+
         return view('livewire.academic-page', [
             'isScopedCoordinator' => $scopedIds !== null,
             'categories' => $categoriesQuery->get(),
             'courses' => $coursesQuery->get(),
             'managingCourse' => $this->managingSubjectsCourseId ? Course::with('subjects')->find($this->managingSubjectsCourseId) : null,
+            'closingCourse' => $closingCourse,
+            'closingNotifiableCount' => $closingNotifiableCount,
+            'deletingCourse' => $this->deletingCourseId ? Course::find($this->deletingCourseId) : null,
             'editions' => $editionsQuery->get(),
             'schedules' => $schedulesQuery->get(),
             'shifts' => AcademicShift::where('is_active', true)->get(),

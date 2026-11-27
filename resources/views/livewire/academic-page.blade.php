@@ -216,11 +216,20 @@
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @forelse($courses as $c)
-                            <tr wire:key="course-row-{{ $c->id }}" class="{{ ($editingCourseId === $c->id || $duplicatingCourseId === $c->id || ($managingCourse && $managingCourse->id === $c->id)) ? 'bg-slate-50/80' : '' }}">
-                                <td class="py-2.5 pr-3 font-mono text-xs font-bold">{{ $c->code }}</td>
+                            @php $courseEnrolledCount = $c->totalEnrollmentsCount(); @endphp
+                            <tr wire:key="course-row-{{ $c->id }}" class="{{ ($editingCourseId === $c->id || $duplicatingCourseId === $c->id || $closingCourseId === $c->id || $deletingCourseId === $c->id || ($managingCourse && $managingCourse->id === $c->id)) ? 'bg-slate-50/80' : '' }}">
+                                <td class="py-2.5 pr-3 font-mono text-xs font-bold">
+                                    {{ $c->code }}
+                                    @if($c->isClosed())
+                                        <div class="mt-1"><span class="cecap-badge bg-amber-100 text-amber-950">CERRADO</span></div>
+                                    @endif
+                                </td>
                                 <td class="py-2.5 pr-3 font-semibold text-slate-900">
                                     {{ $c->name }}
-                                    <div class="text-xs text-slate-500">{{ $c->category?->name }}</div>
+                                    <div class="text-xs text-slate-500">{{ $c->category?->name }} · {{ $courseEnrolledCount }} inscrita(s)</div>
+                                    @if($c->isClosed() && $c->closure_reason)
+                                        <div class="text-[11px] text-amber-800 font-medium mt-0.5">Cierre: {{ $c->closure_reason }}</div>
+                                    @endif
                                 </td>
                                 <td class="py-2.5 pr-3"><span class="cecap-badge bg-brand-100 text-brand-900">{{ $c->program_type_label }}</span></td>
                                 <td class="py-2.5 pr-3 text-xs">{{ $educationLevels[$c->required_education_level] ?? $c->required_education_level }}</td>
@@ -244,6 +253,14 @@
                                             <button type="button" wire:click="editCourse({{ $c->id }})" class="cecap-btn-secondary !min-h-9 !px-2.5 text-xs">Editar</button>
                                             <button type="button" wire:click="startDuplicateCourse({{ $c->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-indigo-300 bg-indigo-50 px-2.5 text-xs font-semibold text-indigo-800 hover:bg-indigo-100 cursor-pointer">Duplicar</button>
                                             <button type="button" wire:click="openCourseSubjects({{ $c->id }})" class="cecap-btn-secondary !min-h-9 !px-2.5 text-xs">+ Materias</button>
+                                            @if($c->isClosed())
+                                                <button type="button" wire:click="reopenClosedCourse({{ $c->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-emerald-400 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 cursor-pointer">Reabrir</button>
+                                            @else
+                                                <button type="button" wire:click="startCloseCourse({{ $c->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-amber-400 bg-amber-50 px-2.5 text-xs font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer">Cerrar Curso</button>
+                                            @endif
+                                            @if($courseEnrolledCount === 0)
+                                                <button type="button" wire:click="startDeleteCourse({{ $c->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-rose-300 bg-white px-2.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 cursor-pointer">Eliminar</button>
+                                            @endif
                                             <button type="button" wire:click="toggleCourseActive({{ $c->id }})" class="cecap-badge cursor-pointer {{ $c->is_active ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-200 text-slate-600' }}">{{ $c->is_active ? 'Activo' : 'Inactivo' }}</button>
                                         </div>
                                     @endif
@@ -480,6 +497,90 @@
                                             <div class="flex flex-wrap gap-2">
                                                 <button type="submit" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-700 px-4 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-indigo-800 cursor-pointer">Crear Curso Duplicado</button>
                                                 <button type="button" wire:click="cancelDuplicateCourse" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
+                                            </div>
+                                        </form>
+                                    </td>
+                                </tr>
+                            @endif
+                            @if($closingCourse && $closingCourse->id === $c->id)
+                                <tr wire:key="course-close-{{ $c->id }}">
+                                    <td colspan="8" class="py-3 px-1">
+                                        <form wire:submit="confirmCloseCourse" class="rounded-2xl border-2 border-amber-500 bg-amber-50/80 p-4 space-y-4">
+                                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                                <div>
+                                                    <h3 class="text-sm sm:text-base font-bold text-amber-950">Cerrar Curso por Decisión Institucional — {{ $closingCourse->code }} · {{ $closingCourse->name }}</h3>
+                                                    <p class="text-xs text-amber-900">Se cerrará el curso y se ocultarán sus ediciones abiertas para matrícula, incluso si tiene alumnas inscritas.</p>
+                                                </div>
+                                                <button type="button" wire:click="cancelCloseCourse" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar</button>
+                                            </div>
+
+                                            @if($errors->any())
+                                                <div class="rounded-xl border border-rose-300 bg-white px-3 py-2 text-xs text-rose-800">
+                                                    <ul class="list-disc pl-4 space-y-0.5">
+                                                        @foreach($errors->all() as $error)
+                                                            <li>{{ $error }}</li>
+                                                        @endforeach
+                                                    </ul>
+                                                </div>
+                                            @endif
+
+                                            <div class="rounded-xl border border-amber-300 bg-white px-3 py-2.5 text-xs text-slate-800">
+                                                <strong>Impacto:</strong>
+                                                Hay <strong>{{ $closingNotifiableCount }} alumna(s) inscrita(s) / en espera</strong> asociadas a este curso.
+                                                @if($closingNotifiableCount > 0)
+                                                    Se enviará un correo automático con el mensaje institucional indicado abajo para que se mantengan pendientes de la nueva oferta.
+                                                @endif
+                                            </div>
+
+                                            <div class="space-y-3">
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Motivo del Cierre Institucional (Auditoría) *</label>
+                                                    <input wire:model="course_closure_reason" type="text" required class="cecap-input" placeholder="Ej. Reprogramación académica / cupo mínimo no alcanzado por decisión institucional">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Mensaje que recibirá cada alumna por correo *</label>
+                                                    <textarea wire:model="course_closure_message" rows="3" required class="cecap-input"></textarea>
+                                                </div>
+                                                @if($closingNotifiableCount > 0)
+                                                    <label class="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-amber-950 cursor-pointer">
+                                                        <input type="checkbox" wire:model="course_closure_notify_students" class="h-4 w-4 rounded text-amber-700">
+                                                        <span>Enviar correo de notificación a las {{ $closingNotifiableCount }} alumna(s) inscrita(s)</span>
+                                                    </label>
+                                                @endif
+                                            </div>
+
+                                            <div class="flex flex-wrap gap-2">
+                                                <button type="submit" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-amber-700 px-4 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-amber-800 cursor-pointer">
+                                                    {{ $closingNotifiableCount > 0 && $course_closure_notify_students ? 'Confirmar Cierre y Notificar Alumnas' : 'Confirmar Cierre Institucional' }}
+                                                </button>
+                                                <button type="button" wire:click="cancelCloseCourse" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
+                                            </div>
+                                        </form>
+                                    </td>
+                                </tr>
+                            @endif
+                            @if($deletingCourse && $deletingCourse->id === $c->id)
+                                <tr wire:key="course-delete-{{ $c->id }}">
+                                    <td colspan="8" class="py-3 px-1">
+                                        <form wire:submit="confirmDeleteCourse" class="rounded-2xl border-2 border-rose-400 bg-rose-50/80 p-4 space-y-3">
+                                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                                <div>
+                                                    <h3 class="text-sm sm:text-base font-bold text-rose-950">Eliminar Curso {{ $deletingCourse->code }} — {{ $deletingCourse->name }}</h3>
+                                                    <p class="text-xs text-rose-900">Este curso tiene <strong>0 alumnas inscritas</strong>. Se retirará de la oferta académica manteniendo la traza en auditoría.</p>
+                                                </div>
+                                                <button type="button" wire:click="cancelDeleteCourse" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar</button>
+                                            </div>
+
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Motivo de eliminación (opcional, para auditoría)</label>
+                                                <input wire:model="course_delete_reason" type="text" class="cecap-input" placeholder="Ej. Curso de prueba / creado por error sin alumnas inscritas">
+                                            </div>
+
+                                            <div class="flex flex-wrap gap-2">
+                                                <button type="submit" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-rose-700 px-4 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-rose-800 cursor-pointer">
+                                                    Confirmar Eliminación del Curso
+                                                </button>
+                                                <button type="button" wire:click="cancelDeleteCourse" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
                                             </div>
                                         </form>
                                     </td>
