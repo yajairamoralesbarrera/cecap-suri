@@ -65,9 +65,22 @@
             <tr>
                 <th>Nivel Educativo</th>
                 <td>{{ $enrollment->student?->education_level ?: 'No indicado' }}</td>
-                <th>Contacto Emergencia</th>
-                <td>{{ trim(($enrollment->student?->emergency_contact_name ?? '').' '.($enrollment->student?->emergency_contact_phone ?? '')) ?: 'No indicado' }}</td>
+                <th>Fecha de Nacimiento</th>
+                <td>
+                    {{ $enrollment->student?->birth_date?->format('d/m/Y') ?: 'No registrada' }}
+                    @if($enrollment->student?->isMinor())
+                        (Menor de edad — {{ $enrollment->student->birth_date->age }} años)
+                    @endif
+                </td>
             </tr>
+            @if($enrollment->student?->guardian_full_name)
+                <tr>
+                    <th>Representante Legal</th>
+                    <td>{{ $enrollment->student->guardian_full_name }} ({{ $enrollment->student->guardian_relationship ?: 'Representante' }})</td>
+                    <th>ID / Tel. Representante</th>
+                    <td>{{ $enrollment->student->guardian_identification_number }} · {{ $enrollment->student->guardian_phone }}</td>
+                </tr>
+            @endif
         </table>
     </div>
 

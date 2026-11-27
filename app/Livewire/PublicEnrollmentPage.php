@@ -62,6 +62,17 @@ class PublicEnrollmentPage extends Component
 
     public string $emergency_contact_phone = '';
 
+    // Datos del representante legal (obligatorios cuando la alumna es menor de 18 años)
+    public string $guardian_full_name = '';
+
+    public string $guardian_identification_number = '';
+
+    public string $guardian_relationship = 'Madre';
+
+    public string $guardian_phone = '';
+
+    public string $guardian_email = '';
+
     public string $notes = '';
 
     public $file_cedula = null;
@@ -75,6 +86,10 @@ class PublicEnrollmentPage extends Component
     public bool $educationBlocked = false;
 
     public string $educationBlockedMessage = '';
+
+    public bool $duplicateCourseBlocked = false;
+
+    public string $duplicateCourseMessage = '';
 
     public bool $isWaitlistMode = false;
 
@@ -131,11 +146,53 @@ class PublicEnrollmentPage extends Component
     {
         $this->evaluateCapacityRequirement();
         $this->evaluateEducationRequirement();
+        $this->evaluateDuplicateCourseEnrollment();
+    }
+
+    public function updatedIdentificationNumber(): void
+    {
+        $this->evaluateDuplicateCourseEnrollment();
     }
 
     public function updatedEducationLevel(): void
     {
         $this->evaluateEducationRequirement();
+    }
+
+    protected function evaluateDuplicateCourseEnrollment(): void
+    {
+        $this->duplicateCourseBlocked = false;
+        $this->duplicateCourseMessage = '';
+
+        if (! $this->course_edition_id || trim($this->identification_number) === '') {
+            return;
+        }
+
+        $edition = CourseEdition::with('course')->find($this->course_edition_id);
+        if (! $edition) {
+            return;
+        }
+
+        $student = Student::findByIdentification($this->identification_number);
+        if (! $student) {
+            return;
+        }
+
+        $existing = $student->activeEnrollmentInCourse((int) $edition->course_id);
+        if (! $existing) {
+            return;
+        }
+
+        $this->duplicateCourseBlocked = true;
+        $this->duplicateCourseMessage = sprintf(
+            'La cédula %s (%s) ya tiene una inscripción activa en el curso "%s" (cohorte %s, solicitud %s, estado: %s). No se permite duplicar la inscripción en el mismo curso.',
+            $student->identification_number,
+            $student->full_name,
+            $edition->course?->name ?? 'este curso',
+            $existing->edition?->name ?? 'cohorte vigente',
+            $existing->enrollment_code,
+            strtoupper(str_replace('_', ' ', (string) $existing->status))
+        );
     }
 
     protected function evaluateCapacityRequirement(): void
@@ -199,11 +256,17 @@ class PublicEnrollmentPage extends Component
     {
         $id = trim($this->identification_number);
         if ($id === '') {
+            $this->duplicateCourseBlocked = false;
+            $this->duplicateCourseMessage = '';
+
             return;
         }
 
-        $student = Student::where('identification_number', $id)->first();
+        $student = Student::findByIdentification($id);
         if (! $student) {
+            $this->duplicateCourseBlocked = false;
+            $this->duplicateCourseMessage = '';
+
             return;
         }
 
@@ -212,12 +275,19 @@ class PublicEnrollmentPage extends Component
         $this->second_last_name = (string) ($student->second_last_name ?? '');
         $this->email = $student->email;
         $this->phone = $student->phone;
+        $this->birth_date = $student->birth_date?->toDateString() ?? '';
         $this->education_level = (string) ($student->education_level ?? $this->education_level);
         $this->province_id = $student->province_id;
         $this->canton_id = $student->canton_id;
         $this->district_id = $student->district_id;
         $this->address_detail = (string) ($student->address_detail ?? '');
+        $this->guardian_full_name = (string) ($student->guardian_full_name ?? '');
+        $this->guardian_identification_number = (string) ($student->guardian_identification_number ?? '');
+        $this->guardian_relationship = (string) ($student->guardian_relationship ?: 'Madre');
+        $this->guardian_phone = (string) ($student->guardian_phone ?? '');
+        $this->guardian_email = (string) ($student->guardian_email ?? '');
         $this->evaluateEducationRequirement();
+        $this->evaluateDuplicateCourseEnrollment();
     }
 
     public function submit(EnrollmentService $enrollmentService, AttachmentService $attachmentService): void
@@ -232,7 +302,9 @@ class PublicEnrollmentPage extends Component
             return;
         }
 
-        $this->validate([
+        $isMinor = Student::isBirthDateMinor($this->birth_date);
+
+        $rules = [
             'course_edition_id' => ['required', 'integer', 'exists:course_editions,id'],
             'identification_type' => ['required', 'string', 'max:40'],
             'identification_number' => ['required', 'string', 'max:40'],
@@ -242,20 +314,43 @@ class PublicEnrollmentPage extends Component
             'email' => ['required', 'email', 'max:255', new ValidEmailDomain()],
             'phone' => ['required', 'string', 'max:30'],
             'gender' => ['required', 'in:femenino'],
-            'birth_date' => ['nullable', 'date'],
+            'birth_date' => ['required', 'date', 'before:today'],
             'education_level' => ['required', 'string', 'max:80'],
             'province_id' => ['nullable', 'integer', 'exists:cr_provinces,id'],
             'canton_id' => ['nullable', 'integer', 'exists:cr_cantons,id'],
             'district_id' => ['nullable', 'integer', 'exists:cr_districts,id'],
             'file_cedula' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
             'file_atestado' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
-        ], [
+        ];
+
+        if ($isMinor) {
+            $rules['guardian_full_name'] = ['required', 'string', 'max:160'];
+            $rules['guardian_identification_number'] = ['required', 'string', 'max:40'];
+            $rules['guardian_relationship'] = ['required', 'string', 'max:60'];
+            $rules['guardian_phone'] = ['required', 'string', 'max:30'];
+            $rules['guardian_email'] = ['nullable', 'email', 'max:255', new ValidEmailDomain()];
+        }
+
+        $this->validate($rules, [
             'email.required' => 'El correo electrónico es obligatorio para enviar su comprobante y planilla.',
             'gender.in' => $settings->gender_policy_message,
+            'birth_date.required' => 'La fecha de nacimiento es obligatoria.',
+            'birth_date.before' => 'La fecha de nacimiento debe ser anterior a hoy.',
+            'guardian_full_name.required' => 'Por ser menor de edad, debe indicar el nombre completo del representante legal.',
+            'guardian_identification_number.required' => 'Por ser menor de edad, debe indicar la cédula o DIMEX del representante legal.',
+            'guardian_relationship.required' => 'Por ser menor de edad, debe indicar el parentesco del representante legal.',
+            'guardian_phone.required' => 'Por ser menor de edad, debe indicar el teléfono del representante legal.',
         ]);
 
         $edition = CourseEdition::with('course')->findOrFail($this->course_edition_id);
         $this->evaluateCapacityRequirement();
+        $this->evaluateDuplicateCourseEnrollment();
+
+        if ($this->duplicateCourseBlocked) {
+            $this->addError('identification_number', $this->duplicateCourseMessage);
+
+            return;
+        }
 
         if ($eduError = $edition->course?->educationLevelRequirementError($this->education_level)) {
             $this->educationBlocked = true;
@@ -265,14 +360,23 @@ class PublicEnrollmentPage extends Component
             return;
         }
 
-        $student = Student::where('identification_number', trim($this->identification_number))->first();
+        $guardianData = $isMinor ? [
+            'guardian_full_name' => trim($this->guardian_full_name),
+            'guardian_identification_number' => trim($this->guardian_identification_number),
+            'guardian_relationship' => trim($this->guardian_relationship),
+            'guardian_phone' => trim($this->guardian_phone),
+            'guardian_email' => $this->guardian_email !== '' ? strtolower(trim($this->guardian_email)) : null,
+        ] : [];
+
+        $student = Student::findByIdentification($this->identification_number);
         if ($student) {
-            $student->update([
+            $student->update(array_merge([
                 'first_name' => trim($this->first_name),
                 'last_name' => trim($this->last_name),
                 'second_last_name' => $this->second_last_name !== '' ? trim($this->second_last_name) : null,
                 'email' => strtolower(trim($this->email)),
                 'phone' => trim($this->phone),
+                'birth_date' => $this->birth_date,
                 'education_level' => $this->education_level,
                 'province_id' => $this->province_id,
                 'canton_id' => $this->canton_id,
@@ -280,9 +384,9 @@ class PublicEnrollmentPage extends Component
                 'address_detail' => $this->address_detail !== '' ? trim($this->address_detail) : null,
                 'emergency_contact_name' => $this->emergency_contact_name !== '' ? trim($this->emergency_contact_name) : null,
                 'emergency_contact_phone' => $this->emergency_contact_phone !== '' ? trim($this->emergency_contact_phone) : null,
-            ]);
+            ], $guardianData));
         } else {
-            $student = Student::create([
+            $student = Student::create(array_merge([
                 'student_code' => Student::nextCode(),
                 'first_name' => trim($this->first_name),
                 'last_name' => trim($this->last_name),
@@ -292,7 +396,7 @@ class PublicEnrollmentPage extends Component
                 'email' => strtolower(trim($this->email)),
                 'phone' => trim($this->phone),
                 'gender' => 'femenino',
-                'birth_date' => $this->birth_date ?: null,
+                'birth_date' => $this->birth_date,
                 'education_level' => $this->education_level,
                 'province_id' => $this->province_id,
                 'canton_id' => $this->canton_id,
@@ -301,7 +405,7 @@ class PublicEnrollmentPage extends Component
                 'emergency_contact_name' => $this->emergency_contact_name !== '' ? trim($this->emergency_contact_name) : null,
                 'emergency_contact_phone' => $this->emergency_contact_phone !== '' ? trim($this->emergency_contact_phone) : null,
                 'status' => 'activo',
-            ]);
+            ], $guardianData));
         }
 
         $submittedDocs = [];
@@ -511,16 +615,20 @@ class PublicEnrollmentPage extends Component
             'course_edition_id', 'identification_number', 'first_name', 'last_name',
             'second_last_name', 'email', 'phone', 'birth_date', 'province_id',
             'canton_id', 'district_id', 'address_detail', 'emergency_contact_name',
-            'emergency_contact_phone', 'notes', 'file_cedula', 'file_atestado',
+            'emergency_contact_phone', 'guardian_full_name', 'guardian_identification_number',
+            'guardian_phone', 'guardian_email', 'notes', 'file_cedula', 'file_atestado',
             'createdEnrollmentId', 'successCode', 'successStatus', 'signedPlanillaUrl',
             'provisionalExpiresAt', 'missingDocumentLabels', 'missingDocumentKeys',
             'showPendingUploadForm', 'uploadFeedback', 'pending_file_cedula', 'pending_file_atestado',
             'showResumeLookup', 'lookup_identification', 'lookupMatches',
         ]);
         $this->gender = 'femenino';
+        $this->guardian_relationship = 'Madre';
         $this->genderBlocked = false;
         $this->educationBlocked = false;
         $this->educationBlockedMessage = '';
+        $this->duplicateCourseBlocked = false;
+        $this->duplicateCourseMessage = '';
         $this->isWaitlistMode = false;
         $this->waitlistNotice = '';
         $this->exitedForm = false;
@@ -577,11 +685,15 @@ class PublicEnrollmentPage extends Component
             }
         }
 
+        $applicantAge = Student::ageFromBirthDate($this->birth_date);
+
         return view('livewire.public-enrollment-page', [
             'settings' => $settings,
             'editions' => $editions,
             'selectedEdition' => $selectedEdition,
             'planillaPdfDataUri' => $planillaPdfDataUri,
+            'applicantAge' => $applicantAge,
+            'isMinorApplicant' => $applicantAge !== null && $applicantAge < 18,
             'requiredDocs' => $selectedEdition?->course?->required_documents ?? ['cedula_dimex'],
             'documentTypes' => config('cecap.document_types'),
             'idTypes' => Picklist::optionsFor('id_type'),

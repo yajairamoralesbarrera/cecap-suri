@@ -113,6 +113,7 @@ it('completes the full 6-module vertical student lifecycle (Academic -> Online E
         ->set('second_last_name', 'Rojas')
         ->set('email', 'gabriela.vargas@ejemplo.cr')
         ->set('phone', '8810-2030')
+        ->set('birth_date', '1994-06-15')
         ->set('file_cedula', UploadedFile::fake()->create('cedula.pdf', 100, 'application/pdf'))
         ->call('submit')
         ->assertHasNoErrors();

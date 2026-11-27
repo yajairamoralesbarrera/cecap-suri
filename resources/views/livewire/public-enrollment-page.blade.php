@@ -323,11 +323,18 @@
                     <div>
                         <label for="pub_id_num" class="block text-sm font-semibold text-slate-700 mb-1">Cédula / DIMEX *</label>
                         <div class="flex gap-2">
-                            <input id="pub_id_num" wire:model="identification_number" type="text" required class="cecap-input" placeholder="1-1234-5678">
+                            <input id="pub_id_num" wire:model.blur="identification_number" type="text" required class="cecap-input" placeholder="1-1234-5678">
                             <button type="button" wire:click="autofillByIdentification" class="cecap-btn-secondary !px-3 text-xs shrink-0">Buscar</button>
                         </div>
+                        @error('identification_number') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
                     </div>
                 </div>
+
+                @if($duplicateCourseBlocked)
+                    <div role="alert" class="rounded-xl border-2 border-rose-400 bg-rose-50 p-4 text-sm font-semibold text-rose-900">
+                        {{ $duplicateCourseMessage }}
+                    </div>
+                @endif
 
                 @if($genderBlocked)
                     <div role="alert" class="rounded-xl border-2 border-rose-300 bg-rose-50 p-4 text-sm font-semibold text-rose-900">
@@ -347,6 +354,16 @@
                     <div>
                         <label for="pub_second_last_name" class="block text-sm font-semibold text-slate-700 mb-1">Segundo apellido</label>
                         <input id="pub_second_last_name" wire:model="second_last_name" type="text" class="cecap-input">
+                    </div>
+                    <div>
+                        <label for="pub_birth_date" class="block text-sm font-semibold text-slate-700 mb-1">Fecha de nacimiento *</label>
+                        <input id="pub_birth_date" wire:model.live="birth_date" type="date" required max="{{ now()->subDay()->toDateString() }}" class="cecap-input">
+                        @if($applicantAge !== null)
+                            <div class="mt-1 text-xs font-semibold {{ $isMinorApplicant ? 'text-amber-800' : 'text-slate-600' }}">
+                                Edad: {{ $applicantAge }} años {{ $isMinorApplicant ? '— Menor de edad (requiere representante legal)' : '' }}
+                            </div>
+                        @endif
+                        @error('birth_date') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
                     </div>
                     <div>
                         <label for="pub_email" class="block text-sm font-semibold text-slate-700 mb-1">Correo electrónico (Obligatorio) *</label>
@@ -401,6 +418,47 @@
                     </div>
                 </div>
 
+                @if($isMinorApplicant)
+                    <div class="rounded-2xl border-2 border-amber-400 bg-amber-50/90 p-4 space-y-3">
+                        <div>
+                            <div class="text-sm font-bold text-amber-950">Datos del Representante Legal (Obligatorio por ser menor de edad — {{ $applicantAge }} años)</div>
+                            <p class="text-xs text-amber-900">Al ser menor de 18 años, debe registrar los datos completos de la madre, padre o encargado/a legal responsable.</p>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            <div>
+                                <label for="pub_guardian_name" class="block text-xs font-semibold text-slate-700 mb-1">Nombre completo del representante *</label>
+                                <input id="pub_guardian_name" wire:model="guardian_full_name" type="text" required class="cecap-input" placeholder="Nombre y apellidos">
+                                @error('guardian_full_name') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                            </div>
+                            <div>
+                                <label for="pub_guardian_id" class="block text-xs font-semibold text-slate-700 mb-1">Cédula / DIMEX del representante *</label>
+                                <input id="pub_guardian_id" wire:model="guardian_identification_number" type="text" required class="cecap-input" placeholder="1-1234-5678">
+                                @error('guardian_identification_number') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                            </div>
+                            <div>
+                                <label for="pub_guardian_rel" class="block text-xs font-semibold text-slate-700 mb-1">Parentesco *</label>
+                                <select id="pub_guardian_rel" wire:model="guardian_relationship" required class="cecap-input">
+                                    <option value="Madre">Madre</option>
+                                    <option value="Padre">Padre</option>
+                                    <option value="Encargado/a Legal">Encargado/a Legal</option>
+                                    <option value="Tutor/a Legal">Tutor/a Legal</option>
+                                </select>
+                                @error('guardian_relationship') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                            </div>
+                            <div>
+                                <label for="pub_guardian_phone" class="block text-xs font-semibold text-slate-700 mb-1">Teléfono del representante *</label>
+                                <input id="pub_guardian_phone" wire:model="guardian_phone" type="tel" required class="cecap-input" placeholder="8888-8888">
+                                @error('guardian_phone') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label for="pub_guardian_email" class="block text-xs font-semibold text-slate-700 mb-1">Correo electrónico del representante (opcional)</label>
+                                <input id="pub_guardian_email" wire:model="guardian_email" type="email" pattern="[^\s@]+@[^\s@]+\.[A-Za-z]{2,24}" class="cecap-input" placeholder="representante@correo.com">
+                                @error('guardian_email') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                            </div>
+                        </div>
+                    </div>
+                @endif
+
                 @if($educationBlocked)
                     <div role="alert" class="rounded-xl border-2 border-rose-300 bg-rose-50 p-4 text-sm font-semibold text-rose-900">
                         {{ $educationBlockedMessage }}
@@ -443,7 +501,7 @@
                         Salir
                     </a>
                     <button type="submit"
-                            @disabled($genderBlocked || $educationBlocked)
+                            @disabled($genderBlocked || $educationBlocked || $duplicateCourseBlocked)
                             wire:loading.attr="disabled"
                             wire:target="file_cedula,file_atestado,submit"
                             class="cecap-btn-primary shrink-0">

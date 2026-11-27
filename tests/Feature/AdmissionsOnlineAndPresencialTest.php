@@ -81,6 +81,7 @@ it('blocks non-female applicants on /inscripcion with configurable gender messag
         ->set('last_name', 'Chaves')
         ->set('email', '')
         ->set('phone', '8800-4000')
+        ->set('birth_date', '1995-05-15')
         ->call('submit')
         ->assertHasErrors('email');
 });
@@ -96,6 +97,7 @@ it('registers incomplete online pre-enrollment as documentacion_pendiente and se
         ->set('last_name', 'Soto')
         ->set('email', 'mariana.soto@correo.cr')
         ->set('phone', '8811-4455')
+        ->set('birth_date', '1995-05-15')
         ->call('submit')
         ->assertHasNoErrors()
         ->assertSee('Documentos faltantes por presentar')
@@ -158,6 +160,7 @@ it('blocks online pre-enrollment when applicant education level is below course 
         ->set('last_name', 'Vargas')
         ->set('email', 'sofia.vargas@correo.cr')
         ->set('phone', '8811-9999')
+        ->set('birth_date', '1995-05-15')
         ->set('education_level', 'primaria_completa')
         ->assertSet('educationBlocked', true)
         ->assertSee('Nivel académico insuficiente para este curso')
@@ -176,6 +179,7 @@ it('blocks online pre-enrollment when applicant education level is below course 
         ->set('last_name', 'Vargas')
         ->set('email', 'sofia.vargas@correo.cr')
         ->set('phone', '8811-9999')
+        ->set('birth_date', '1995-05-15')
         ->set('education_level', 'noveno_aprobado')
         ->assertSet('educationBlocked', false)
         ->call('submit')
@@ -242,6 +246,20 @@ it('stores private attachments with SHA-256 versioning and protected download', 
         'email' => 'daniela.mora@correo.cr',
         'phone' => '8833-6677',
         'gender' => 'femenino',
+        'birth_date' => '1995-03-10',
+    ]);
+
+    $edAtt = createSampleEdition('curso_corto');
+    Enrollment::create([
+        'enrollment_code' => Enrollment::nextCode(),
+        'student_id' => $student->id,
+        'course_edition_id' => $edAtt->id,
+        'source' => 'presencial',
+        'status' => 'confirmada',
+        'required_documents_snapshot' => ['cedula_dimex'],
+        'submitted_documents' => ['cedula_dimex'],
+        'documents_complete' => true,
+        'created_by' => $admin->id,
     ]);
 
     $attService = app(AttachmentService::class);
@@ -298,6 +316,7 @@ it('routes full editions to online waitlist on /inscripcion, enforces presencial
         ->set('last_name', 'Castro')
         ->set('email', 'andrea.castro@correo.cr')
         ->set('phone', '8800-7001')
+        ->set('birth_date', '1995-05-15')
         ->call('submit')
         ->assertHasNoErrors();
 
@@ -315,6 +334,7 @@ it('routes full editions to online waitlist on /inscripcion, enforces presencial
         ->set('last_name', 'Méndez')
         ->set('email', 'lucia.mendez@correo.cr')
         ->set('phone', '8800-7002')
+        ->set('birth_date', '1995-05-15')
         ->call('submit')
         ->assertHasNoErrors()
         ->assertSet('successStatus', 'lista_espera')
@@ -337,6 +357,7 @@ it('routes full editions to online waitlist on /inscripcion, enforces presencial
         ->set('last_name', 'Solís')
         ->set('email', 'valeria.solis@correo.cr')
         ->set('phone', '8800-7003')
+        ->set('birth_date', '1995-05-15')
         ->set('gender', 'femenino')
         ->set('education_level', 'bachillerato_secundaria')
         ->set('submitted_documents', ['cedula_dimex'])
@@ -353,6 +374,7 @@ it('routes full editions to online waitlist on /inscripcion, enforces presencial
         ->set('last_name', 'Solís')
         ->set('email', 'valeria.solis@correo.cr')
         ->set('phone', '8800-7003')
+        ->set('birth_date', '1995-05-15')
         ->set('gender', 'femenino')
         ->set('education_level', 'bachillerato_secundaria')
         ->set('submitted_documents', ['cedula_dimex'])
@@ -375,6 +397,7 @@ it('routes full editions to online waitlist on /inscripcion, enforces presencial
         ->set('last_name', 'Rojas')
         ->set('email', 'camila.rojas@correo.cr')
         ->set('phone', '8800-7004')
+        ->set('birth_date', '1995-05-15')
         ->set('gender', 'femenino')
         ->set('education_level', 'bachillerato_secundaria')
         ->set('submitted_documents', ['cedula_dimex'])
@@ -439,6 +462,7 @@ it('routes full editions to online waitlist on /inscripcion, enforces presencial
         ->set('last_name', 'Quesada')
         ->set('email', 'natalia.quesada@correo.cr')
         ->set('phone', '8800-7005')
+        ->set('birth_date', '1995-05-15')
         ->set('gender', 'femenino')
         ->set('education_level', 'bachillerato_secundaria')
         ->set('submitted_documents', ['cedula_dimex'])
@@ -478,6 +502,7 @@ it('allows presencial officer to check availability first and directly enroll, w
         ->set('last_name', 'Vega')
         ->set('email', 'rebeca.vega@correo.cr')
         ->set('phone', '8800-8001')
+        ->set('birth_date', '1995-05-15')
         ->set('gender', 'femenino')
         ->call('createPresencialEnrollment')
         ->assertHasNoErrors()
@@ -504,6 +529,7 @@ it('allows presencial officer to check availability first and directly enroll, w
         ->set('last_name', 'Salas')
         ->set('email', 'monica.salas@correo.cr')
         ->set('phone', '8800-8002')
+        ->set('birth_date', '1995-05-15')
         ->set('gender', 'femenino')
         ->call('createPresencialEnrollment')
         ->assertHasErrors('presencial_rejection_reason_code')
@@ -533,6 +559,7 @@ it('supports inline attachment uploads in /admisiones, audited reopening of reje
         ->set('last_name', 'Mora')
         ->set('email', 'gabriela.mora@correo.cr')
         ->set('phone', '8800-9001')
+        ->set('birth_date', '1995-05-15')
         ->set('education_level', 'noveno_aprobado')
         ->set('file_cedula', UploadedFile::fake()->create('cedula.pdf', 100, 'application/pdf'))
         ->call('submit')
@@ -594,6 +621,7 @@ it('supports inline attachment uploads in /admisiones, audited reopening of reje
         ->set('last_name', 'Ulloa')
         ->set('email', 'karina.ulloa@correo.cr')
         ->set('phone', '8800-9002')
+        ->set('birth_date', '1995-05-15')
         ->set('gender', 'femenino')
         ->set('education_level', 'bachillerato_secundaria')
         ->set('submitted_documents', ['cedula_dimex'])
@@ -697,6 +725,7 @@ it('rejects emails without valid TLD termination and redirects Salir on /inscrip
             ->set('last_name', 'Campos')
             ->set('email', $badEmail)
             ->set('phone', '8800-9901')
+        ->set('birth_date', '1995-05-15')
             ->set('education_level', 'bachillerato_secundaria')
             ->call('submit')
             ->assertHasErrors('email');
@@ -709,6 +738,7 @@ it('rejects emails without valid TLD termination and redirects Salir on /inscrip
         ->set('last_name', 'Campos')
         ->set('email', 'maria.campos@proyectosuri.org')
         ->set('phone', '8800-9902')
+        ->set('birth_date', '1995-05-15')
         ->set('education_level', 'bachillerato_secundaria')
         ->call('submit')
         ->assertHasNoErrors('email')
@@ -753,6 +783,7 @@ it('shows students in Directorio de Alumnas only once they have a confirmed enro
         ->set('last_name', 'Solís')
         ->set('email', 'valeria.solis@correo.com')
         ->set('phone', '8800-9801')
+        ->set('birth_date', '1995-05-15')
         ->set('education_level', 'bachillerato_secundaria')
         ->set('file_cedula', UploadedFile::fake()->create('cedula.pdf', 100, 'application/pdf'))
         ->call('submit')
@@ -779,6 +810,127 @@ it('shows students in Directorio de Alumnas only once they have a confirmed enro
         ->assertSee('Curso Directorio')
         ->assertSee('Cohorte Directorio');
 });
+
+it('blocks duplicate cédula in the same course (online and presencial), requires birth_date and legal guardian for minors, and shows attachment status in presencial Step 3', function () {
+    $admin = User::where('email', 'superadmin@cecap.or.cr')->firstOrFail();
+    $edition = createSampleEdition('curso_corto');
+
+    // 1. Online: sin fecha de nacimiento falla validación
+    Livewire::test(PublicEnrollmentPage::class)
+        ->set('course_edition_id', $edition->id)
+        ->set('identification_number', '1-9700-0001')
+        ->set('first_name', 'Sofía')
+        ->set('last_name', 'Jiménez')
+        ->set('email', 'sofia.jimenez@correo.com')
+        ->set('phone', '8800-9701')
+        ->set('birth_date', '')
+        ->call('submit')
+        ->assertHasErrors('birth_date');
+
+    // 2. Online: menor de edad (< 18 años) exige datos del representante legal
+    $minorBirthDate = now()->subYears(16)->toDateString();
+    Livewire::test(PublicEnrollmentPage::class)
+        ->set('course_edition_id', $edition->id)
+        ->set('identification_number', '1-9700-0001')
+        ->set('first_name', 'Sofía')
+        ->set('last_name', 'Jiménez')
+        ->set('email', 'sofia.jimenez@correo.com')
+        ->set('phone', '8800-9701')
+        ->set('birth_date', $minorBirthDate)
+        ->assertSee('Datos del Representante Legal')
+        ->call('submit')
+        ->assertHasErrors(['guardian_full_name', 'guardian_identification_number', 'guardian_phone'])
+        ->set('guardian_full_name', 'Carmen Jiménez Mora')
+        ->set('guardian_identification_number', '1-5000-0001')
+        ->set('guardian_relationship', 'Madre')
+        ->set('guardian_phone', '8811-2233')
+        ->set('guardian_email', 'carmen.jimenez@correo.com')
+        ->call('submit')
+        ->assertHasNoErrors();
+
+    $minorStudent = Student::where('identification_number', '1-9700-0001')->firstOrFail();
+    expect($minorStudent->isMinor())->toBeTrue();
+    expect($minorStudent->guardian_full_name)->toBe('Carmen Jiménez Mora');
+    expect($minorStudent->guardian_identification_number)->toBe('1-5000-0001');
+
+    // La Planilla PDF incluye los datos del representante legal
+    $minorEnrollment = Enrollment::where('student_id', $minorStudent->id)->firstOrFail();
+    $this->actingAs($admin)
+        ->get(route('pdf.planilla', $minorEnrollment).'?vista=html')
+        ->assertOk()
+        ->assertSee('Carmen Jiménez Mora')
+        ->assertSee('1-5000-0001');
+
+    // 3. Bloqueo de misma cédula (incluso sin guiones) en el MISMO curso — Online
+    Livewire::test(PublicEnrollmentPage::class)
+        ->set('course_edition_id', $edition->id)
+        ->set('identification_number', '197000001')
+        ->assertSet('duplicateCourseBlocked', true)
+        ->assertSee('No se permite duplicar la inscripción en el mismo curso')
+        ->set('first_name', 'Sofía')
+        ->set('last_name', 'Jiménez')
+        ->set('email', 'sofia.jimenez@correo.com')
+        ->set('phone', '8800-9701')
+        ->set('birth_date', $minorBirthDate)
+        ->set('guardian_full_name', 'Carmen Jiménez Mora')
+        ->set('guardian_identification_number', '1-5000-0001')
+        ->set('guardian_relationship', 'Madre')
+        ->set('guardian_phone', '8811-2233')
+        ->call('submit')
+        ->assertHasErrors('identification_number');
+
+    // 4. Bloqueo de misma cédula en el MISMO curso — Matrícula Presencial
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->set('tab', 'enroll')
+        ->set('course_edition_id', $edition->id)
+        ->set('identification_number', '1-9700-0001')
+        ->assertSet('duplicateCourseBlocked', true)
+        ->assertSee('No se permite duplicar la inscripción en el mismo curso')
+        ->set('first_name', 'Sofía')
+        ->set('last_name', 'Jiménez')
+        ->set('email', 'sofia.jimenez@correo.com')
+        ->set('phone', '8800-9701')
+        ->set('birth_date', $minorBirthDate)
+        ->set('guardian_full_name', 'Carmen Jiménez Mora')
+        ->set('guardian_identification_number', '1-5000-0001')
+        ->set('guardian_relationship', 'Madre')
+        ->set('guardian_phone', '8811-2233')
+        ->call('createPresencialEnrollment')
+        ->assertHasErrors('identification_number');
+
+    expect(Enrollment::where('student_id', $minorStudent->id)->count())->toBe(1);
+
+    // 5. Matrícula Presencial: muestra estado visible del adjunto en numeral 3 y exige representante legal si es menor
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->set('tab', 'enroll')
+        ->set('course_edition_id', $edition->id)
+        ->set('identification_number', '1-9700-0002')
+        ->set('first_name', 'Paula')
+        ->set('last_name', 'Chacón')
+        ->set('email', 'paula.chacon@correo.com')
+        ->set('phone', '8800-9702')
+        ->set('birth_date', now()->subYears(17)->toDateString())
+        ->assertSee('Datos del Representante Legal')
+        ->set('attachment_doc_type', 'cedula_dimex')
+        ->set('attachment_file', UploadedFile::fake()->create('cedula_paula.pdf', 90, 'application/pdf'))
+        ->assertSee('Adjunto cargado y listo para guardar')
+        ->assertSee('cedula_paula.pdf')
+        ->call('createPresencialEnrollment')
+        ->assertHasErrors(['guardian_full_name', 'guardian_identification_number', 'guardian_phone'])
+        ->set('guardian_full_name', 'Roberto Chacón Solís')
+        ->set('guardian_identification_number', '1-4000-0002')
+        ->set('guardian_relationship', 'Padre')
+        ->set('guardian_phone', '8822-3344')
+        ->call('createPresencialEnrollment')
+        ->assertHasNoErrors();
+
+    $paula = Student::where('identification_number', '1-9700-0002')->firstOrFail();
+    expect($paula->guardian_full_name)->toBe('Roberto Chacón Solís');
+    expect($paula->attachments()->count())->toBe(1);
+});
+
 
 
 

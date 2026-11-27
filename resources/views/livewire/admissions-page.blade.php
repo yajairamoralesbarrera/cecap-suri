@@ -522,6 +522,13 @@
             {{-- PASO 2: DATOS DE LA SOLICITANTE --}}
             <div class="space-y-4">
                 <div class="text-xs font-bold uppercase tracking-wide text-slate-600">2. Datos de la Solicitante</div>
+
+                @if($duplicateCourseBlocked)
+                    <div role="alert" class="rounded-xl border-2 border-rose-400 bg-rose-50 p-4 text-sm font-semibold text-rose-900">
+                        {{ $duplicateCourseMessage }}
+                    </div>
+                @endif
+
                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     <div>
                         <label class="block text-sm font-semibold text-slate-700 mb-1">Tipo ID *</label>
@@ -534,9 +541,10 @@
                     <div>
                         <label class="block text-sm font-semibold text-slate-700 mb-1">Cédula / DIMEX *</label>
                         <div class="flex gap-2">
-                            <input wire:model="identification_number" type="text" required class="cecap-input" placeholder="1-1234-5678">
+                            <input wire:model.blur="identification_number" type="text" required class="cecap-input" placeholder="1-1234-5678">
                             <button type="button" wire:click="autofillStudent" class="cecap-btn-secondary !px-3 text-xs shrink-0">Autollenar</button>
                         </div>
+                        @error('identification_number') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-slate-700 mb-1">Género (precargado Femenino) *</label>
@@ -559,8 +567,19 @@
                         <input wire:model="second_last_name" type="text" class="cecap-input">
                     </div>
                     <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Fecha de Nacimiento *</label>
+                        <input wire:model.live="birth_date" type="date" required max="{{ now()->subDay()->toDateString() }}" class="cecap-input">
+                        @if($applicantAge !== null)
+                            <div class="mt-1 text-xs font-semibold {{ $isMinorApplicant ? 'text-amber-800' : 'text-slate-600' }}">
+                                Edad: {{ $applicantAge }} años {{ $isMinorApplicant ? '— Menor de edad (requiere representante legal)' : '' }}
+                            </div>
+                        @endif
+                        @error('birth_date') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                    </div>
+                    <div>
                         <label class="block text-sm font-semibold text-slate-700 mb-1">Correo Electrónico (Obligatorio) *</label>
-                        <input wire:model="email" type="email" required class="cecap-input">
+                        <input wire:model="email" type="email" required pattern="[^\s@]+@[^\s@]+\.[A-Za-z]{2,24}" class="cecap-input" placeholder="alumna@correo.com">
+                        @error('email') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
                     </div>
                     <div>
                         <label class="block text-sm font-semibold text-slate-700 mb-1">Teléfono *</label>
@@ -596,6 +615,47 @@
                         </select>
                     </div>
                 </div>
+
+                @if($isMinorApplicant)
+                    <div class="rounded-2xl border-2 border-amber-400 bg-amber-50/90 p-4 space-y-3">
+                        <div>
+                            <div class="text-sm font-bold text-amber-950">Datos del Representante Legal (Obligatorio por ser menor de edad — {{ $applicantAge }} años)</div>
+                            <p class="text-xs text-amber-900">Al inscribir una menor de 18 años, debe registrar los datos del representante legal responsable.</p>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Nombre completo del representante *</label>
+                                <input wire:model="guardian_full_name" type="text" required class="cecap-input" placeholder="Nombre y apellidos">
+                                @error('guardian_full_name') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Cédula / DIMEX del representante *</label>
+                                <input wire:model="guardian_identification_number" type="text" required class="cecap-input" placeholder="1-1234-5678">
+                                @error('guardian_identification_number') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Parentesco *</label>
+                                <select wire:model="guardian_relationship" required class="cecap-input">
+                                    <option value="Madre">Madre</option>
+                                    <option value="Padre">Padre</option>
+                                    <option value="Encargado/a Legal">Encargado/a Legal</option>
+                                    <option value="Tutor/a Legal">Tutor/a Legal</option>
+                                </select>
+                                @error('guardian_relationship') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Teléfono del representante *</label>
+                                <input wire:model="guardian_phone" type="tel" required class="cecap-input" placeholder="8888-8888">
+                                @error('guardian_phone') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                            </div>
+                            <div class="sm:col-span-2">
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Correo del representante (opcional)</label>
+                                <input wire:model="guardian_email" type="email" pattern="[^\s@]+@[^\s@]+\.[A-Za-z]{2,24}" class="cecap-input" placeholder="representante@correo.com">
+                                @error('guardian_email') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                            </div>
+                        </div>
+                    </div>
+                @endif
             </div>
 
             {{-- PASO 3: DOCUMENTACIÓN, ADJUNTO Y CONFIRMACIÓN --}}
@@ -605,30 +665,77 @@
                 $isWaitlistAction = (! $selectedEditionIsFull && $presencial_action === 'lista_espera')
                     || ($selectedEditionIsFull && $full_capacity_decision === 'lista_espera');
                 $isOvercapAction = $selectedEditionIsFull && $full_capacity_decision === 'autorizar_sobrecupo';
+                $requiredDocsForSelected = $selectedEdition?->course?->required_documents ?? ['cedula_dimex'];
             @endphp
 
             <div class="border-t border-slate-200 pt-4 space-y-4">
                 <div class="text-xs font-bold uppercase tracking-wide text-slate-600">3. Documentación y Registro</div>
 
+                {{-- Estado en vivo de los documentos requeridos y del adjunto cargado --}}
+                <div class="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 space-y-2.5">
+                    <div class="text-xs font-bold text-slate-700">Estado de Documentos y Adjunto:</div>
+                    <div class="flex flex-wrap gap-2 text-xs">
+                        @foreach($requiredDocsForSelected as $reqKey)
+                            @php
+                                $checkedDoc = in_array($reqKey, $submitted_documents ?? [], true);
+                                $uploadingThis = $attachment_file && $attachment_doc_type === $reqKey;
+                                $storedDoc = $existingStudentAttachments->contains('document_type', $reqKey);
+                                $isReady = $checkedDoc || $uploadingThis || $storedDoc;
+                            @endphp
+                            <span class="cecap-badge {{ $isReady ? 'bg-emerald-100 text-emerald-900' : 'bg-rose-100 text-rose-900' }}">
+                                {{ $isReady ? '✓' : '✗ Pendiente:' }} {{ $documentTypes[$reqKey] ?? $reqKey }}
+                                @if($uploadingThis)
+                                    (archivo adjunto listo)
+                                @elseif($storedDoc)
+                                    (en expediente)
+                                @endif
+                            </span>
+                        @endforeach
+                    </div>
+
+                    @if($existingStudentAttachments->isNotEmpty())
+                        <div class="text-xs text-slate-600">
+                            <strong>Adjuntos ya guardados en el expediente:</strong>
+                            @foreach($existingStudentAttachments as $exAtt)
+                                <a href="{{ route('attachments.download', $exAtt->uuid) }}" class="ml-1.5 text-brand-800 underline font-medium">{{ $exAtt->document_type_label }} v{{ $exAtt->version }}</a>
+                            @endforeach
+                        </div>
+                    @endif
+                </div>
+
                 <div>
                     <label class="block text-sm font-semibold text-slate-700 mb-1">Adjunto Privado (PDF/JPG/PNG/WebP máx 25MB)</label>
                     <div class="flex flex-col sm:flex-row gap-2">
-                        <select wire:model="attachment_doc_type" class="cecap-input sm:w-52 shrink-0">
+                        <select wire:model.live="attachment_doc_type" class="cecap-input sm:w-52 shrink-0">
                             <option value="cedula_dimex">Cédula / DIMEX</option>
                             <option value="atestado_academico">Atestado Académico</option>
                         </select>
                         <input wire:model="attachment_file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
                     </div>
+                    <div wire:loading wire:target="attachment_file" class="mt-2 inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-900">
+                        Subiendo archivo adjunto, espere un momento...
+                    </div>
+                    @if($attachment_file)
+                        <div wire:loading.remove wire:target="attachment_file" class="mt-2 inline-flex flex-wrap items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900">
+                            <span>✓ Adjunto cargado y listo para guardar: <strong>{{ $attachment_file->getClientOriginalName() }}</strong></span>
+                            <span class="text-emerald-700">({{ number_format(($attachment_file->getSize() ?: 0) / 1024, 1) }} KB · {{ $documentTypes[$attachment_doc_type] ?? $attachment_doc_type }})</span>
+                        </div>
+                    @else
+                        <div wire:loading.remove wire:target="attachment_file" class="mt-1.5 text-xs text-slate-500">
+                            Estado del adjunto: <strong>Sin archivo cargado aún</strong> (opcional si la alumna presenta el documento físico en ventanilla).
+                        </div>
+                    @endif
+                    @error('attachment_file') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
                 </div>
 
                 @if(! $isRejectAction && ! $isWaitlistAction)
                     <div class="flex flex-wrap gap-6 text-sm">
                         <label class="inline-flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" wire:model="submitted_documents" value="cedula_dimex" class="h-4 w-4 rounded text-brand-900">
+                            <input type="checkbox" wire:model.live="submitted_documents" value="cedula_dimex" class="h-4 w-4 rounded text-brand-900">
                             <span>Cédula / DIMEX presentada</span>
                         </label>
                         <label class="inline-flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" wire:model="submitted_documents" value="atestado_academico" class="h-4 w-4 rounded text-brand-900">
+                            <input type="checkbox" wire:model.live="submitted_documents" value="atestado_academico" class="h-4 w-4 rounded text-brand-900">
                             <span>Atestados académicos presentados</span>
                         </label>
                         <label class="inline-flex items-center gap-2 cursor-pointer font-semibold text-brand-950">
@@ -655,20 +762,22 @@
 
                 <div class="flex flex-wrap gap-2">
                     @if($isRejectAction)
-                        <button type="button" wire:click="createPresencialEnrollment" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-rose-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-rose-800 cursor-pointer">
+                        <button type="button" wire:click="createPresencialEnrollment" @disabled($duplicateCourseBlocked) wire:loading.attr="disabled" wire:target="attachment_file,createPresencialEnrollment" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-rose-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-rose-800 cursor-pointer disabled:opacity-50">
                             Registrar Rechazo y Enviar Correo
                         </button>
                     @elseif($isWaitlistAction)
-                        <button type="button" wire:click="createPresencialEnrollment" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-800 cursor-pointer">
+                        <button type="button" wire:click="createPresencialEnrollment" @disabled($duplicateCourseBlocked) wire:loading.attr="disabled" wire:target="attachment_file,createPresencialEnrollment" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-800 cursor-pointer disabled:opacity-50">
                             Registrar en Lista de Espera
                         </button>
                     @elseif($isOvercapAction)
-                        <button type="button" wire:click="createPresencialEnrollment" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-800 cursor-pointer">
+                        <button type="button" wire:click="createPresencialEnrollment" @disabled($duplicateCourseBlocked) wire:loading.attr="disabled" wire:target="attachment_file,createPresencialEnrollment" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-800 cursor-pointer disabled:opacity-50">
                             Autorizar Sobrecupo y Matricular
                         </button>
                     @else
-                        <button type="button" wire:click="createPresencialEnrollment" class="cecap-btn-primary">
-                            Registrar Matrícula Presencial
+                        <button type="button" wire:click="createPresencialEnrollment" @disabled($duplicateCourseBlocked) wire:loading.attr="disabled" wire:target="attachment_file,createPresencialEnrollment" class="cecap-btn-primary disabled:opacity-50">
+                            <span wire:loading.remove wire:target="attachment_file,createPresencialEnrollment">Registrar Matrícula Presencial</span>
+                            <span wire:loading wire:target="attachment_file">Subiendo adjunto...</span>
+                            <span wire:loading wire:target="createPresencialEnrollment">Registrando...</span>
                         </button>
                     @endif
                 </div>

@@ -37,6 +37,8 @@ class EnrollmentService
         }
 
         $edition->loadMissing('course');
+        $this->assertNotAlreadyEnrolledInCourse($student, $edition);
+
         if ($eduError = $edition->course?->educationLevelRequirementError($student->education_level)) {
             throw ValidationException::withMessages([
                 'education_level' => $eduError,
@@ -186,6 +188,8 @@ class EnrollmentService
         ?string $rejectionNotes = null
     ): Enrollment {
         $edition->loadMissing('course');
+        $this->assertNotAlreadyEnrolledInCourse($student, $edition);
+
         $isFull = $edition->availableSeats() <= 0;
         $isDirectRejection = (! $isFull && $presencialAction === 'rechazar')
             || ($isFull && $capacityDecisionCode === 'rechazar_cupo_lleno');
@@ -842,6 +846,30 @@ class EnrollmentService
 
             return $enrollment->fresh(['student.attachments', 'edition.course']);
         });
+    }
+
+    protected function assertNotAlreadyEnrolledInCourse(Student $student, CourseEdition $edition): void
+    {
+        $existing = $student->activeEnrollmentInCourse((int) $edition->course_id);
+        if (! $existing) {
+            return;
+        }
+
+        $courseName = $edition->course?->name ?? 'este curso';
+        $cohortName = $existing->edition?->name ?? 'cohorte vigente';
+        $statusLabel = strtoupper(str_replace('_', ' ', (string) $existing->status));
+
+        throw ValidationException::withMessages([
+            'identification_number' => sprintf(
+                'La cédula %s (%s) ya tiene una inscripción activa en el curso "%s" (cohorte %s, solicitud %s, estado: %s). No se permite duplicar la inscripción en el mismo curso.',
+                $student->identification_number,
+                $student->full_name,
+                $courseName,
+                $cohortName,
+                $existing->enrollment_code,
+                $statusLabel
+            ),
+        ]);
     }
 
     /**

@@ -52,6 +52,8 @@ class AdmissionsPage extends Component
 
     public string $gender = 'femenino'; // Precargado en Femenino en /admisiones
 
+    public string $birth_date = '';
+
     public string $education_level = 'bachillerato_secundaria';
 
     public ?int $province_id = null;
@@ -61,6 +63,21 @@ class AdmissionsPage extends Component
     public ?int $district_id = null;
 
     public string $address_detail = '';
+
+    // Datos del representante legal (obligatorios si la alumna es menor de 18 años)
+    public string $guardian_full_name = '';
+
+    public string $guardian_identification_number = '';
+
+    public string $guardian_relationship = 'Madre';
+
+    public string $guardian_phone = '';
+
+    public string $guardian_email = '';
+
+    public bool $duplicateCourseBlocked = false;
+
+    public string $duplicateCourseMessage = '';
 
     public ?int $course_edition_id = null;
 
@@ -173,6 +190,48 @@ class AdmissionsPage extends Component
         $max = (int) $edition->max_capacity;
         $this->selectedEditionIsFull = $edition->availableSeats() <= 0;
         $this->selectedEditionCapacityInfo = sprintf('%d / %d cupos ocupados', $active, $max);
+        $this->evaluateDuplicateCourseEnrollment();
+    }
+
+    public function updatedIdentificationNumber(): void
+    {
+        $this->evaluateDuplicateCourseEnrollment();
+    }
+
+    protected function evaluateDuplicateCourseEnrollment(): void
+    {
+        $this->duplicateCourseBlocked = false;
+        $this->duplicateCourseMessage = '';
+
+        if (! $this->course_edition_id || trim($this->identification_number) === '') {
+            return;
+        }
+
+        $edition = CourseEdition::with('course')->find($this->course_edition_id);
+        if (! $edition) {
+            return;
+        }
+
+        $student = Student::findByIdentification($this->identification_number);
+        if (! $student) {
+            return;
+        }
+
+        $existing = $student->activeEnrollmentInCourse((int) $edition->course_id);
+        if (! $existing) {
+            return;
+        }
+
+        $this->duplicateCourseBlocked = true;
+        $this->duplicateCourseMessage = sprintf(
+            'La cédula %s (%s) ya tiene una inscripción activa en el curso "%s" (cohorte %s, solicitud %s, estado: %s). No se permite duplicar la inscripción en el mismo curso.',
+            $student->identification_number,
+            $student->full_name,
+            $edition->course?->name ?? 'este curso',
+            $existing->edition?->name ?? 'cohorte vigente',
+            $existing->enrollment_code,
+            strtoupper(str_replace('_', ' ', (string) $existing->status))
+        );
     }
 
     public function updatedProvinceId(): void
@@ -190,14 +249,23 @@ class AdmissionsPage extends Component
     {
         $id = trim($this->identification_number);
         if ($id === '') {
+            $this->duplicateCourseBlocked = false;
+            $this->duplicateCourseMessage = '';
+
             return;
         }
-        $student = Student::where('identification_number', $id)->first();
+        $student = Student::findByIdentification($id);
         if (! $student) {
+            $this->duplicateCourseBlocked = false;
+            $this->duplicateCourseMessage = '';
+
             return;
         }
         $this->loadStudentIntoForm($student);
-        $this->feedback = 'Datos de la alumna autollenados desde el expediente existente.';
+        $this->evaluateDuplicateCourseEnrollment();
+        $this->feedback = $this->duplicateCourseBlocked
+            ? null
+            : 'Datos de la alumna autollenados desde el expediente existente.';
     }
 
     public function editStudent(int $studentId): void
@@ -221,26 +289,37 @@ class AdmissionsPage extends Component
         $this->email = $student->email;
         $this->phone = $student->phone;
         $this->gender = $student->gender ?: 'femenino';
+        $this->birth_date = $student->birth_date?->toDateString() ?? '';
         $this->education_level = (string) ($student->education_level ?? 'bachillerato_secundaria');
         $this->province_id = $student->province_id;
         $this->canton_id = $student->canton_id;
         $this->district_id = $student->district_id;
         $this->address_detail = (string) ($student->address_detail ?? '');
+        $this->guardian_full_name = (string) ($student->guardian_full_name ?? '');
+        $this->guardian_identification_number = (string) ($student->guardian_identification_number ?? '');
+        $this->guardian_relationship = (string) ($student->guardian_relationship ?: 'Madre');
+        $this->guardian_phone = (string) ($student->guardian_phone ?? '');
+        $this->guardian_email = (string) ($student->guardian_email ?? '');
     }
 
     public function cancelEditStudent(): void
     {
         $this->reset([
             'editingStudentId', 'edit_reason', 'identification_number', 'first_name',
-            'last_name', 'second_last_name', 'email', 'phone', 'province_id',
+            'last_name', 'second_last_name', 'email', 'phone', 'birth_date', 'province_id',
             'canton_id', 'district_id', 'address_detail',
+            'guardian_full_name', 'guardian_identification_number', 'guardian_phone', 'guardian_email',
+            'duplicateCourseBlocked', 'duplicateCourseMessage',
         ]);
         $this->gender = 'femenino';
+        $this->guardian_relationship = 'Madre';
     }
 
     public function saveStudentOnly(): void
     {
         abort_unless(Auth::user()->hasEffectivePermission('admisiones.manage'), 403);
+
+        $isMinor = Student::isBirthDateMinor($this->birth_date);
 
         $rules = [
             'identification_type' => ['required', 'string', 'max:40'],
@@ -250,7 +329,16 @@ class AdmissionsPage extends Component
             'email' => ['required', 'email', 'max:255', new ValidEmailDomain()], // OBLIGATORIO en creación y edición
             'phone' => ['required', 'string', 'max:30'],
             'gender' => ['required', 'string', 'max:30'],
+            'birth_date' => ['nullable', 'date', 'before:today'],
         ];
+
+        if ($isMinor) {
+            $rules['guardian_full_name'] = ['required', 'string', 'max:160'];
+            $rules['guardian_identification_number'] = ['required', 'string', 'max:40'];
+            $rules['guardian_relationship'] = ['required', 'string', 'max:60'];
+            $rules['guardian_phone'] = ['required', 'string', 'max:30'];
+            $rules['guardian_email'] = ['nullable', 'email', 'max:255', new ValidEmailDomain()];
+        }
 
         if ($this->editingStudentId) {
             $rules['edit_reason'] = ['required', 'string', 'min:5'];
@@ -259,11 +347,15 @@ class AdmissionsPage extends Component
         $this->validate($rules, [
             'email.required' => 'El correo electrónico es obligatorio en creación y edición de expediente.',
             'edit_reason.required' => 'La edición controlada exige indicar el motivo de la modificación para auditoría.',
+            'guardian_full_name.required' => 'Por ser menor de edad, debe indicar el nombre completo del representante legal.',
+            'guardian_identification_number.required' => 'Por ser menor de edad, debe indicar la cédula o DIMEX del representante legal.',
+            'guardian_relationship.required' => 'Por ser menor de edad, debe indicar el parentesco del representante legal.',
+            'guardian_phone.required' => 'Por ser menor de edad, debe indicar el teléfono del representante legal.',
         ]);
 
         if ($this->editingStudentId) {
             $student = Student::findOrFail($this->editingStudentId);
-            $old = $student->only(['first_name', 'last_name', 'email', 'phone', 'gender', 'education_level']);
+            $old = $student->only(['first_name', 'last_name', 'email', 'phone', 'gender', 'birth_date', 'education_level', 'guardian_full_name', 'guardian_phone']);
             $student->update([
                 'first_name' => trim($this->first_name),
                 'last_name' => trim($this->last_name),
@@ -271,11 +363,17 @@ class AdmissionsPage extends Component
                 'email' => strtolower(trim($this->email)),
                 'phone' => trim($this->phone),
                 'gender' => $this->gender,
+                'birth_date' => $this->birth_date ?: $student->birth_date,
                 'education_level' => $this->education_level,
                 'province_id' => $this->province_id,
                 'canton_id' => $this->canton_id,
                 'district_id' => $this->district_id,
                 'address_detail' => $this->address_detail ?: null,
+                'guardian_full_name' => $isMinor ? trim($this->guardian_full_name) : ($this->guardian_full_name !== '' ? trim($this->guardian_full_name) : $student->guardian_full_name),
+                'guardian_identification_number' => $isMinor ? trim($this->guardian_identification_number) : ($this->guardian_identification_number !== '' ? trim($this->guardian_identification_number) : $student->guardian_identification_number),
+                'guardian_relationship' => $isMinor ? trim($this->guardian_relationship) : ($this->guardian_relationship !== '' ? trim($this->guardian_relationship) : $student->guardian_relationship),
+                'guardian_phone' => $isMinor ? trim($this->guardian_phone) : ($this->guardian_phone !== '' ? trim($this->guardian_phone) : $student->guardian_phone),
+                'guardian_email' => $this->guardian_email !== '' ? strtolower(trim($this->guardian_email)) : $student->guardian_email,
                 'updated_by' => Auth::id(),
             ]);
 
@@ -284,7 +382,7 @@ class AdmissionsPage extends Component
                 module: 'admisiones',
                 auditable: $student,
                 oldValues: $old,
-                newValues: $student->only(['first_name', 'last_name', 'email', 'phone', 'gender', 'education_level']),
+                newValues: $student->only(['first_name', 'last_name', 'email', 'phone', 'gender', 'birth_date', 'education_level', 'guardian_full_name', 'guardian_phone']),
                 reason: $this->edit_reason
             );
             $this->cancelEditStudent();
@@ -296,7 +394,9 @@ class AdmissionsPage extends Component
     {
         abort_unless(Auth::user()->hasEffectivePermission('admisiones.manage'), 403);
 
-        $this->validate([
+        $isMinor = Student::isBirthDateMinor($this->birth_date);
+
+        $rules = [
             'identification_type' => ['required', 'string', 'max:40'],
             'identification_number' => ['required', 'string', 'max:40'],
             'first_name' => ['required', 'string', 'max:100'],
@@ -304,16 +404,49 @@ class AdmissionsPage extends Component
             'email' => ['required', 'email', 'max:255', new ValidEmailDomain()],
             'phone' => ['required', 'string', 'max:30'],
             'gender' => ['required', 'string', 'max:30'],
+            'birth_date' => ['required', 'date', 'before:today'],
             'education_level' => ['required', 'string', 'max:80'],
             'course_edition_id' => ['required', 'integer', 'exists:course_editions,id'],
             'attachment_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
-        ], [
+        ];
+
+        if ($isMinor) {
+            $rules['guardian_full_name'] = ['required', 'string', 'max:160'];
+            $rules['guardian_identification_number'] = ['required', 'string', 'max:40'];
+            $rules['guardian_relationship'] = ['required', 'string', 'max:60'];
+            $rules['guardian_phone'] = ['required', 'string', 'max:30'];
+            $rules['guardian_email'] = ['nullable', 'email', 'max:255', new ValidEmailDomain()];
+        }
+
+        $this->validate($rules, [
             'email.required' => 'El correo electrónico es obligatorio en Admisiones.',
+            'birth_date.required' => 'La fecha de nacimiento es obligatoria.',
+            'birth_date.before' => 'La fecha de nacimiento debe ser anterior a hoy.',
+            'guardian_full_name.required' => 'Por ser menor de edad, debe indicar el nombre completo del representante legal.',
+            'guardian_identification_number.required' => 'Por ser menor de edad, debe indicar la cédula o DIMEX del representante legal.',
+            'guardian_relationship.required' => 'Por ser menor de edad, debe indicar el parentesco del representante legal.',
+            'guardian_phone.required' => 'Por ser menor de edad, debe indicar el teléfono del representante legal.',
         ]);
 
-        $student = Student::where('identification_number', trim($this->identification_number))->first();
+        $edition = CourseEdition::with('course')->findOrFail($this->course_edition_id);
+        $this->evaluateDuplicateCourseEnrollment();
+        if ($this->duplicateCourseBlocked) {
+            $this->addError('identification_number', $this->duplicateCourseMessage);
+
+            return;
+        }
+
+        $guardianData = $isMinor ? [
+            'guardian_full_name' => trim($this->guardian_full_name),
+            'guardian_identification_number' => trim($this->guardian_identification_number),
+            'guardian_relationship' => trim($this->guardian_relationship),
+            'guardian_phone' => trim($this->guardian_phone),
+            'guardian_email' => $this->guardian_email !== '' ? strtolower(trim($this->guardian_email)) : null,
+        ] : [];
+
+        $student = Student::findByIdentification($this->identification_number);
         if (! $student) {
-            $student = Student::create([
+            $student = Student::create(array_merge([
                 'student_code' => Student::nextCode(),
                 'first_name' => trim($this->first_name),
                 'last_name' => trim($this->last_name),
@@ -323,6 +456,7 @@ class AdmissionsPage extends Component
                 'email' => strtolower(trim($this->email)),
                 'phone' => trim($this->phone),
                 'gender' => $this->gender ?: 'femenino',
+                'birth_date' => $this->birth_date,
                 'education_level' => $this->education_level,
                 'province_id' => $this->province_id,
                 'canton_id' => $this->canton_id,
@@ -330,14 +464,15 @@ class AdmissionsPage extends Component
                 'address_detail' => $this->address_detail ?: null,
                 'status' => 'activo',
                 'created_by' => Auth::id(),
-            ]);
+            ], $guardianData));
         } else {
-            $student->update([
+            $student->update(array_merge([
                 'email' => strtolower(trim($this->email)),
                 'phone' => trim($this->phone),
+                'birth_date' => $this->birth_date,
                 'education_level' => $this->education_level,
                 'updated_by' => Auth::id(),
-            ]);
+            ], $guardianData));
         }
 
         $docs = $this->submitted_documents;
@@ -347,8 +482,6 @@ class AdmissionsPage extends Component
                 $docs[] = $this->attachment_doc_type;
             }
         }
-
-        $edition = CourseEdition::with('course')->findOrFail($this->course_edition_id);
 
         try {
             $enrollment = $enrollmentService->createPresencialEnrollment(
@@ -382,10 +515,17 @@ class AdmissionsPage extends Component
             'second_last_name',
             'email',
             'phone',
+            'birth_date',
             'province_id',
             'canton_id',
             'district_id',
             'address_detail',
+            'guardian_full_name',
+            'guardian_identification_number',
+            'guardian_phone',
+            'guardian_email',
+            'duplicateCourseBlocked',
+            'duplicateCourseMessage',
             'course_edition_id',
             'attachment_file',
             'authorize_exception',
@@ -400,6 +540,7 @@ class AdmissionsPage extends Component
         ]);
         $this->identification_type = 'cedula_nacional';
         $this->gender = 'femenino';
+        $this->guardian_relationship = 'Madre';
         $this->education_level = 'bachillerato_secundaria';
         $this->submitted_documents = ['cedula_dimex'];
         $this->attachment_doc_type = 'cedula_dimex';
@@ -784,6 +925,14 @@ class AdmissionsPage extends Component
 
     public function render()
     {
+        $applicantAge = Student::ageFromBirthDate($this->birth_date);
+        $matchedStudent = trim($this->identification_number) !== ''
+            ? Student::findByIdentification($this->identification_number)?->load('attachments')
+            : null;
+        $existingStudentAttachments = $matchedStudent
+            ? $matchedStudent->attachments->where('status', 'activo')->values()
+            : collect();
+
         return view('livewire.admissions-page', [
             'enrollments' => Enrollment::with(['student.attachments', 'edition.course'])->latest()->limit(60)->get(),
             'students' => Student::confirmedDirectory()
@@ -797,6 +946,9 @@ class AdmissionsPage extends Component
                 ->get(),
             'editions' => CourseEdition::with('course')->whereIn('status', ['abierta', 'planificada', 'en_curso'])->orderByDesc('id')->get(),
             'selectedEdition' => $this->course_edition_id ? CourseEdition::with('course')->find($this->course_edition_id) : null,
+            'applicantAge' => $applicantAge,
+            'isMinorApplicant' => $applicantAge !== null && $applicantAge < 18,
+            'existingStudentAttachments' => $existingStudentAttachments,
             'confirmingEnrollment' => $this->confirmingEnrollmentId ? Enrollment::with(['student', 'edition.course'])->find($this->confirmingEnrollmentId) : null,
             'rejectingEnrollment' => $this->rejectingEnrollmentId ? Enrollment::with(['student', 'edition.course'])->find($this->rejectingEnrollmentId) : null,
             'attachingEnrollment' => $this->attachingEnrollmentId ? Enrollment::with(['student.attachments', 'edition.course'])->find($this->attachingEnrollmentId) : null,

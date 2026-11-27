@@ -32,6 +32,11 @@ class Student extends Model
         'address_detail',
         'emergency_contact_name',
         'emergency_contact_phone',
+        'guardian_full_name',
+        'guardian_identification_number',
+        'guardian_relationship',
+        'guardian_phone',
+        'guardian_email',
         'notes',
         'status',
         'created_by',
@@ -120,9 +125,74 @@ class Student extends Model
     /** @var list<string> */
     public const CONFIRMED_ENROLLMENT_STATUSES = ['confirmada', 'en_curso', 'egresada', 'graduada'];
 
+    /** @var list<string> */
+    public const ACTIVE_COURSE_ENROLLMENT_STATUSES = [
+        'preinscrita',
+        'documentacion_pendiente',
+        'lista_espera',
+        'confirmada',
+        'en_curso',
+    ];
+
     public function scopeConfirmedDirectory($query)
     {
         return $query->whereHas('enrollments', fn ($q) => $q->whereIn('status', self::CONFIRMED_ENROLLMENT_STATUSES));
+    }
+
+    public function isMinor(): bool
+    {
+        return $this->birth_date !== null && $this->birth_date->age < 18;
+    }
+
+    public static function ageFromBirthDate(?string $birthDate): ?int
+    {
+        $clean = trim((string) $birthDate);
+        if ($clean === '') {
+            return null;
+        }
+
+        try {
+            $date = \Carbon\Carbon::parse($clean);
+
+            return $date->isFuture() ? null : $date->age;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    public static function isBirthDateMinor(?string $birthDate): bool
+    {
+        $age = self::ageFromBirthDate($birthDate);
+
+        return $age !== null && $age < 18;
+    }
+
+    public static function findByIdentification(string $identification): ?self
+    {
+        $clean = trim($identification);
+        if ($clean === '') {
+            return null;
+        }
+
+        $normalized = strtoupper((string) preg_replace('/[^0-9A-Za-z]/', '', $clean));
+
+        return static::query()
+            ->where(function ($q) use ($clean, $normalized): void {
+                $q->where('identification_number', $clean);
+                if ($normalized !== '') {
+                    $q->orWhereRaw("UPPER(REGEXP_REPLACE(identification_number, '[^0-9A-Za-z]', '', 'g')) = ?", [$normalized]);
+                }
+            })
+            ->first();
+    }
+
+    public function activeEnrollmentInCourse(int $courseId): ?Enrollment
+    {
+        return $this->enrollments()
+            ->whereIn('status', self::ACTIVE_COURSE_ENROLLMENT_STATUSES)
+            ->whereHas('edition', fn ($q) => $q->where('course_id', $courseId))
+            ->with('edition.course')
+            ->first();
     }
 
     public static function nextCode(): string
