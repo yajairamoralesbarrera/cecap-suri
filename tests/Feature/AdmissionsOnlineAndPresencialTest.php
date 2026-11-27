@@ -255,3 +255,81 @@ it('stores private attachments with SHA-256 versioning and protected download', 
 
     $this->get('/adjuntos/'.$v2->uuid)->assertOk();
 });
+
+it('enforces max_capacity on /inscripcion and allows audited rejection with picklist reason, email notification, and seat release', function () {
+    \Illuminate\Support\Facades\Mail::fake();
+    $admin = User::where('email', 'superadmin@cecap.or.cr')->firstOrFail();
+
+    $edition = createSampleEdition('curso_corto');
+    $edition->update(['max_capacity' => 1]);
+
+    // 1ra solicitante ocupa el único cupo (1/1)
+    Livewire::test(PublicEnrollmentPage::class)
+        ->set('course_edition_id', $edition->id)
+        ->set('gender', 'femenino')
+        ->set('identification_number', '1-7000-0001')
+        ->set('first_name', 'Andrea')
+        ->set('last_name', 'Castro')
+        ->set('email', 'andrea.castro@correo.cr')
+        ->set('phone', '8800-7001')
+        ->call('submit')
+        ->assertHasNoErrors();
+
+    $enrollment = Enrollment::firstOrFail();
+    expect($edition->fresh()->availableSeats())->toBe(0);
+
+    // 2da solicitante queda bloqueada en vivo y al enviar por cupo máximo alcanzado
+    Livewire::test(PublicEnrollmentPage::class)
+        ->set('course_edition_id', $edition->id)
+        ->assertSet('capacityBlocked', true)
+        ->assertSee('Cupo máximo alcanzado')
+        ->set('gender', 'femenino')
+        ->set('identification_number', '1-7000-0002')
+        ->set('first_name', 'Lucía')
+        ->set('last_name', 'Méndez')
+        ->set('email', 'lucia.mendez@correo.cr')
+        ->set('phone', '8800-7002')
+        ->call('submit')
+        ->assertHasErrors('course_edition_id');
+
+    expect(Enrollment::count())->toBe(1);
+
+    // Rechazar la 1ra solicitud desde /admisiones exige motivo del picklist, envía correo y libera el cupo
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->call('startRejectEnrollment', $enrollment->id)
+        ->call('submitRejection')
+        ->assertHasErrors('rejection_reason_code')
+        ->set('rejection_reason_code', 'documentacion_incompleta')
+        ->set('rejection_notes', 'Favor presentar cédula vigente en la próxima convocatoria.')
+        ->call('submitRejection')
+        ->assertHasNoErrors();
+
+    $enrollment->refresh();
+    expect($enrollment->status)->toBe('rechazada');
+    expect($enrollment->rejection_reason_code)->toBe('documentacion_incompleta');
+    expect($enrollment->rejected_at)->not->toBeNull();
+    expect(AuditLog::where('event', 'enrollment.rejected')->where('auditable_id', (string) $enrollment->id)->exists())->toBeTrue();
+
+    \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\EnrollmentRejectedMail::class, function ($mail) {
+        return $mail->hasTo('andrea.castro@correo.cr')
+            && str_contains($mail->reasonLabel, 'Documentación incompleta');
+    });
+
+    // Al rechazarse, el cupo queda nuevamente disponible (1/1) y la 2da solicitante puede inscribirse
+    expect($edition->fresh()->availableSeats())->toBe(1);
+    Livewire::test(PublicEnrollmentPage::class)
+        ->set('course_edition_id', $edition->id)
+        ->assertSet('capacityBlocked', false)
+        ->set('gender', 'femenino')
+        ->set('identification_number', '1-7000-0002')
+        ->set('first_name', 'Lucía')
+        ->set('last_name', 'Méndez')
+        ->set('email', 'lucia.mendez@correo.cr')
+        ->set('phone', '8800-7002')
+        ->call('submit')
+        ->assertHasNoErrors();
+
+    expect(Enrollment::where('status', '!=', 'rechazada')->count())->toBe(1);
+});
+

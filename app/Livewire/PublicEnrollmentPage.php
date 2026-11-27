@@ -74,6 +74,10 @@ class PublicEnrollmentPage extends Component
 
     public string $educationBlockedMessage = '';
 
+    public bool $capacityBlocked = false;
+
+    public string $capacityBlockedMessage = '';
+
     #[Locked]
     public ?int $createdEnrollmentId = null;
 
@@ -113,12 +117,43 @@ class PublicEnrollmentPage extends Component
 
     public function updatedCourseEditionId(): void
     {
+        $this->evaluateCapacityRequirement();
         $this->evaluateEducationRequirement();
     }
 
     public function updatedEducationLevel(): void
     {
         $this->evaluateEducationRequirement();
+    }
+
+    protected function evaluateCapacityRequirement(): void
+    {
+        if (! $this->course_edition_id) {
+            $this->capacityBlocked = false;
+            $this->capacityBlockedMessage = '';
+
+            return;
+        }
+
+        $edition = CourseEdition::find($this->course_edition_id);
+        if (! $edition) {
+            $this->capacityBlocked = false;
+            $this->capacityBlockedMessage = '';
+
+            return;
+        }
+
+        if ($edition->availableSeats() <= 0) {
+            $this->capacityBlocked = true;
+            $this->capacityBlockedMessage = sprintf(
+                'Cupo máximo alcanzado para esta edición (%d / %d cupos ocupados). No es posible registrar más preinscripciones en este grupo.',
+                $edition->activeEnrollmentsCount(),
+                (int) $edition->max_capacity
+            );
+        } else {
+            $this->capacityBlocked = false;
+            $this->capacityBlockedMessage = '';
+        }
     }
 
     protected function evaluateEducationRequirement(): void
@@ -208,6 +243,13 @@ class PublicEnrollmentPage extends Component
         ]);
 
         $edition = CourseEdition::with('course')->findOrFail($this->course_edition_id);
+
+        if ($edition->availableSeats() <= 0) {
+            $this->evaluateCapacityRequirement();
+            $this->addError('course_edition_id', $this->capacityBlockedMessage);
+
+            return;
+        }
 
         if ($eduError = $edition->course?->educationLevelRequirementError($this->education_level)) {
             $this->educationBlocked = true;
@@ -375,6 +417,8 @@ class PublicEnrollmentPage extends Component
         $this->genderBlocked = false;
         $this->educationBlocked = false;
         $this->educationBlockedMessage = '';
+        $this->capacityBlocked = false;
+        $this->capacityBlockedMessage = '';
     }
 
     public function render()

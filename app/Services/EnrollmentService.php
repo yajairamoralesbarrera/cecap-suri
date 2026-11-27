@@ -2,13 +2,17 @@
 
 namespace App\Services;
 
+use App\Mail\EnrollmentRejectedMail;
 use App\Models\CourseEdition;
 use App\Models\Enrollment;
 use App\Models\InstitutionSetting;
+use App\Models\Picklist;
 use App\Models\Student;
 use App\Models\StudentLifecycleEvent;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 
 class EnrollmentService
@@ -41,14 +45,29 @@ class EnrollmentService
 
         if ($edition->availableSeats() <= 0) {
             throw ValidationException::withMessages([
-                'course_edition_id' => 'Esta edición no cuenta con cupos disponibles.',
+                'course_edition_id' => sprintf(
+                    'Cupo máximo alcanzado para esta edición (%d / %d cupos ocupados). No es posible registrar más preinscripciones en este grupo.',
+                    $edition->activeEnrollmentsCount(),
+                    (int) $edition->max_capacity
+                ),
             ]);
         }
 
         $this->scheduleConflicts->assertStudentHasNoScheduleConflict($student, $edition);
 
         return DB::transaction(function () use ($student, $edition, $submittedDocuments, $notes, $settings): Enrollment {
-            $requiredDocs = $edition->course->required_documents ?? CourseEdition::find($edition->id)->course->required_documents ?? ['cedula_dimex'];
+            $lockedEdition = CourseEdition::with('course')->whereKey($edition->id)->lockForUpdate()->firstOrFail();
+            if ($lockedEdition->availableSeats() <= 0) {
+                throw ValidationException::withMessages([
+                    'course_edition_id' => sprintf(
+                        'Cupo máximo alcanzado para esta edición (%d / %d cupos ocupados). No es posible registrar más preinscripciones en este grupo.',
+                        $lockedEdition->activeEnrollmentsCount(),
+                        (int) $lockedEdition->max_capacity
+                    ),
+                ]);
+            }
+
+            $requiredDocs = $lockedEdition->course->required_documents ?? ['cedula_dimex'];
             $submitted = array_values(array_unique($submittedDocuments));
             $missing = array_diff($requiredDocs, $submitted);
             $docsComplete = count($missing) === 0;
@@ -173,7 +192,11 @@ class EnrollmentService
 
         if ($edition->availableSeats() <= 0) {
             throw ValidationException::withMessages([
-                'course_edition_id' => 'Esta edición no cuenta con cupos disponibles.',
+                'course_edition_id' => sprintf(
+                    'Cupo máximo alcanzado para esta edición (%d / %d cupos ocupados). No es posible registrar más matrículas en este grupo.',
+                    $edition->activeEnrollmentsCount(),
+                    (int) $edition->max_capacity
+                ),
             ]);
         }
 
@@ -209,6 +232,16 @@ class EnrollmentService
             $exceptionCommitmentDate,
             $notes
         ): Enrollment {
+            $lockedEdition = CourseEdition::whereKey($edition->id)->lockForUpdate()->firstOrFail();
+            if ($lockedEdition->availableSeats() <= 0) {
+                throw ValidationException::withMessages([
+                    'course_edition_id' => sprintf(
+                        'Cupo máximo alcanzado para esta edición (%d / %d cupos ocupados). No es posible registrar más matrículas en este grupo.',
+                        $lockedEdition->activeEnrollmentsCount(),
+                        (int) $lockedEdition->max_capacity
+                    ),
+                ]);
+            }
             $status = $confirmImmediately
                 ? 'confirmada'
                 : ($docsComplete ? 'preinscrita' : 'documentacion_pendiente');
@@ -341,6 +374,113 @@ class EnrollmentService
 
             return $enrollment->fresh();
         });
+    }
+
+    /**
+     * Rechaza una solicitud de inscripción/preinscripción con motivo de picklist,
+     * registra auditoría + historial, libera el cupo de la edición y notifica por correo.
+     *
+     * @return array{enrollment: Enrollment, mail_sent: bool, reason_label: string}
+     */
+    public function rejectEnrollment(
+        Enrollment $enrollment,
+        string $reasonCode,
+        ?string $additionalNotes = null
+    ): array {
+        if (! in_array($enrollment->status, ['preinscrita', 'documentacion_pendiente'], true)) {
+            throw ValidationException::withMessages([
+                'rejection_reason_code' => 'Solo se pueden rechazar solicitudes en estado Preinscrita o Documentación Pendiente.',
+            ]);
+        }
+
+        $reason = Picklist::query()
+            ->where('group_key', 'enrollment_rejection_reason')
+            ->where('code', $reasonCode)
+            ->where('is_active', true)
+            ->first();
+
+        if (! $reason) {
+            throw ValidationException::withMessages([
+                'rejection_reason_code' => 'Debe seleccionar un motivo de rechazo válido del catálogo.',
+            ]);
+        }
+
+        $cleanNotes = filled($additionalNotes) ? trim((string) $additionalNotes) : null;
+
+        $updated = DB::transaction(function () use ($enrollment, $reason, $cleanNotes): Enrollment {
+            $oldStatus = $enrollment->status;
+
+            $enrollment->update([
+                'status' => 'rechazada',
+                'rejection_reason_code' => $reason->code,
+                'rejection_notes' => $cleanNotes,
+                'rejected_at' => now(),
+                'rejected_by' => Auth::id(),
+                'updated_by' => Auth::id(),
+            ]);
+
+            StudentLifecycleEvent::create([
+                'student_id' => $enrollment->student_id,
+                'enrollment_id' => $enrollment->id,
+                'event_type' => 'solicitud_rechazada',
+                'from_status' => $oldStatus,
+                'to_status' => 'rechazada',
+                'description' => trim(sprintf(
+                    'Solicitud rechazada. Motivo: %s.%s',
+                    $reason->label,
+                    $cleanNotes ? ' Observaciones: '.$cleanNotes : ''
+                )),
+                'metadata' => [
+                    'rejection_reason_code' => $reason->code,
+                    'rejection_reason_label' => $reason->label,
+                    'rejection_notes' => $cleanNotes,
+                ],
+                'recorded_by' => Auth::id(),
+                'created_at' => now(),
+            ]);
+
+            AuditService::log(
+                event: 'enrollment.rejected',
+                module: 'admisiones',
+                auditable: $enrollment,
+                oldValues: ['status' => $oldStatus],
+                newValues: [
+                    'status' => 'rechazada',
+                    'rejection_reason_code' => $reason->code,
+                    'rejection_reason_label' => $reason->label,
+                    'recipient_email' => $enrollment->student?->email,
+                ],
+                reason: $cleanNotes ? $reason->label.' — '.$cleanNotes : $reason->label
+            );
+
+            return $enrollment->fresh(['student', 'edition.course']);
+        });
+
+        $mailSent = false;
+        $recipientEmail = $updated->student?->email;
+        if (filled($recipientEmail)) {
+            try {
+                Mail::to($recipientEmail)->send(new EnrollmentRejectedMail(
+                    enrollment: $updated,
+                    reasonLabel: $reason->label,
+                    additionalNotes: $cleanNotes,
+                    settings: InstitutionSetting::current()
+                ));
+                $mailSent = true;
+            } catch (\Throwable $e) {
+                Log::warning('No se pudo enviar correo de rechazo de solicitud', [
+                    'enrollment_id' => $updated->id,
+                    'email' => $recipientEmail,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return [
+            'enrollment' => $updated,
+            'mail_sent' => $mailSent,
+            'reason_label' => $reason->label,
+        ];
     }
 
     /**

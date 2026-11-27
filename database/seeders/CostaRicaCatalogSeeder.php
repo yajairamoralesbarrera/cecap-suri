@@ -118,6 +118,16 @@ class CostaRicaCatalogSeeder extends Seeder
                 ['ong', 'ONG / Fundación'],
                 ['institucion_publica', 'Institución Pública (IMAS / Municipalidad)'],
             ],
+            'enrollment_rejection_reason' => [
+                ['documentacion_incompleta', 'Documentación incompleta o no presentada en plazo'],
+                ['documentacion_invalida', 'Documentos ilegibles o no cumplen requisitos'],
+                ['nivel_academico_insuficiente', 'No cumple con el nivel académico previo requerido'],
+                ['cupo_agotado', 'Cupo máximo de la edición agotado'],
+                ['plazo_provisional_vencido', 'Vencimiento del plazo provisional sin confirmación presencial'],
+                ['perfil_no_elegible', 'No cumple con el perfil de elegibilidad institucional'],
+                ['solicitud_duplicada', 'Solicitud duplicada o desistimiento de la solicitante'],
+                ['otro_motivo', 'Otro motivo (detallado en observaciones)'],
+            ],
         ];
 
         foreach ($picklists as $group => $items) {

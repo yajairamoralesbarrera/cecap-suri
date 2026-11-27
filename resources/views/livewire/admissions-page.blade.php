@@ -75,6 +75,42 @@
             </div>
         @endif
 
+        @if($rejectingEnrollment)
+            <div class="cecap-card border-rose-400 bg-rose-50/70 space-y-4">
+                <div class="flex items-center justify-between gap-2">
+                    <h2 class="text-base font-bold text-rose-950">Rechazar Solicitud {{ $rejectingEnrollment->enrollment_code }} — {{ $rejectingEnrollment->student?->full_name }}</h2>
+                    <button type="button" wire:click="cancelRejectEnrollment" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar</button>
+                </div>
+                <p class="text-sm text-slate-700">
+                    Curso: <strong>{{ $rejectingEnrollment->edition?->course?->name }}</strong> ({{ $rejectingEnrollment->edition?->name }}) ·
+                    Se notificará por correo a <strong>{{ $rejectingEnrollment->student?->email }}</strong> y el cupo quedará libre.
+                </p>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Motivo de Rechazo (Picklist) *</label>
+                        <select wire:model="rejection_reason_code" required class="cecap-input">
+                            <option value="">-- Seleccione el motivo de rechazo --</option>
+                            @foreach($rejectionReasons as $code => $label)
+                                <option value="{{ $code }}">{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Observaciones adicionales para la solicitante (opcional)</label>
+                        <input wire:model="rejection_notes" type="text" class="cecap-input" placeholder="Ej. Puede postular nuevamente en la edición del próximo trimestre">
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" wire:click="submitRejection" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800 cursor-pointer">
+                        Confirmar Rechazo y Enviar Correo
+                    </button>
+                    <button type="button" wire:click="cancelRejectEnrollment" class="cecap-btn-secondary">Cancelar</button>
+                </div>
+            </div>
+        @endif
+
         <div class="cecap-card overflow-x-auto">
             <h2 class="text-base font-bold text-slate-900 mb-3">Solicitudes y Matrículas Recientes</h2>
             <table class="w-full text-sm text-left">
@@ -95,11 +131,14 @@
                             <td class="py-2.5 pr-3 font-semibold text-slate-900">{{ $enr->student?->full_name }}<div class="text-xs text-slate-500">{{ $enr->student?->identification_number }} · {{ $enr->student?->email }}</div></td>
                             <td class="py-2.5 pr-3 text-xs">{{ $enr->edition?->course?->name }}<div class="text-slate-500">{{ $enr->edition?->name }}</div></td>
                             <td class="py-2.5 pr-3">
-                                <span class="cecap-badge {{ $enr->status === 'confirmada' ? 'bg-emerald-100 text-emerald-900' : ($enr->status === 'documentacion_pendiente' ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-800') }}">
+                                <span class="cecap-badge {{ $enr->status === 'confirmada' ? 'bg-emerald-100 text-emerald-900' : ($enr->status === 'rechazada' ? 'bg-rose-100 text-rose-900' : ($enr->status === 'documentacion_pendiente' ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-800')) }}">
                                     {{ strtoupper(str_replace('_', ' ', $enr->status)) }}
                                 </span>
                                 @if($enr->exception_authorized)
                                     <div class="text-[11px] text-amber-700 font-semibold mt-0.5">Excepción hasta {{ $enr->exception_commitment_date?->format('d/m/Y') }}</div>
+                                @endif
+                                @if($enr->status === 'rechazada' && $enr->rejection_reason_label)
+                                    <div class="text-[11px] text-rose-700 font-medium mt-0.5">Motivo: {{ $enr->rejection_reason_label }}</div>
                                 @endif
                             </td>
                             <td class="py-2.5 pr-3 text-xs">
@@ -113,6 +152,7 @@
                                 <div class="flex flex-wrap gap-1.5">
                                     @if(in_array($enr->status, ['preinscrita', 'documentacion_pendiente'], true) && auth()->user()->hasEffectivePermission('admisiones.manage'))
                                         <button type="button" wire:click="startConfirmEnrollment({{ $enr->id }})" class="cecap-btn-primary !min-h-9 !px-3 text-xs">Confirmar</button>
+                                        <button type="button" wire:click="startRejectEnrollment({{ $enr->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-rose-300 bg-white px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50 cursor-pointer">Rechazar</button>
                                     @endif
                                     <button type="button"
                                             data-pdf-modal-url="{{ route('pdf.planilla', $enr) }}"

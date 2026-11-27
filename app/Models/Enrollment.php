@@ -30,6 +30,10 @@ class Enrollment extends Model
         'exception_commitment_date',
         'exception_authorized_by',
         'exception_authorized_at',
+        'rejection_reason_code',
+        'rejection_notes',
+        'rejected_at',
+        'rejected_by',
         'notes',
         'created_by',
         'updated_by',
@@ -46,6 +50,7 @@ class Enrollment extends Model
             'exception_authorized' => 'boolean',
             'exception_commitment_date' => 'date',
             'exception_authorized_at' => 'datetime',
+            'rejected_at' => 'datetime',
         ];
     }
 
@@ -67,6 +72,20 @@ class Enrollment extends Model
     public function exceptionAuthorizedByUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'exception_authorized_by');
+    }
+
+    public function rejectedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'rejected_by');
+    }
+
+    public function getRejectionReasonLabelAttribute(): ?string
+    {
+        if (! $this->rejection_reason_code) {
+            return null;
+        }
+
+        return Picklist::labelFor('enrollment_rejection_reason', $this->rejection_reason_code);
     }
 
     public function attendanceRecords(): HasMany

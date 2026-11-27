@@ -167,11 +167,18 @@
                 </div>
 
                 @if($selectedEdition)
+                    @php
+                        $availSeats = $selectedEdition->availableSeats();
+                        $maxSeats = (int) $selectedEdition->max_capacity;
+                    @endphp
                     <div class="rounded-xl border border-brand-100 bg-brand-50 p-4 text-sm grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div>
-                            <div class="text-xs font-semibold uppercase text-brand-800">Tipo y Requisito</div>
+                            <div class="text-xs font-semibold uppercase text-brand-800">Tipo, Cupo y Requisito</div>
                             <div class="font-bold text-brand-950">{{ $selectedEdition->course?->program_type_label }}</div>
                             <div class="text-xs text-slate-600">Nivel previo: {{ $educationLevels[$selectedEdition->course?->required_education_level] ?? $selectedEdition->course?->required_education_level }}</div>
+                            <div class="mt-1 text-xs font-bold {{ $availSeats > 0 ? 'text-emerald-700' : 'text-rose-700' }}">
+                                {{ $availSeats > 0 ? "Cupos disponibles: {$availSeats} de {$maxSeats}" : "CUPO AGOTADO (0 de {$maxSeats})" }}
+                            </div>
                         </div>
                         <div>
                             <div class="text-xs font-semibold uppercase text-brand-800">Inversión Referencial</div>
@@ -186,6 +193,12 @@
                                 @endforeach
                             </ul>
                         </div>
+                    </div>
+                @endif
+
+                @if($capacityBlocked)
+                    <div role="alert" class="rounded-xl border-2 border-rose-300 bg-rose-50 p-4 text-sm font-semibold text-rose-900">
+                        {{ $capacityBlockedMessage }}
                     </div>
                 @endif
             </div>
@@ -324,7 +337,7 @@
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-slate-200 pt-4">
                 <p class="text-xs text-slate-500">Al enviar, se generará su Planilla de Inscripción PDF descargable e imprimible (enlace seguro válido por {{ $settings->online_enrollment_provisional_days }} días).</p>
                 <button type="submit"
-                        @disabled($genderBlocked || $educationBlocked)
+                        @disabled($genderBlocked || $educationBlocked || $capacityBlocked)
                         wire:loading.attr="disabled"
                         wire:target="file_cedula,file_atestado,submit"
                         class="cecap-btn-primary shrink-0">

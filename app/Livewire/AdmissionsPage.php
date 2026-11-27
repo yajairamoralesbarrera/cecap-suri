@@ -88,6 +88,13 @@ class AdmissionsPage extends Component
 
     public string $confirm_exception_date = '';
 
+    // Rechazo auditado con motivo de picklist y notificación por correo
+    public ?int $rejectingEnrollmentId = null;
+
+    public string $rejection_reason_code = '';
+
+    public string $rejection_notes = '';
+
     public function setTab(string $tab): void
     {
         $this->tab = $tab;
@@ -293,16 +300,75 @@ class AdmissionsPage extends Component
     public function startConfirmEnrollment(int $enrollmentId): void
     {
         $enr = Enrollment::findOrFail($enrollmentId);
+        $this->rejectingEnrollmentId = null;
         $this->confirmingEnrollmentId = $enr->id;
         $this->confirm_docs = $enr->submitted_documents ?? [];
         $this->confirm_exception = false;
         $this->confirm_exception_reason = '';
         $this->confirm_exception_date = now()->addDays(15)->toDateString();
+        $this->resetValidation();
     }
 
     public function cancelConfirmEnrollment(): void
     {
         $this->confirmingEnrollmentId = null;
+    }
+
+    public function startRejectEnrollment(int $enrollmentId): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('admisiones.manage'), 403);
+        $enr = Enrollment::findOrFail($enrollmentId);
+        $this->confirmingEnrollmentId = null;
+        $this->rejectingEnrollmentId = $enr->id;
+        $this->rejection_reason_code = '';
+        $this->rejection_notes = '';
+        $this->resetValidation();
+        $this->feedback = null;
+    }
+
+    public function cancelRejectEnrollment(): void
+    {
+        $this->rejectingEnrollmentId = null;
+        $this->rejection_reason_code = '';
+        $this->rejection_notes = '';
+        $this->resetValidation();
+    }
+
+    public function submitRejection(EnrollmentService $enrollmentService): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('admisiones.manage'), 403);
+        if (! $this->rejectingEnrollmentId) {
+            return;
+        }
+
+        $this->validate([
+            'rejection_reason_code' => ['required', 'string', 'max:60'],
+            'rejection_notes' => ['nullable', 'string', 'max:1000'],
+        ], [
+            'rejection_reason_code.required' => 'Debe seleccionar un motivo de rechazo del catálogo (picklist).',
+        ]);
+
+        $enrollment = Enrollment::with(['student', 'edition.course'])->findOrFail($this->rejectingEnrollmentId);
+
+        try {
+            $result = $enrollmentService->rejectEnrollment(
+                enrollment: $enrollment,
+                reasonCode: $this->rejection_reason_code,
+                additionalNotes: $this->rejection_notes ?: null
+            );
+        } catch (ValidationException $e) {
+            foreach ($e->errors() as $k => $msgs) {
+                $this->addError($k, $msgs[0]);
+            }
+
+            return;
+        }
+
+        $this->cancelRejectEnrollment();
+        $email = $result['enrollment']->student?->email;
+        $this->feedback = $result['mail_sent']
+            ? sprintf('Solicitud %s rechazada (%s). Se envió notificación por correo a %s y el cupo quedó liberado.', $result['enrollment']->enrollment_code, $result['reason_label'], $email)
+            : sprintf('Solicitud %s rechazada (%s) y cupo liberado (no se pudo entregar correo a %s).', $result['enrollment']->enrollment_code, $result['reason_label'], $email ?: 'sin correo');
     }
 
     public function submitConfirmation(EnrollmentService $enrollmentService): void
@@ -355,6 +421,8 @@ class AdmissionsPage extends Component
             'students' => Student::withCount('enrollments')->latest()->limit(60)->get(),
             'editions' => CourseEdition::with('course')->whereIn('status', ['abierta', 'planificada', 'en_curso'])->orderByDesc('id')->get(),
             'confirmingEnrollment' => $this->confirmingEnrollmentId ? Enrollment::with(['student', 'edition.course'])->find($this->confirmingEnrollmentId) : null,
+            'rejectingEnrollment' => $this->rejectingEnrollmentId ? Enrollment::with(['student', 'edition.course'])->find($this->rejectingEnrollmentId) : null,
+            'rejectionReasons' => Picklist::optionsFor('enrollment_rejection_reason'),
             'documentTypes' => config('cecap.document_types'),
             'idTypes' => Picklist::optionsFor('id_type'),
             'genders' => Picklist::optionsFor('gender'),
