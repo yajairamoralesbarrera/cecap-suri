@@ -360,7 +360,7 @@
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                     @forelse($students as $st)
-                        <tr>
+                        <tr wire:key="student-row-{{ $st->id }}" class="{{ $editingStudentId === $st->id ? 'bg-slate-50/80' : '' }}">
                             <td class="py-2.5 pr-3 font-mono text-xs font-bold">{{ $st->student_code }}</td>
                             <td class="py-2.5 pr-3 font-semibold">{{ $st->full_name }}<div class="text-xs text-slate-500">{{ $st->identification_number }}</div></td>
                             <td class="py-2.5 pr-3 text-xs">{{ $st->email }}<div>{{ $st->phone }}</div></td>
@@ -376,6 +376,89 @@
                                 <button type="button" wire:click="editStudent({{ $st->id }})" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Edición Controlada</button>
                             </td>
                         </tr>
+                        @if($editingStudentId === $st->id)
+                            <tr wire:key="student-edit-{{ $st->id }}">
+                                <td colspan="5" class="py-3 px-1">
+                                    <div class="rounded-2xl border-2 border-brand-700 bg-brand-50/60 p-4 space-y-4">
+                                        <div class="flex flex-wrap items-center justify-between gap-2">
+                                            <h3 class="text-sm sm:text-base font-bold text-brand-950">Edición Controlada de Expediente — {{ $st->full_name }} ({{ $st->student_code }})</h3>
+                                            <button type="button" wire:click="cancelEditStudent" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar</button>
+                                        </div>
+
+                                        @if($errors->any())
+                                            <div class="rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+                                                <ul class="list-disc pl-4 space-y-0.5">
+                                                    @foreach($errors->all() as $error)
+                                                        <li>{{ $error }}</li>
+                                                    @endforeach
+                                                </ul>
+                                            </div>
+                                        @endif
+
+                                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Nombre *</label>
+                                                <input wire:model="first_name" type="text" required class="cecap-input">
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Primer Apellido *</label>
+                                                <input wire:model="last_name" type="text" required class="cecap-input">
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Segundo Apellido</label>
+                                                <input wire:model="second_last_name" type="text" class="cecap-input">
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Correo Electrónico (Obligatorio) *</label>
+                                                <input wire:model="email" type="email" required class="cecap-input">
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Teléfono *</label>
+                                                <input wire:model="phone" type="tel" required class="cecap-input">
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Nivel Educativo</label>
+                                                <select wire:model="education_level" class="cecap-input">
+                                                    @foreach($educationLevels as $code => $label)
+                                                        <option value="{{ $code }}">{{ $label }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Provincia</label>
+                                                <select wire:model.live="province_id" class="cecap-input">
+                                                    <option value="">-- Seleccione --</option>
+                                                    @foreach($provinces as $p)<option value="{{ $p->id }}">{{ $p->name }}</option>@endforeach
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Cantón</label>
+                                                <select wire:model.live="canton_id" class="cecap-input">
+                                                    <option value="">-- Seleccione --</option>
+                                                    @foreach($cantons as $c)<option value="{{ $c->id }}">{{ $c->name }}</option>@endforeach
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Distrito</label>
+                                                <select wire:model="district_id" class="cecap-input">
+                                                    <option value="">-- Seleccione --</option>
+                                                    @foreach($districts as $d)<option value="{{ $d->id }}">{{ $d->name }}</option>@endforeach
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div class="rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-2">
+                                            <label class="block text-xs sm:text-sm font-semibold text-amber-950">Motivo de la Edición Controlada (Obligatorio para Auditoría) *</label>
+                                            <input wire:model="edit_reason" type="text" class="cecap-input" placeholder="Ej. Actualización de correo y teléfono solicitada por la alumna">
+                                            <div class="flex flex-wrap gap-2 pt-1">
+                                                <button type="button" wire:click="saveStudentOnly" class="cecap-btn-primary text-xs sm:text-sm">Guardar Cambios Auditados</button>
+                                                <button type="button" wire:click="cancelEditStudent" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        @endif
                     @empty
                         <tr><td colspan="5" class="py-6 text-center text-slate-500">Sin alumnas registradas.</td></tr>
                     @endforelse

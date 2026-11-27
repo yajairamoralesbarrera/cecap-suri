@@ -263,6 +263,7 @@ class AcademicPage extends Component
             return;
         }
 
+        $this->managingSubjectsCourseId = null;
         $this->editingCourseId = $course->id;
         $this->course_category_id = $course->academic_category_id;
         $this->course_code = $course->code;
@@ -439,6 +440,7 @@ class AcademicPage extends Component
             return;
         }
 
+        $this->editingCourseId = null;
         $this->managingSubjectsCourseId = $course->id;
         $nextIdx = $course->subjects->count() + 1;
         $this->new_sub_code = sprintf('MAT-%02d', $nextIdx);

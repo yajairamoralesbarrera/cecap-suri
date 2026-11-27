@@ -132,7 +132,9 @@ class AdmissionsPage extends Component
         $student = Student::findOrFail($studentId);
         $this->loadStudentIntoForm($student);
         $this->editingStudentId = $student->id;
-        $this->tab = 'enroll';
+        $this->edit_reason = '';
+        $this->resetValidation();
+        $this->tab = 'students';
     }
 
     protected function loadStudentIntoForm(Student $student): void

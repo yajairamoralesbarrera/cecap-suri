@@ -46,38 +46,40 @@
         <div class="cecap-card lg:col-span-2 space-y-4">
             <h2 class="text-base font-bold text-slate-900">Repositorio Documental Versionado (Sin Borrado Físico)</h2>
 
-            @if($versioningDocId)
-                <form wire:submit="uploadNewVersion" class="rounded-xl border border-brand-200 bg-brand-50 p-4 space-y-3">
-                    <div class="font-bold text-sm text-brand-950">Cargar Nueva Versión (la versión anterior se conserva íntegra)</div>
-                    <input wire:model="new_version_file" type="file" required accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
-                    <div class="flex gap-2">
-                        <button type="submit" class="cecap-btn-primary !min-h-9 text-xs">Guardar Nueva Versión</button>
-                        <button type="button" wire:click="cancelNewVersion" class="cecap-btn-secondary !min-h-9 text-xs">Cancelar</button>
-                    </div>
-                </form>
-            @endif
-
             <div class="divide-y divide-slate-100">
                 @forelse($documents as $doc)
-                    <div class="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div>
-                            <div class="font-bold text-slate-900">{{ $doc->code }} — {{ $doc->title }} <span class="cecap-badge bg-brand-100 text-brand-900 ml-1">v{{ $doc->current_version }}</span></div>
-                            <div class="text-xs text-slate-500">
-                                {{ $categories[$doc->category] ?? $doc->category }} · Visibilidad: {{ $doc->visibility }} · Estado: {{ strtoupper($doc->status) }}
+                    <div wire:key="doc-row-{{ $doc->id }}" class="py-3 space-y-3">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                                <div class="font-bold text-slate-900">{{ $doc->code }} — {{ $doc->title }} <span class="cecap-badge bg-brand-100 text-brand-900 ml-1">v{{ $doc->current_version }}</span></div>
+                                <div class="text-xs text-slate-500">
+                                    {{ $categories[$doc->category] ?? $doc->category }} · Visibilidad: {{ $doc->visibility }} · Estado: {{ strtoupper($doc->status) }}
+                                    @if($doc->currentAttachment)
+                                        · SHA-256: <span class="font-mono">{{ substr($doc->currentAttachment->sha256, 0, 12) }}…</span>
+                                    @endif
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap gap-1.5">
                                 @if($doc->currentAttachment)
-                                    · SHA-256: <span class="font-mono">{{ substr($doc->currentAttachment->sha256, 0, 12) }}…</span>
+                                    <a href="{{ route('attachments.download', $doc->currentAttachment->uuid) }}" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Descargar</a>
+                                @endif
+                                @if(auth()->user()->hasEffectivePermission('documentos.manage') && $doc->status === 'vigente')
+                                    <button type="button" wire:click="startNewVersion({{ $doc->id }})" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Nueva Versión</button>
+                                    <button type="button" wire:click="archiveDocument({{ $doc->id }})" class="cecap-btn-secondary !min-h-9 !px-3 text-xs text-amber-700">Archivar</button>
                                 @endif
                             </div>
                         </div>
-                        <div class="flex flex-wrap gap-1.5">
-                            @if($doc->currentAttachment)
-                                <a href="{{ route('attachments.download', $doc->currentAttachment->uuid) }}" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Descargar</a>
-                            @endif
-                            @if(auth()->user()->hasEffectivePermission('documentos.manage') && $doc->status === 'vigente')
-                                <button type="button" wire:click="startNewVersion({{ $doc->id }})" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Nueva Versión</button>
-                                <button type="button" wire:click="archiveDocument({{ $doc->id }})" class="cecap-btn-secondary !min-h-9 !px-3 text-xs text-amber-700">Archivar</button>
-                            @endif
-                        </div>
+
+                        @if($versioningDocId === $doc->id)
+                            <form wire:submit="uploadNewVersion" class="rounded-xl border-2 border-brand-700 bg-brand-50/70 p-4 space-y-3">
+                                <div class="font-bold text-sm text-brand-950">Cargar Nueva Versión para {{ $doc->code }} (la versión anterior se conserva íntegra)</div>
+                                <input wire:model="new_version_file" type="file" required accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
+                                <div class="flex flex-wrap gap-2">
+                                    <button type="submit" class="cecap-btn-primary !min-h-9 text-xs">Guardar Nueva Versión</button>
+                                    <button type="button" wire:click="cancelNewVersion" class="cecap-btn-secondary !min-h-9 text-xs">Cancelar</button>
+                                </div>
+                            </form>
+                        @endif
                     </div>
                 @empty
                     <p class="py-6 text-center text-sm text-slate-500">Sin documentos archivados.</p>

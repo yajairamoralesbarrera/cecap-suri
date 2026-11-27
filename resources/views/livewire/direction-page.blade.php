@@ -128,53 +128,6 @@
             </div>
         @endif
 
-        @if($editingUserId)
-            <div class="cecap-card border-brand-700 bg-brand-50/40 space-y-4">
-                <div class="flex items-center justify-between">
-                    <h3 class="font-bold text-brand-950">Editar Roles, Categorías y Permisos por Persona</h3>
-                    <button type="button" wire:click="cancelEditUserAccess" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar</button>
-                </div>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                    @foreach($rolesCatalog as $rk => $rm)
-                        @if($rk !== 'super_admin' || $isSuperAdmin)
-                            <label class="inline-flex items-center gap-2"><input type="checkbox" wire:model.live="edit_roles" value="{{ $rk }}" class="h-4 w-4 rounded"> {{ $rm['label'] }}</label>
-                        @endif
-                    @endforeach
-                </div>
-                <label class="inline-flex items-center gap-2 text-sm font-semibold text-brand-950 cursor-pointer">
-                    <input type="checkbox" wire:model.live="edit_uses_custom" class="h-4 w-4 rounded">
-                    <span>Activar permisos personalizados por persona (uses_custom_permissions)</span>
-                </label>
-                @if($edit_uses_custom)
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-1.5 text-xs bg-white p-3 rounded-xl border border-slate-200 max-h-52 overflow-y-auto">
-                        @foreach($allPermissions as $perm)
-                            @if($perm !== 'system.code.manage' || $isSuperAdmin)
-                                <label class="inline-flex items-center gap-1.5"><input type="checkbox" wire:model="edit_direct_permissions" value="{{ $perm }}" class="h-3.5 w-3.5 rounded"> {{ $perm }}</label>
-                            @endif
-                        @endforeach
-                    </div>
-                @endif
-                <div class="rounded-xl border border-brand-200 bg-white p-3 space-y-2 text-xs">
-                    <div class="font-bold text-brand-950">Categorías asignadas (Coordinador de Área / Categoría)</div>
-                    @if($categories->isEmpty())
-                        <p class="text-amber-900">Aún no existen categorías académicas. Cree una aquí mismo o desde <a href="{{ route('academico') }}" class="font-bold underline">Académico → Categorías</a>:</p>
-                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                            <input wire:model="quick_cat_code" type="text" class="cecap-input !min-h-9 !py-1 text-xs" placeholder="Código (ej. CAT-GASTRO)">
-                            <input wire:model="quick_cat_name" type="text" class="cecap-input !min-h-9 !py-1 text-xs" placeholder="Nombre categoría">
-                            <button type="button" wire:click="createQuickCategory" class="cecap-btn-secondary !min-h-9 !py-1 text-xs">+ Crear categoría</button>
-                        </div>
-                    @else
-                        <div class="flex flex-wrap gap-3">
-                            @foreach($categories as $cat)
-                                <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="checkbox" wire:model="edit_categories" value="{{ $cat->id }}" class="h-4 w-4 rounded text-brand-900"> {{ $cat->name }}</label>
-                            @endforeach
-                        </div>
-                    @endif
-                </div>
-                <button type="button" wire:click="saveUserAccess" class="cecap-btn-primary">Guardar Accesos</button>
-            </div>
-        @endif
-
         <div class="cecap-card overflow-x-auto">
             <h2 class="text-base font-bold text-slate-900 mb-3">Usuarios de la Plataforma</h2>
             <table class="w-full text-sm text-left">
@@ -183,7 +136,7 @@
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                     @foreach($users as $u)
-                        <tr>
+                        <tr wire:key="user-row-{{ $u->id }}" class="{{ $editingUserId === $u->id ? 'bg-slate-50/80' : '' }}">
                             <td class="py-2.5 pr-3 font-semibold">{{ $u->name }}<div class="text-xs text-slate-500">{{ $u->email }} · {{ $u->identification_number }}</div></td>
                             <td class="py-2.5 pr-3 text-xs">
                                 <div class="font-semibold">{{ $u->role_labels }}</div>
@@ -210,6 +163,59 @@
                                 </div>
                             </td>
                         </tr>
+                        @if($editingUserId === $u->id)
+                            <tr wire:key="user-access-{{ $u->id }}">
+                                <td colspan="4" class="py-3 px-1">
+                                    <div class="rounded-2xl border-2 border-brand-700 bg-brand-50/60 p-4 space-y-4">
+                                        <div class="flex flex-wrap items-center justify-between gap-2">
+                                            <h3 class="text-sm sm:text-base font-bold text-brand-950">Editar Roles, Categorías y Permisos — {{ $u->name }}</h3>
+                                            <button type="button" wire:click="cancelEditUserAccess" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar</button>
+                                        </div>
+                                        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                                            @foreach($rolesCatalog as $rk => $rm)
+                                                @if($rk !== 'super_admin' || $isSuperAdmin)
+                                                    <label class="inline-flex items-center gap-2"><input type="checkbox" wire:model.live="edit_roles" value="{{ $rk }}" class="h-4 w-4 rounded"> {{ $rm['label'] }}</label>
+                                                @endif
+                                            @endforeach
+                                        </div>
+                                        <label class="inline-flex items-center gap-2 text-sm font-semibold text-brand-950 cursor-pointer">
+                                            <input type="checkbox" wire:model.live="edit_uses_custom" class="h-4 w-4 rounded">
+                                            <span>Activar permisos personalizados por persona (uses_custom_permissions)</span>
+                                        </label>
+                                        @if($edit_uses_custom)
+                                            <div class="grid grid-cols-2 md:grid-cols-4 gap-1.5 text-xs bg-white p-3 rounded-xl border border-slate-200 max-h-52 overflow-y-auto">
+                                                @foreach($allPermissions as $perm)
+                                                    @if($perm !== 'system.code.manage' || $isSuperAdmin)
+                                                        <label class="inline-flex items-center gap-1.5"><input type="checkbox" wire:model="edit_direct_permissions" value="{{ $perm }}" class="h-3.5 w-3.5 rounded"> {{ $perm }}</label>
+                                                    @endif
+                                                @endforeach
+                                            </div>
+                                        @endif
+                                        <div class="rounded-xl border border-brand-200 bg-white p-3 space-y-2 text-xs">
+                                            <div class="font-bold text-brand-950">Categorías asignadas (Coordinador de Área / Categoría)</div>
+                                            @if($categories->isEmpty())
+                                                <p class="text-amber-900">Aún no existen categorías académicas. Cree una aquí mismo o desde <a href="{{ route('academico') }}" class="font-bold underline">Académico → Categorías</a>:</p>
+                                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                                    <input wire:model="quick_cat_code" type="text" class="cecap-input !min-h-9 !py-1 text-xs" placeholder="Código (ej. CAT-GASTRO)">
+                                                    <input wire:model="quick_cat_name" type="text" class="cecap-input !min-h-9 !py-1 text-xs" placeholder="Nombre categoría">
+                                                    <button type="button" wire:click="createQuickCategory" class="cecap-btn-secondary !min-h-9 !py-1 text-xs">+ Crear categoría</button>
+                                                </div>
+                                            @else
+                                                <div class="flex flex-wrap gap-3">
+                                                    @foreach($categories as $cat)
+                                                        <label class="inline-flex items-center gap-1.5 cursor-pointer"><input type="checkbox" wire:model="edit_categories" value="{{ $cat->id }}" class="h-4 w-4 rounded text-brand-900"> {{ $cat->name }}</label>
+                                                    @endforeach
+                                                </div>
+                                            @endif
+                                        </div>
+                                        <div class="flex flex-wrap gap-2">
+                                            <button type="button" wire:click="saveUserAccess" class="cecap-btn-primary text-xs sm:text-sm">Guardar Accesos</button>
+                                            <button type="button" wire:click="cancelEditUserAccess" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        @endif
                     @endforeach
                 </tbody>
             </table>

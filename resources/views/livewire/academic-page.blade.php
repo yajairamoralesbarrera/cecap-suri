@@ -73,15 +73,10 @@
     {{-- TAB: CURSOS Y MATERIAS --}}
     @if($tab === 'courses')
         <div class="space-y-6">
-            @if(auth()->user()->hasEffectivePermission('academico.manage'))
-                <form wire:submit="createCourse" class="cecap-card space-y-4 {{ $editingCourseId ? 'border-brand-700 bg-brand-50/30' : '' }}">
+            @if(auth()->user()->hasEffectivePermission('academico.manage') && ! $editingCourseId)
+                <form wire:submit="createCourse" class="cecap-card space-y-4">
                     <div class="flex flex-wrap items-center justify-between gap-2">
-                        <h2 class="text-base font-bold text-brand-950">
-                            {{ $editingCourseId ? 'Editar Características del Curso (Cambio Auditado)' : 'Registrar Curso Corto / Programa / Curso Técnico' }}
-                        </h2>
-                        @if($editingCourseId)
-                            <button type="button" wire:click="cancelEditCourse" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar Edición</button>
-                        @endif
+                        <h2 class="text-base font-bold text-brand-950">Registrar Curso Corto / Programa / Curso Técnico</h2>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
@@ -153,7 +148,7 @@
                         </div>
                     </div>
 
-                    @if($course_program_type === 'curso_tecnico' && ! $editingCourseId)
+                    @if($course_program_type === 'curso_tecnico')
                         <div class="rounded-xl border border-amber-300 bg-amber-50/70 p-4 space-y-3">
                             <div class="flex flex-wrap items-center justify-between gap-2">
                                 <div>
@@ -199,10 +194,7 @@
                     @endif
 
                     <div class="flex flex-wrap gap-2">
-                        <button type="submit" class="cecap-btn-primary">{{ $editingCourseId ? 'Guardar Cambios del Curso' : 'Guardar Curso' }}</button>
-                        @if($editingCourseId)
-                            <button type="button" wire:click="cancelEditCourse" class="cecap-btn-secondary">Cancelar</button>
-                        @endif
+                        <button type="submit" class="cecap-btn-primary">Guardar Curso</button>
                     </div>
                 </form>
             @endif
@@ -224,7 +216,7 @@
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @forelse($courses as $c)
-                            <tr wire:key="course-row-{{ $c->id }}" class="{{ ($managingCourse && $managingCourse->id === $c->id) ? 'bg-slate-50/80' : '' }}">
+                            <tr wire:key="course-row-{{ $c->id }}" class="{{ ($editingCourseId === $c->id || ($managingCourse && $managingCourse->id === $c->id)) ? 'bg-slate-50/80' : '' }}">
                                 <td class="py-2.5 pr-3 font-mono text-xs font-bold">{{ $c->code }}</td>
                                 <td class="py-2.5 pr-3 font-semibold text-slate-900">
                                     {{ $c->name }}
@@ -233,7 +225,9 @@
                                 <td class="py-2.5 pr-3"><span class="cecap-badge bg-brand-100 text-brand-900">{{ $c->program_type_label }}</span></td>
                                 <td class="py-2.5 pr-3 text-xs">{{ $educationLevels[$c->required_education_level] ?? $c->required_education_level }}</td>
                                 <td class="py-2.5 pr-3 font-semibold">{{ $c->default_max_capacity }}</td>
-                                <td class="py-2.5 pr-3 text-xs">{{ implode(', ', $c->required_documents ?? []) }}</td>
+                                <td class="py-2.5 pr-3 text-xs">
+                                    {{ collect($c->required_documents ?? [])->map(fn ($dk) => $documentTypes[$dk] ?? $dk)->implode(', ') }}
+                                </td>
                                 <td class="py-2.5 pr-3 text-xs">
                                     @if($c->subjects->isNotEmpty())
                                         <div class="font-semibold text-slate-800">{{ $c->subjects->count() }} materia(s)</div>
@@ -254,6 +248,99 @@
                                     @endif
                                 </td>
                             </tr>
+                            @if($editingCourseId === $c->id)
+                                <tr wire:key="course-edit-{{ $c->id }}">
+                                    <td colspan="8" class="py-3 px-1">
+                                        <form wire:submit="createCourse" class="rounded-2xl border-2 border-brand-700 bg-brand-50/60 p-4 space-y-4">
+                                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                                <h3 class="text-sm sm:text-base font-bold text-brand-950">Editar Características del Curso {{ $c->code }} (Cambio Auditado)</h3>
+                                                <button type="button" wire:click="cancelEditCourse" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar Edición</button>
+                                            </div>
+                                            @if($errors->any())
+                                                <div class="rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+                                                    <ul class="list-disc pl-4 space-y-0.5">
+                                                        @foreach($errors->all() as $error)
+                                                            <li>{{ $error }}</li>
+                                                        @endforeach
+                                                    </ul>
+                                                </div>
+                                            @endif
+                                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Categoría *</label>
+                                                    <select wire:model="course_category_id" required class="cecap-input">
+                                                        <option value="">-- Seleccione --</option>
+                                                        @foreach($categories as $cat)
+                                                            <option value="{{ $cat->id }}">{{ $cat->name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Código del Curso *</label>
+                                                    <input wire:model="course_code" type="text" required class="cecap-input">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Tipo de Programa *</label>
+                                                    <select wire:model.live="course_program_type" class="cecap-input">
+                                                        <option value="curso_corto">Curso Corto</option>
+                                                        <option value="programa">Programa</option>
+                                                        <option value="curso_tecnico">Curso Técnico (exige materias + atestados)</option>
+                                                    </select>
+                                                </div>
+                                                <div class="md:col-span-2">
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Nombre Oficial *</label>
+                                                    <input wire:model="course_name" type="text" required class="cecap-input">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Nivel Académico Previo Requerido *</label>
+                                                    <select wire:model="course_education_level" class="cecap-input">
+                                                        @foreach($educationLevels as $code => $label)
+                                                            <option value="{{ $code }}">{{ $label }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Capacidad Máxima por Defecto *</label>
+                                                    <input wire:model="course_default_max_capacity" type="number" min="1" required class="cecap-input">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Horas Lectivas / Meses</label>
+                                                    <div class="grid grid-cols-2 gap-2">
+                                                        <input wire:model="course_duration_hours" type="number" min="1" class="cecap-input" placeholder="Horas">
+                                                        <input wire:model="course_duration_months" type="number" min="1" class="cecap-input" placeholder="Meses">
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Matrícula / Mensualidad (CRC)</label>
+                                                    <div class="grid grid-cols-2 gap-2">
+                                                        <input wire:model="course_enrollment_fee" type="number" step="0.01" min="0" class="cecap-input" placeholder="Matrícula">
+                                                        <input wire:model="course_monthly_fee" type="number" step="0.01" min="0" class="cecap-input" placeholder="Mensualidad">
+                                                    </div>
+                                                </div>
+                                                <div class="md:col-span-3">
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Descripción / Perfil del Curso</label>
+                                                    <textarea wire:model="course_description" rows="2" class="cecap-input"></textarea>
+                                                </div>
+                                            </div>
+                                            <div class="rounded-xl bg-white p-3 border border-slate-200 space-y-2">
+                                                <div class="text-xs font-semibold text-slate-800">Checklist Mínimo de Documentos Requeridos</div>
+                                                <div class="flex flex-wrap gap-4 text-xs sm:text-sm">
+                                                    @foreach(['cedula_dimex', 'atestado_academico'] as $docKey)
+                                                        <label class="inline-flex items-center gap-2 cursor-pointer">
+                                                            <input type="checkbox" wire:model="course_required_documents" value="{{ $docKey }}" class="h-4 w-4 rounded text-brand-900">
+                                                            <span>{{ $documentTypes[$docKey] ?? $docKey }}</span>
+                                                        </label>
+                                                    @endforeach
+                                                </div>
+                                            </div>
+                                            <div class="flex flex-wrap gap-2">
+                                                <button type="submit" class="cecap-btn-primary text-xs sm:text-sm">Guardar Cambios del Curso</button>
+                                                <button type="button" wire:click="cancelEditCourse" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
+                                            </div>
+                                        </form>
+                                    </td>
+                                </tr>
+                            @endif
                             @if($managingCourse && $managingCourse->id === $c->id)
                                 <tr wire:key="course-subjects-{{ $c->id }}">
                                     <td colspan="8" class="py-3 px-1">
