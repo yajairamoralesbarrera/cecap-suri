@@ -1212,6 +1212,25 @@ it('allows re-enrollment in the same course/program/subject when previously unap
     expect($dianaOnline->status)->toBe('confirmada');
     expect($dianaOnline->reenrollment_authorized)->toBeTrue();
     expect($dianaOnline->reenrollment_reason)->toBe('Curso anteriormente sin aprobar — Materia Contabilidad Básica');
+
+    // 5. Botón Editar inline en Solicitudes y Matrículas Recientes (actualiza datos y observaciones manteniendo el mismo código MAT-...)
+    $originalCode = $dianaOnline->enrollment_code;
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->call('startEditEnrollment', $dianaOnline->id)
+        ->assertSet('editingEnrollmentId', $dianaOnline->id)
+        ->set('edit_enr_phone', '8899-7766')
+        ->set('edit_enr_notes', 'Teléfono actualizado en ventanilla')
+        ->set('edit_enr_reason', 'Corrección de teléfono solicitada por la alumna')
+        ->call('saveEnrollmentEdit')
+        ->assertHasNoErrors()
+        ->assertSet('editingEnrollmentId', null);
+
+    $dianaOnline->refresh();
+    expect($dianaOnline->enrollment_code)->toBe($originalCode);
+    expect($dianaOnline->notes)->toBe('Teléfono actualizado en ventanilla');
+    expect($diana->fresh()->phone)->toBe('8899-7766');
+    expect(AuditLog::where('event', 'enrollment.updated')->where('auditable_id', (string) $dianaOnline->id)->exists())->toBeTrue();
 });
 
 

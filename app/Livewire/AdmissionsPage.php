@@ -10,12 +10,15 @@ use App\Models\Enrollment;
 use App\Models\Picklist;
 use App\Models\RecordAttachment;
 use App\Models\Student;
+use App\Models\StudentLifecycleEvent;
 use App\Rules\ValidEmailDomain;
 use App\Rules\ValidIdentificationNumber;
 use App\Services\AttachmentService;
 use App\Services\AuditService;
 use App\Services\EnrollmentService;
+use App\Services\ScheduleConflictService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -151,6 +154,43 @@ class AdmissionsPage extends Component
     public string $reopen_attachment_doc_type = 'atestado_academico';
 
     public $reopen_attachment_file = null;
+
+    // Edición controlada inline de una solicitud/matrícula en Cola de Admisiones
+    public ?int $editingEnrollmentId = null;
+
+    public ?int $edit_enr_edition_id = null;
+
+    public string $edit_enr_identification_type = 'cedula_nacional';
+
+    public string $edit_enr_identification_number = '';
+
+    public string $edit_enr_first_name = '';
+
+    public string $edit_enr_last_name = '';
+
+    public string $edit_enr_second_last_name = '';
+
+    public string $edit_enr_email = '';
+
+    public string $edit_enr_phone = '';
+
+    public string $edit_enr_birth_date = '';
+
+    public string $edit_enr_education_level = 'bachillerato_secundaria';
+
+    public string $edit_enr_guardian_full_name = '';
+
+    public string $edit_enr_guardian_identification_number = '';
+
+    public string $edit_enr_guardian_relationship = 'Madre';
+
+    public string $edit_enr_guardian_phone = '';
+
+    public string $edit_enr_guardian_email = '';
+
+    public string $edit_enr_notes = '';
+
+    public string $edit_enr_reason = '';
 
     // Carga inline de adjuntos en Directorio de Alumnas
     public ?int $attachingStudentId = null;
@@ -694,6 +734,7 @@ class AdmissionsPage extends Component
         $this->rejectingEnrollmentId = null;
         $this->attachingEnrollmentId = null;
         $this->reopeningEnrollmentId = null;
+        $this->editingEnrollmentId = null;
         $this->confirmingEnrollmentId = $enr->id;
         $activeTypes = $enr->student?->attachments?->where('status', 'activo')->pluck('document_type')->all() ?? [];
         $this->confirm_docs = array_values(array_unique(array_merge($enr->submitted_documents ?? [], $activeTypes)));
@@ -729,6 +770,7 @@ class AdmissionsPage extends Component
         $this->confirmingEnrollmentId = null;
         $this->attachingEnrollmentId = null;
         $this->reopeningEnrollmentId = null;
+        $this->editingEnrollmentId = null;
         $this->rejectingEnrollmentId = $enr->id;
         $this->rejection_reason_code = '';
         $this->rejection_notes = '';
@@ -869,6 +911,7 @@ class AdmissionsPage extends Component
         $this->confirmingEnrollmentId = null;
         $this->rejectingEnrollmentId = null;
         $this->reopeningEnrollmentId = null;
+        $this->editingEnrollmentId = null;
         $this->attachingEnrollmentId = $enr->id;
         $missing = $enr->missingDocuments();
         $this->enr_attachment_doc_type = $missing[0] ?? 'atestado_academico';
@@ -931,6 +974,231 @@ class AdmissionsPage extends Component
         }
     }
 
+    public function startEditEnrollment(int $enrollmentId): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('admisiones.manage'), 403);
+        $enr = Enrollment::with(['student', 'edition.course'])->findOrFail($enrollmentId);
+        $student = $enr->student;
+
+        $this->confirmingEnrollmentId = null;
+        $this->rejectingEnrollmentId = null;
+        $this->attachingEnrollmentId = null;
+        $this->reopeningEnrollmentId = null;
+        $this->editingEnrollmentId = $enr->id;
+
+        $this->edit_enr_edition_id = $enr->course_edition_id;
+        $this->edit_enr_identification_type = (string) ($student?->identification_type ?: 'cedula_nacional');
+        $this->edit_enr_identification_number = (string) ($student?->identification_number ?? '');
+        $this->edit_enr_first_name = (string) ($student?->first_name ?? '');
+        $this->edit_enr_last_name = (string) ($student?->last_name ?? '');
+        $this->edit_enr_second_last_name = (string) ($student?->second_last_name ?? '');
+        $this->edit_enr_email = (string) ($student?->email ?? '');
+        $this->edit_enr_phone = (string) ($student?->phone ?? '');
+        $this->edit_enr_birth_date = $student?->birth_date?->toDateString() ?? '';
+        $this->edit_enr_education_level = (string) ($student?->education_level ?: 'bachillerato_secundaria');
+        $this->edit_enr_guardian_full_name = (string) ($student?->guardian_full_name ?? '');
+        $this->edit_enr_guardian_identification_number = (string) ($student?->guardian_identification_number ?? '');
+        $this->edit_enr_guardian_relationship = (string) ($student?->guardian_relationship ?: 'Madre');
+        $this->edit_enr_guardian_phone = (string) ($student?->guardian_phone ?? '');
+        $this->edit_enr_guardian_email = (string) ($student?->guardian_email ?? '');
+        $this->edit_enr_notes = (string) ($enr->notes ?? '');
+        $this->edit_enr_reason = '';
+        $this->resetValidation();
+        $this->feedback = null;
+    }
+
+    public function cancelEditEnrollment(): void
+    {
+        $this->editingEnrollmentId = null;
+        $this->edit_enr_reason = '';
+        $this->resetValidation();
+    }
+
+    public function saveEnrollmentEdit(ScheduleConflictService $scheduleConflicts): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('admisiones.manage'), 403);
+        if (! $this->editingEnrollmentId) {
+            return;
+        }
+
+        $enrollment = Enrollment::with(['student', 'edition.course'])->findOrFail($this->editingEnrollmentId);
+        $student = $enrollment->student;
+        $validIdTypes = array_keys(Picklist::optionsFor('id_type'));
+        $isMinor = Student::isBirthDateMinor($this->edit_enr_birth_date);
+
+        $rules = [
+            'edit_enr_edition_id' => ['required', 'integer', 'exists:course_editions,id'],
+            'edit_enr_identification_type' => ['required', 'string', 'max:40', Rule::in($validIdTypes)],
+            'edit_enr_identification_number' => [
+                'required',
+                'string',
+                'max:40',
+                new ValidIdentificationNumber($this->edit_enr_identification_type),
+                Rule::unique('students', 'identification_number')->ignore($student->id),
+            ],
+            'edit_enr_first_name' => ['required', 'string', 'max:100'],
+            'edit_enr_last_name' => ['required', 'string', 'max:100'],
+            'edit_enr_second_last_name' => ['nullable', 'string', 'max:100'],
+            'edit_enr_email' => ['required', 'email', 'max:255', new ValidEmailDomain()],
+            'edit_enr_phone' => ['required', 'string', 'max:30'],
+            'edit_enr_birth_date' => ['nullable', 'date', 'before:today'],
+            'edit_enr_education_level' => ['required', 'string', 'max:80'],
+            'edit_enr_notes' => ['nullable', 'string', 'max:1000'],
+            'edit_enr_reason' => ['required', 'string', 'min:4', 'max:500'],
+        ];
+
+        if ($isMinor) {
+            $rules['edit_enr_guardian_full_name'] = ['required', 'string', 'max:160'];
+            $rules['edit_enr_guardian_identification_number'] = ['required', 'string', 'max:40', new ValidIdentificationNumber()];
+            $rules['edit_enr_guardian_relationship'] = ['required', 'string', 'max:60'];
+            $rules['edit_enr_guardian_phone'] = ['required', 'string', 'max:30'];
+            $rules['edit_enr_guardian_email'] = ['nullable', 'email', 'max:255', new ValidEmailDomain()];
+        }
+
+        $this->validate($rules, [
+            'edit_enr_identification_type.in' => 'Seleccione un tipo de identificación válido.',
+            'edit_enr_reason.required' => 'Indique el motivo de la edición para conservar la trazabilidad en auditoría.',
+            'edit_enr_reason.min' => 'El motivo de la edición debe tener al menos 4 caracteres.',
+            'edit_enr_guardian_full_name.required' => 'Por ser menor de edad, debe indicar el nombre del representante legal.',
+            'edit_enr_guardian_identification_number.required' => 'Por ser menor de edad, debe indicar la identificación del representante legal.',
+            'edit_enr_guardian_phone.required' => 'Por ser menor de edad, debe indicar el teléfono del representante legal.',
+        ]);
+
+        // Evitar colisión con otra alumna usando el mismo número con distinto formato de guiones
+        $otherWithId = Student::findByIdentification($this->edit_enr_identification_number);
+        if ($otherWithId && (int) $otherWithId->id !== (int) $student->id) {
+            $this->addError('edit_enr_identification_number', sprintf(
+                'La identificación %s ya pertenece a otra alumna (%s).',
+                trim($this->edit_enr_identification_number),
+                $otherWithId->full_name
+            ));
+
+            return;
+        }
+
+        $targetEdition = CourseEdition::with('course')->findOrFail($this->edit_enr_edition_id);
+        $editionChanged = (int) $targetEdition->id !== (int) $enrollment->course_edition_id;
+
+        if ($editionChanged) {
+            $dup = $student->activeEnrollmentInCourse((int) $targetEdition->course_id, $enrollment->id);
+            if ($dup) {
+                $this->addError('edit_enr_edition_id', sprintf(
+                    'La alumna ya tiene otra inscripción activa en "%s" (%s).',
+                    $targetEdition->course?->name ?? 'ese curso',
+                    $dup->enrollment_code
+                ));
+
+                return;
+            }
+
+            if (in_array($enrollment->status, ['preinscrita', 'documentacion_pendiente', 'confirmada'], true)) {
+                try {
+                    $scheduleConflicts->assertStudentHasNoScheduleConflict($student, $targetEdition);
+                } catch (ValidationException $e) {
+                    $this->addError('edit_enr_edition_id', collect($e->errors())->flatten()->first());
+
+                    return;
+                }
+            }
+        }
+
+        $cleanReason = trim($this->edit_enr_reason);
+        $oldValues = [
+            'course_edition_id' => $enrollment->course_edition_id,
+            'notes' => $enrollment->notes,
+            'student_identification_type' => $student->identification_type,
+            'student_identification_number' => $student->identification_number,
+            'student_name' => $student->full_name,
+            'student_email' => $student->email,
+            'student_phone' => $student->phone,
+            'student_birth_date' => $student->birth_date?->toDateString(),
+            'student_education_level' => $student->education_level,
+        ];
+
+        DB::transaction(function () use ($enrollment, $student, $targetEdition, $editionChanged, $isMinor, $cleanReason, $oldValues): void {
+            $studentData = [
+                'identification_type' => $this->edit_enr_identification_type,
+                'identification_number' => trim($this->edit_enr_identification_number),
+                'first_name' => trim($this->edit_enr_first_name),
+                'last_name' => trim($this->edit_enr_last_name),
+                'second_last_name' => $this->edit_enr_second_last_name !== '' ? trim($this->edit_enr_second_last_name) : null,
+                'email' => strtolower(trim($this->edit_enr_email)),
+                'phone' => trim($this->edit_enr_phone),
+                'birth_date' => $this->edit_enr_birth_date !== '' ? $this->edit_enr_birth_date : $student->birth_date,
+                'education_level' => $this->edit_enr_education_level,
+                'updated_by' => Auth::id(),
+            ];
+
+            if ($isMinor || trim($this->edit_enr_guardian_full_name) !== '') {
+                $studentData['guardian_full_name'] = trim($this->edit_enr_guardian_full_name) ?: null;
+                $studentData['guardian_identification_number'] = trim($this->edit_enr_guardian_identification_number) ?: null;
+                $studentData['guardian_relationship'] = trim($this->edit_enr_guardian_relationship) ?: null;
+                $studentData['guardian_phone'] = trim($this->edit_enr_guardian_phone) ?: null;
+                $studentData['guardian_email'] = $this->edit_enr_guardian_email !== '' ? strtolower(trim($this->edit_enr_guardian_email)) : null;
+            }
+
+            $student->update($studentData);
+
+            $enrData = [
+                'notes' => trim($this->edit_enr_notes) !== '' ? trim($this->edit_enr_notes) : null,
+                'updated_by' => Auth::id(),
+            ];
+
+            if ($editionChanged) {
+                $requiredDocs = $targetEdition->course?->required_documents ?? ['cedula_dimex'];
+                $submitted = $enrollment->submitted_documents ?? [];
+                $docsComplete = count(array_diff($requiredDocs, $submitted)) === 0;
+                $enrData['course_edition_id'] = $targetEdition->id;
+                $enrData['required_documents_snapshot'] = array_values($requiredDocs);
+                $enrData['documents_complete'] = $docsComplete;
+                if (in_array($enrollment->status, ['preinscrita', 'documentacion_pendiente'], true)) {
+                    $enrData['status'] = $docsComplete ? 'preinscrita' : 'documentacion_pendiente';
+                }
+            }
+
+            $enrollment->update($enrData);
+
+            StudentLifecycleEvent::create([
+                'student_id' => $student->id,
+                'enrollment_id' => $enrollment->id,
+                'event_type' => 'solicitud_editada',
+                'from_status' => $enrollment->getOriginal('status'),
+                'to_status' => $enrollment->status,
+                'description' => sprintf('Solicitud %s editada desde Cola de Admisiones. Motivo: %s', $enrollment->enrollment_code, $cleanReason),
+                'metadata' => [
+                    'edition_changed' => $editionChanged,
+                    'new_edition_id' => $targetEdition->id,
+                ],
+                'recorded_by' => Auth::id(),
+                'created_at' => now(),
+            ]);
+
+            $student->refresh();
+            AuditService::log(
+                event: 'enrollment.updated',
+                module: 'admisiones',
+                auditable: $enrollment,
+                oldValues: $oldValues,
+                newValues: [
+                    'course_edition_id' => $enrollment->course_edition_id,
+                    'notes' => $enrollment->notes,
+                    'student_identification_type' => $student->identification_type,
+                    'student_identification_number' => $student->identification_number,
+                    'student_name' => $student->full_name,
+                    'student_email' => $student->email,
+                    'student_phone' => $student->phone,
+                    'student_birth_date' => $student->birth_date?->toDateString(),
+                    'student_education_level' => $student->education_level,
+                ],
+                reason: $cleanReason
+            );
+        });
+
+        $code = $enrollment->enrollment_code;
+        $this->cancelEditEnrollment();
+        $this->feedback = sprintf('Solicitud %s actualizada correctamente (cambio auditado).', $code);
+    }
+
     public function startReopenEnrollment(int $enrollmentId): void
     {
         abort_unless(Auth::user()->hasEffectivePermission('admisiones.manage'), 403);
@@ -938,6 +1206,7 @@ class AdmissionsPage extends Component
         $this->confirmingEnrollmentId = null;
         $this->rejectingEnrollmentId = null;
         $this->attachingEnrollmentId = null;
+        $this->editingEnrollmentId = null;
         $this->reopeningEnrollmentId = $enr->id;
         $this->reopen_reason = '';
         $this->reopen_authorize_overcapacity = false;
@@ -1156,6 +1425,8 @@ class AdmissionsPage extends Component
             'rejectingEnrollment' => $this->rejectingEnrollmentId ? Enrollment::with(['student', 'edition.course'])->find($this->rejectingEnrollmentId) : null,
             'attachingEnrollment' => $this->attachingEnrollmentId ? Enrollment::with(['student.attachments', 'edition.course'])->find($this->attachingEnrollmentId) : null,
             'reopeningEnrollment' => $this->reopeningEnrollmentId ? Enrollment::with(['student.attachments', 'edition.course'])->find($this->reopeningEnrollmentId) : null,
+            'editingEnrollment' => $this->editingEnrollmentId ? Enrollment::with(['student', 'edition.course'])->find($this->editingEnrollmentId) : null,
+            'editEnrIsMinor' => Student::isBirthDateMinor($this->edit_enr_birth_date),
             'attachingStudent' => $this->attachingStudentId ? Student::with('attachments')->find($this->attachingStudentId) : null,
             'rejectionReasons' => Picklist::optionsFor('enrollment_rejection_reason'),
             'fullCapacityDecisions' => Picklist::optionsFor('full_capacity_decision'),

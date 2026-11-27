@@ -70,7 +70,7 @@
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                     @forelse($enrollments as $enr)
-                        @php $enrPanelOpen = $confirmingEnrollmentId === $enr->id || $rejectingEnrollmentId === $enr->id || $attachingEnrollmentId === $enr->id || $reopeningEnrollmentId === $enr->id; @endphp
+                        @php $enrPanelOpen = $confirmingEnrollmentId === $enr->id || $rejectingEnrollmentId === $enr->id || $attachingEnrollmentId === $enr->id || $reopeningEnrollmentId === $enr->id || $editingEnrollmentId === $enr->id; @endphp
                         <tr wire:key="enr-row-{{ $enr->id }}" class="{{ $enrPanelOpen ? 'bg-slate-50/80' : '' }} border-b-0">
                             <td class="pt-2.5 pb-1.5 pr-3 font-mono text-xs font-bold">{{ $enr->enrollment_code }}<div class="text-[11px] font-normal text-slate-400">{{ $enr->source }}</div></td>
                             <td class="pt-2.5 pb-1.5 pr-3 font-semibold text-slate-900">{{ $enr->student?->full_name }}<div class="text-xs font-normal text-slate-500">{{ $enr->student?->identification_number }} · {{ $enr->student?->email }}</div></td>
@@ -117,6 +117,7 @@
                                         <button type="button" wire:click="startReopenEnrollment({{ $enr->id }})" class="inline-flex min-h-8 items-center justify-center rounded-xl border border-emerald-400 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 cursor-pointer">Reabrir</button>
                                     @endif
                                     @if(auth()->user()->hasEffectivePermission('admisiones.manage'))
+                                        <button type="button" wire:click="startEditEnrollment({{ $enr->id }})" class="cecap-btn-secondary !min-h-8 !px-3 !py-1 text-xs">Editar</button>
                                         <button type="button" wire:click="startAttachEnrollment({{ $enr->id }})" class="inline-flex min-h-8 items-center justify-center rounded-xl border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer">Adjuntos</button>
                                     @endif
                                     <button type="button"
@@ -128,6 +129,129 @@
                                 </div>
                             </td>
                         </tr>
+
+                        @if($editingEnrollment && $editingEnrollment->id === $enr->id)
+                            <tr wire:key="enr-edit-{{ $enr->id }}">
+                                <td colspan="5" class="py-3 px-1">
+                                    <form wire:submit="saveEnrollmentEdit" class="rounded-2xl border-2 border-brand-700 bg-brand-50/70 p-4 space-y-4">
+                                        <div class="flex flex-wrap items-center justify-between gap-2">
+                                            <div>
+                                                <h3 class="text-sm sm:text-base font-bold text-brand-950">Editar Solicitud {{ $editingEnrollment->enrollment_code }} — {{ $editingEnrollment->student?->full_name }}</h3>
+                                                <p class="text-xs text-slate-600">Actualiza datos de la solicitud, cohorte o expediente manteniendo el mismo número de solicitud (cambio auditado).</p>
+                                            </div>
+                                            <button type="button" wire:click="cancelEditEnrollment" class="cecap-btn-secondary !min-h-8 !px-3 !py-1 text-xs">Cancelar</button>
+                                        </div>
+
+                                        @if($errors->any())
+                                            <div class="rounded-xl border border-rose-300 bg-white px-3 py-2 text-xs font-medium text-rose-800">
+                                                <ul class="list-disc pl-4 space-y-0.5">
+                                                    @foreach($errors->all() as $error)
+                                                        <li>{{ $error }}</li>
+                                                    @endforeach
+                                                </ul>
+                                            </div>
+                                        @endif
+
+                                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                            <div class="sm:col-span-2 lg:col-span-3">
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Curso / Cohorte *</label>
+                                                <select wire:model="edit_enr_edition_id" required class="cecap-input">
+                                                    @foreach($queueEditions as $qEd)
+                                                        <option value="{{ $qEd->id }}">{{ $qEd->course?->name }} — {{ $qEd->name }} [{{ $qEd->code }}]</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Tipo de Identificación *</label>
+                                                <select wire:model.live="edit_enr_identification_type" class="cecap-input">
+                                                    @foreach($idTypes as $code => $label)
+                                                        <option value="{{ $code }}">{{ $label }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Documento de Identificación *</label>
+                                                <input wire:model="edit_enr_identification_number" type="text" required class="cecap-input" placeholder="{{ \App\Rules\ValidIdentificationNumber::placeholderFor($edit_enr_identification_type) }}">
+                                                <div class="mt-0.5 text-[11px] text-slate-500">{{ \App\Rules\ValidIdentificationNumber::hintFor($edit_enr_identification_type) }}</div>
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Fecha de Nacimiento</label>
+                                                <input wire:model.live="edit_enr_birth_date" type="date" max="{{ now()->subDay()->toDateString() }}" class="cecap-input">
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Nombre *</label>
+                                                <input wire:model="edit_enr_first_name" type="text" required class="cecap-input">
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Primer Apellido *</label>
+                                                <input wire:model="edit_enr_last_name" type="text" required class="cecap-input">
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Segundo Apellido</label>
+                                                <input wire:model="edit_enr_second_last_name" type="text" class="cecap-input">
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Correo Electrónico *</label>
+                                                <input wire:model="edit_enr_email" type="email" required class="cecap-input">
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Teléfono *</label>
+                                                <input wire:model="edit_enr_phone" type="tel" required class="cecap-input">
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Nivel Educativo *</label>
+                                                <select wire:model="edit_enr_education_level" class="cecap-input">
+                                                    @foreach($educationLevels as $code => $label)
+                                                        <option value="{{ $code }}">{{ $label }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                            <div class="sm:col-span-2 lg:col-span-3">
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Observaciones de la Solicitud</label>
+                                                <input wire:model="edit_enr_notes" type="text" class="cecap-input" placeholder="Observaciones administrativas opcionales">
+                                            </div>
+                                        </div>
+
+                                        @if($editEnrIsMinor)
+                                            <div class="rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-2.5">
+                                                <div class="text-xs font-bold text-amber-950">Datos del Representante Legal (Menor de edad) *</div>
+                                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                                    <div>
+                                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Nombre completo *</label>
+                                                        <input wire:model="edit_enr_guardian_full_name" type="text" required class="cecap-input">
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Cédula / DIMEX *</label>
+                                                        <input wire:model="edit_enr_guardian_identification_number" type="text" required class="cecap-input">
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Parentesco *</label>
+                                                        <input wire:model="edit_enr_guardian_relationship" type="text" required class="cecap-input">
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Teléfono *</label>
+                                                        <input wire:model="edit_enr_guardian_phone" type="tel" required class="cecap-input">
+                                                    </div>
+                                                    <div class="sm:col-span-2">
+                                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Correo electrónico (opcional)</label>
+                                                        <input wire:model="edit_enr_guardian_email" type="email" class="cecap-input">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        @endif
+
+                                        <div class="rounded-xl border border-amber-300 bg-amber-50/80 p-3 space-y-2">
+                                            <label class="block text-xs font-semibold text-amber-950">Motivo de la Edición (Obligatorio para Auditoría) *</label>
+                                            <input wire:model="edit_enr_reason" type="text" required class="cecap-input" placeholder="Ej. Corrección de correo / cambio de cohorte solicitado por la alumna">
+                                            <div class="flex flex-wrap gap-2 pt-1">
+                                                <button type="submit" class="cecap-btn-primary text-xs sm:text-sm">Guardar Cambios Auditados</button>
+                                                <button type="button" wire:click="cancelEditEnrollment" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
+                                            </div>
+                                        </div>
+                                    </form>
+                                </td>
+                            </tr>
+                        @endif
 
                         @if($confirmingEnrollment && $confirmingEnrollment->id === $enr->id)
                             <tr wire:key="enr-confirm-{{ $enr->id }}">
