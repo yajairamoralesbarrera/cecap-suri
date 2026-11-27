@@ -120,4 +120,28 @@ class AttachmentService
 
         return $attachment;
     }
+
+    public function restore(RecordAttachment $attachment, string $reason): RecordAttachment
+    {
+        $old = ['status' => $attachment->status, 'is_current' => $attachment->is_current];
+
+        $attachment->update([
+            'status' => 'activo',
+            'is_current' => true,
+            'archived_by' => null,
+            'archived_at' => null,
+            'notes' => trim(($attachment->notes ? $attachment->notes."\n" : '').'Restaurado: '.$reason),
+        ]);
+
+        AuditService::log(
+            event: 'attachment.restored',
+            module: 'documentos',
+            auditable: $attachment,
+            oldValues: $old,
+            newValues: ['status' => 'activo', 'is_current' => true],
+            reason: $reason
+        );
+
+        return $attachment;
+    }
 }

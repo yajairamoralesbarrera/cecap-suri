@@ -145,6 +145,7 @@
 
         if (titleEl) titleEl.textContent = title || 'Documento Oficial CeCap';
         if (downloadBtn) {
+            downloadBtn.textContent = 'Descargar PDF';
             downloadBtn.setAttribute('href', appBase + dlRel);
             downloadBtn.dataset.pdfDownloadUrl = dlRel;
             downloadBtn.dataset.pdfFilename = ((title || 'Documento-CeCap').replace(/[^\w\-]+/g, '-')) + '.pdf';
@@ -343,7 +344,19 @@
             return;
         }
 
-        const binaryLink = e.target.closest('a[href*="/adjuntos/"], a[href*="/direccion/exportar/"]');
+        const attachmentLink = e.target.closest('a[href*="/adjuntos/"]');
+        if (attachmentLink) {
+            e.preventDefault();
+            const label = (attachmentLink.textContent || 'Adjunto Privado').trim();
+            openPdfModal(attachmentLink.getAttribute('href'), label);
+            const dlBtn = document.getElementById('cecap-pdf-download');
+            if (dlBtn) {
+                dlBtn.textContent = 'Descargar Archivo';
+            }
+            return;
+        }
+
+        const binaryLink = e.target.closest('a[href*="/direccion/exportar/"]');
         if (binaryLink) {
             e.preventDefault();
             downloadViaBlob(binaryLink.getAttribute('href'), '', binaryLink);

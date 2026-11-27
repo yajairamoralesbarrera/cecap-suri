@@ -124,6 +124,8 @@ class AdmissionsPage extends Component
 
     public string $student_attachment_notes = '';
 
+    public ?int $showingArchivedStudentId = null;
+
     // Decisión del funcionario en matrícula presencial (cupo disponible o cupo máximo alcanzado)
     public string $presencial_action = 'inscribir'; // inscribir | lista_espera | rechazar
 
@@ -509,7 +511,20 @@ class AdmissionsPage extends Component
         abort_unless(Auth::user()->hasEffectivePermission('admisiones.manage'), 403);
         $att = RecordAttachment::findOrFail($attachmentId);
         $attachmentService->archive($att, 'Archivado desde Admisiones sin borrado físico');
-        $this->feedback = 'Adjunto archivado de forma segura (sin borrado físico).';
+        $this->feedback = 'Adjunto archivado de forma segura (sin borrado físico). Puede verlo o restaurarlo desde "Ver archivado(s) / historial".';
+    }
+
+    public function toggleStudentArchivedAttachments(int $studentId): void
+    {
+        $this->showingArchivedStudentId = $this->showingArchivedStudentId === $studentId ? null : $studentId;
+    }
+
+    public function restoreAttachment(int $attachmentId, AttachmentService $attachmentService): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('admisiones.manage'), 403);
+        $att = RecordAttachment::findOrFail($attachmentId);
+        $attachmentService->restore($att, 'Restaurado desde Directorio de Alumnas');
+        $this->feedback = sprintf('Adjunto %s (v%d) restaurado nuevamente a estado ACTIVO.', $att->document_type_label, $att->version);
     }
 
     public function startAttachEnrollment(int $enrollmentId): void

@@ -672,15 +672,39 @@
                             <td class="py-2.5 pr-3 font-mono text-xs font-bold">{{ $st->student_code }}</td>
                             <td class="py-2.5 pr-3 font-semibold">{{ $st->full_name }}<div class="text-xs text-slate-500">{{ $st->identification_number }}</div></td>
                             <td class="py-2.5 pr-3 text-xs">{{ $st->email }}<div>{{ $st->phone }}</div></td>
-                            <td class="py-2.5 pr-3 text-xs">
-                                @forelse($st->attachments->where('status', 'activo') as $att)
+                            <td class="py-2.5 pr-3 text-xs space-y-1">
+                                @php
+                                    $activeStudentAtts = $st->attachments->where('status', 'activo');
+                                    $archivedStudentAtts = $st->attachments->where('status', '!=', 'activo');
+                                @endphp
+                                @forelse($activeStudentAtts as $att)
                                     <div class="flex items-center gap-2">
-                                        <a href="{{ route('attachments.download', $att->uuid) }}" class="text-brand-800 underline">{{ $att->document_type_label }} v{{ $att->version }}</a>
+                                        <a href="{{ route('attachments.download', $att->uuid) }}" class="text-brand-800 underline font-medium">{{ $att->document_type_label }} v{{ $att->version }}</a>
                                         <button type="button" wire:click="archiveAttachment({{ $att->id }})" class="text-[11px] text-amber-700 hover:underline cursor-pointer">Archivar</button>
                                     </div>
                                 @empty
-                                    <span class="text-slate-400">Sin adjuntos</span>
+                                    <span class="text-slate-400">Sin adjuntos vigentes</span>
                                 @endforelse
+
+                                @if($archivedStudentAtts->isNotEmpty())
+                                    <div class="pt-0.5">
+                                        <button type="button" wire:click="toggleStudentArchivedAttachments({{ $st->id }})" class="text-[11px] font-semibold text-slate-600 hover:text-brand-800 underline cursor-pointer">
+                                            {{ $showingArchivedStudentId === $st->id ? 'Ocultar historial' : 'Ver '.$archivedStudentAtts->count().' archivado(s) / historial' }}
+                                        </button>
+                                    </div>
+                                    @if($showingArchivedStudentId === $st->id)
+                                        <div class="mt-1 rounded-lg border border-slate-200 bg-slate-50 p-2 space-y-1">
+                                            @foreach($archivedStudentAtts as $arch)
+                                                <div class="flex flex-wrap items-center gap-2 text-[11px]">
+                                                    <a href="{{ route('attachments.download', $arch->uuid) }}" class="text-slate-700 underline">{{ $arch->document_type_label }} v{{ $arch->version }} ({{ $arch->status }})</a>
+                                                    @if(auth()->user()->hasEffectivePermission('admisiones.manage'))
+                                                        <button type="button" wire:click="restoreAttachment({{ $arch->id }})" class="font-semibold text-emerald-700 hover:underline cursor-pointer">Restaurar</button>
+                                                    @endif
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    @endif
+                                @endif
                             </td>
                             <td class="py-2.5">
                                 <div class="flex flex-wrap gap-1.5">

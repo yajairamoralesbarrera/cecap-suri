@@ -253,7 +253,32 @@ it('stores private attachments with SHA-256 versioning and protected download', 
     expect($v2->version)->toBe(2);
     expect(strlen($v2->sha256))->toBe(64);
 
-    $this->get('/adjuntos/'.$v2->uuid)->assertOk();
+    // Vista previa HTML (evita volcado binario en el visor) y descarga binaria segura con ?descargar=1
+    $this->get('/adjuntos/'.$v2->uuid.'?vista=html')
+        ->assertOk()
+        ->assertSee('data:application/pdf;base64,')
+        ->assertSee('cedula_v2.pdf');
+
+    $this->withHeaders(['Accept' => 'text/html'])
+        ->get('/adjuntos/'.$v2->uuid)
+        ->assertOk()
+        ->assertSee('cedula_v2.pdf');
+
+    $this->get('/adjuntos/'.$v2->uuid.'?descargar=1')
+        ->assertOk()
+        ->assertHeader('content-type', 'application/pdf');
+
+    // Archivar y restaurar adjunto sin borrado físico desde Directorio de Alumnas
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->set('tab', 'students')
+        ->call('archiveAttachment', $v2->id)
+        ->call('toggleStudentArchivedAttachments', $student->id)
+        ->assertSee('Restaurar')
+        ->call('restoreAttachment', $v2->id);
+
+    expect($v2->fresh()->status)->toBe('activo');
+    expect(AuditLog::where('event', 'attachment.restored')->where('auditable_id', (string) $v2->id)->exists())->toBeTrue();
 });
 
 it('routes full editions to online waitlist on /inscripcion, enforces presencial full-capacity picklist decisions, and supports audited rejection with seat release', function () {
