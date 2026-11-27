@@ -103,12 +103,13 @@ class PublicEnrollmentPage extends Component
 
     public $pending_file_atestado = null;
 
-    // Retomar carga de adjuntos faltantes para solicitantes que regresan posteriormente
+    // Retomar carga de adjuntos faltantes para solicitantes que regresan posteriormente (búsqueda solo por cédula)
     public bool $showResumeLookup = false;
 
     public string $lookup_identification = '';
 
-    public string $lookup_enrollment_code = '';
+    /** @var list<array<string, mixed>> */
+    public array $lookupMatches = [];
 
     public function updatedGender(string $value): void
     {
@@ -406,6 +407,7 @@ class PublicEnrollmentPage extends Component
     public function toggleResumeLookup(): void
     {
         $this->showResumeLookup = ! $this->showResumeLookup;
+        $this->lookupMatches = [];
         $this->resetValidation();
     }
 
@@ -413,32 +415,71 @@ class PublicEnrollmentPage extends Component
     {
         $this->validate([
             'lookup_identification' => ['required', 'string', 'max:40'],
-            'lookup_enrollment_code' => ['required', 'string', 'max:40'],
         ], [
             'lookup_identification.required' => 'Ingrese su número de cédula o DIMEX.',
-            'lookup_enrollment_code.required' => 'Ingrese su código de solicitud (ej. MAT-2026-0001).',
         ]);
 
         $idNum = trim($this->lookup_identification);
-        $code = strtoupper(trim($this->lookup_enrollment_code));
+        $normalized = strtoupper((string) preg_replace('/[^0-9A-Za-z]/', '', $idNum));
 
-        $enrollment = Enrollment::with('student')
-            ->whereRaw('UPPER(enrollment_code) = ?', [$code])
-            ->whereHas('student', fn ($q) => $q->where('identification_number', $idNum))
-            ->first();
+        $enrollments = Enrollment::with(['student', 'edition.course'])
+            ->whereHas('student', function ($q) use ($idNum, $normalized): void {
+                $q->where('identification_number', $idNum);
+                if ($normalized !== '') {
+                    $q->orWhereRaw("UPPER(REGEXP_REPLACE(identification_number, '[^0-9A-Za-z]', '', 'g')) = ?", [$normalized]);
+                }
+            })
+            ->orderByDesc('id')
+            ->get();
 
-        if (! $enrollment) {
-            $this->addError('lookup_enrollment_code', 'No se encontró ninguna solicitud que coincida con esa cédula y código. Verifique los datos en su comprobante o Planilla PDF.');
+        if ($enrollments->isEmpty()) {
+            $this->lookupMatches = [];
+            $this->addError('lookup_identification', 'No se encontró ninguna solicitud registrada con esa cédula / DIMEX.');
 
             return;
         }
 
-        if ($enrollment->status === 'rechazada') {
-            $this->addError('lookup_enrollment_code', 'Esta solicitud se encuentra rechazada. Por favor acuda o comuníquese con Secretaría / Admisiones para presentar sus adjuntos y solicitar su reapertura.');
+        $nonRejected = $enrollments->where('status', '!=', 'rechazada')->values();
+        if ($nonRejected->isEmpty()) {
+            $this->lookupMatches = [];
+            $this->addError('lookup_identification', 'Su solicitud se encuentra rechazada. Por favor acuda o comuníquese con Secretaría / Admisiones para presentar sus adjuntos y solicitar su reapertura.');
 
             return;
         }
 
+        // Priorizar solicitudes que tienen documentos faltantes
+        $incomplete = $nonRejected->filter(fn (Enrollment $enr) => ! empty($enr->missingDocuments()))->values();
+        $candidates = $incomplete->isNotEmpty() ? $incomplete : $nonRejected;
+
+        if ($candidates->count() === 1) {
+            $this->loadFoundEnrollment($candidates->first());
+
+            return;
+        }
+
+        $this->lookupMatches = $candidates->map(fn (Enrollment $enr) => [
+            'id' => $enr->id,
+            'code' => $enr->enrollment_code,
+            'course' => $enr->edition?->course?->name ?? 'Curso',
+            'cohort' => $enr->edition?->name ?? 'Cohorte',
+            'status' => strtoupper(str_replace('_', ' ', $enr->status)),
+            'missing' => implode(', ', $enr->missingDocumentLabels()),
+        ])->all();
+    }
+
+    public function selectLookupEnrollment(int $enrollmentId): void
+    {
+        $allowedIds = array_column($this->lookupMatches, 'id');
+        if (! in_array($enrollmentId, $allowedIds, true)) {
+            return;
+        }
+
+        $enrollment = Enrollment::with(['student', 'edition.course'])->findOrFail($enrollmentId);
+        $this->loadFoundEnrollment($enrollment);
+    }
+
+    protected function loadFoundEnrollment(Enrollment $enrollment): void
+    {
         $settings = InstitutionSetting::current();
         $this->createdEnrollmentId = $enrollment->id;
         $this->successCode = $enrollment->enrollment_code;
@@ -448,6 +489,7 @@ class PublicEnrollmentPage extends Component
         $this->missingDocumentLabels = $enrollment->missingDocumentLabels();
         $this->showPendingUploadForm = ! empty($this->missingDocumentKeys);
         $this->showResumeLookup = false;
+        $this->lookupMatches = [];
         $this->uploadFeedback = empty($this->missingDocumentKeys)
             ? sprintf('Solicitud %s encontrada: su documentación ya se encuentra completa.', $enrollment->enrollment_code)
             : null;
@@ -469,7 +511,7 @@ class PublicEnrollmentPage extends Component
             'createdEnrollmentId', 'successCode', 'successStatus', 'signedPlanillaUrl',
             'provisionalExpiresAt', 'missingDocumentLabels', 'missingDocumentKeys',
             'showPendingUploadForm', 'uploadFeedback', 'pending_file_cedula', 'pending_file_atestado',
-            'showResumeLookup', 'lookup_identification', 'lookup_enrollment_code',
+            'showResumeLookup', 'lookup_identification', 'lookupMatches',
         ]);
         $this->gender = 'femenino';
         $this->genderBlocked = false;

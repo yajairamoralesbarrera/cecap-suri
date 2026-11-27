@@ -535,11 +535,10 @@ it('supports inline attachment uploads in /admisiones, audited reopening of reje
     expect($enr->status)->toBe('documentacion_pendiente');
     expect($enr->documents_complete)->toBeFalse();
 
-    // 2. Retomar solicitud en /inscripcion en una sesión nueva usando cédula + código de solicitud
+    // 2. Retomar solicitud en /inscripcion en una sesión nueva usando ÚNICAMENTE cédula (incluso sin guiones)
     Livewire::test(PublicEnrollmentPage::class)
         ->call('toggleResumeLookup')
-        ->set('lookup_identification', '1-9000-0001')
-        ->set('lookup_enrollment_code', $enr->enrollment_code)
+        ->set('lookup_identification', '190000001')
         ->call('resumePendingEnrollment')
         ->assertHasNoErrors()
         ->assertSet('createdEnrollmentId', $enr->id)

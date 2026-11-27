@@ -156,8 +156,8 @@
         <div class="rounded-2xl border border-amber-300 bg-amber-50/80 p-4 space-y-3">
             <div class="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                    <div class="text-sm font-bold text-amber-950">¿Ya te preinscribiste y te faltan documentos por subir?</div>
-                    <p class="text-xs text-amber-900">Ingresa tu cédula y tu código de solicitud para adjuntar los archivos faltantes sobre tu misma preinscripción sin duplicarla.</p>
+                    <div class="text-sm font-bold text-amber-950">¿Ya te preinscribiste y te faltan documentos o atestados por subir?</div>
+                    <p class="text-xs text-amber-900">Ingresa únicamente tu número de cédula o DIMEX para adjuntar los archivos faltantes sobre tu misma preinscripción sin duplicarla.</p>
                 </div>
                 <button type="button" wire:click="toggleResumeLookup" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">
                     {{ $showResumeLookup ? 'Ocultar' : 'Completar documentos faltantes' }}
@@ -166,21 +166,40 @@
 
             @if($showResumeLookup)
                 <form wire:submit="resumePendingEnrollment" class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end pt-2 border-t border-amber-200">
-                    <div>
+                    <div class="sm:col-span-2">
                         <label class="block text-xs font-semibold text-slate-700 mb-1">Número de Cédula / DIMEX *</label>
                         <input wire:model="lookup_identification" type="text" required class="cecap-input" placeholder="Ej. 1-1234-5678">
                     </div>
                     <div>
-                        <label class="block text-xs font-semibold text-slate-700 mb-1">Código de Solicitud *</label>
-                        <input wire:model="lookup_enrollment_code" type="text" required class="cecap-input font-mono uppercase" placeholder="Ej. MAT-2026-0001">
-                    </div>
-                    <div>
-                        <button type="submit" class="cecap-btn-primary w-full text-xs sm:text-sm">Buscar mi Solicitud</button>
+                        <button type="submit" class="cecap-btn-primary w-full text-xs sm:text-sm">Buscar por Cédula</button>
                     </div>
                 </form>
-                @error('lookup_enrollment_code')
+                @error('lookup_identification')
                     <div class="rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800">{{ $message }}</div>
                 @enderror
+
+                @if(! empty($lookupMatches))
+                    <div class="rounded-xl border border-amber-300 bg-white p-3 space-y-2">
+                        <div class="text-xs font-bold text-amber-950">Encontramos varias solicitudes asociadas a tu cédula. Selecciona a cuál deseas subir los documentos:</div>
+                        <div class="space-y-2">
+                            @foreach($lookupMatches as $match)
+                                <div wire:key="lookup-match-{{ $match['id'] }}" class="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs">
+                                    <div>
+                                        <span class="font-mono font-bold text-brand-950">{{ $match['code'] }}</span>
+                                        — <span class="font-semibold text-slate-800">{{ $match['course'] }}</span>
+                                        <span class="text-slate-500">({{ $match['cohort'] }})</span>
+                                        @if($match['missing'] !== '')
+                                            <div class="text-rose-700 font-medium">Faltante: {{ $match['missing'] }}</div>
+                                        @endif
+                                    </div>
+                                    <button type="button" wire:click="selectLookupEnrollment({{ $match['id'] }})" class="cecap-btn-primary !min-h-8 !px-3 !py-1 text-xs">
+                                        Seleccionar y Subir
+                                    </button>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                @endif
             @endif
         </div>
 
