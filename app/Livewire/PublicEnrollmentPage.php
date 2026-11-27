@@ -12,6 +12,7 @@ use App\Models\Picklist;
 use App\Models\Student;
 use App\Services\AttachmentService;
 use App\Services\EnrollmentService;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
@@ -110,6 +111,8 @@ class PublicEnrollmentPage extends Component
 
     /** @var list<array<string, mixed>> */
     public array $lookupMatches = [];
+
+    public bool $exitedForm = false;
 
     public function updatedGender(string $value): void
     {
@@ -519,6 +522,24 @@ class PublicEnrollmentPage extends Component
         $this->educationBlockedMessage = '';
         $this->isWaitlistMode = false;
         $this->waitlistNotice = '';
+        $this->exitedForm = false;
+    }
+
+    public function exitEnrollment(): mixed
+    {
+        if (Auth::check()) {
+            return $this->redirectRoute('panel', navigate: true);
+        }
+
+        $this->resetForm();
+        $this->exitedForm = true;
+
+        return null;
+    }
+
+    public function returnToForm(): void
+    {
+        $this->exitedForm = false;
     }
 
     public function render()

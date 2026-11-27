@@ -14,17 +14,36 @@
         </div>
     </div>
 
-    @if($successCode)
+    @if($exitedForm)
+        <div class="cecap-card border-brand-200 bg-white text-center py-10 px-6 space-y-4">
+            <span class="cecap-badge bg-brand-100 text-brand-900">SESIÓN DE INSCRIPCIÓN FINALIZADA</span>
+            <h2 class="text-xl font-bold text-brand-950">Has salido de la Inscripción en Línea</h2>
+            <p class="text-sm text-slate-600 max-w-xl mx-auto">
+                Gracias por tu interés en <strong>{{ $settings->institution_name }}</strong>. Por tu seguridad, los datos ingresados han sido limpiados de esta pantalla.
+            </p>
+            <p class="text-xs text-slate-500">
+                Horario de atención presencial: <strong>{{ $settings->attention_hours }}</strong> · Tel: {{ $settings->phone }}
+            </p>
+            <div class="flex flex-wrap justify-center gap-3 pt-2">
+                <button type="button" wire:click="returnToForm" class="cecap-btn-primary">Volver a Inscripción en Línea</button>
+                <a href="{{ route('login') }}" class="cecap-btn-secondary">Ingresar al Sistema</a>
+            </div>
+        </div>
+    @elseif($successCode)
         <div class="cecap-card {{ $successStatus === 'lista_espera' ? 'border-indigo-300 bg-indigo-50/70' : 'border-emerald-300 bg-emerald-50/70' }} space-y-4">
-            <div class="flex items-start justify-between gap-3">
-                <div>
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="space-y-2">
                     @if($successStatus === 'lista_espera')
                         <span class="cecap-badge bg-indigo-700 text-white">LISTA DE ESPERA EN LÍNEA</span>
                     @else
                         <span class="cecap-badge bg-emerald-700 text-white">PREINSCRIPCIÓN REGISTRADA</span>
                     @endif
-                    <h2 class="mt-2 text-xl font-bold {{ $successStatus === 'lista_espera' ? 'text-indigo-950' : 'text-emerald-950' }}">Código de Solicitud: {{ $successCode }}</h2>
-                    <p class="text-sm {{ $successStatus === 'lista_espera' ? 'text-indigo-900' : 'text-emerald-900' }} mt-1">
+                    <div class="rounded-xl border-2 {{ $successStatus === 'lista_espera' ? 'border-indigo-400 bg-white' : 'border-emerald-500 bg-white' }} px-4 py-3">
+                        <div class="text-xs font-bold uppercase tracking-wide text-slate-500">Su Número de Solicitud es:</div>
+                        <div class="mt-0.5 font-mono text-2xl sm:text-3xl font-extrabold {{ $successStatus === 'lista_espera' ? 'text-indigo-950' : 'text-emerald-900' }}">{{ $successCode }}</div>
+                        <p class="text-xs text-slate-600 mt-1">Anote o guarde este <strong>Número de Solicitud</strong> para presentarlo en las oficinas del Centro de Capacitación o consultar su trámite.</p>
+                    </div>
+                    <p class="text-sm {{ $successStatus === 'lista_espera' ? 'text-indigo-900' : 'text-emerald-900' }}">
                         Estado actual:
                         <strong>
                             {{ $successStatus === 'lista_espera' ? 'Lista de Espera en Línea (Cupo máximo alcanzado)' : ($successStatus === 'documentacion_pendiente' ? 'Documentación Pendiente' : 'Preinscrita (Provisional)') }}
@@ -36,7 +55,7 @@
 
             @if($successStatus === 'lista_espera')
                 <div class="rounded-xl border border-indigo-300 bg-white px-4 py-3 text-sm text-indigo-950">
-                    <strong>Importante (Lista de Espera):</strong> El grupo seleccionado ya completó su matrícula máxima. Su solicitud quedó registrada en orden de ingreso y Secretaría le contactará por correo o teléfono si se libera un cupo o se habilita una nueva cohorte.
+                    <strong>Importante (Lista de Espera — Solicitud N.º {{ $successCode }}):</strong> El grupo seleccionado ya completó su matrícula máxima. Su solicitud <strong>N.º {{ $successCode }}</strong> quedó registrada en orden de ingreso y Secretaría le contactará por correo o teléfono si se libera un cupo o se habilita una nueva cohorte.
                 </div>
             @endif
 
@@ -50,13 +69,13 @@
                 <div class="rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-950 space-y-3">
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="space-y-1">
-                            <div class="font-bold">Documentos faltantes por presentar:</div>
+                            <div class="font-bold">Documentos faltantes por presentar (Solicitud N.º {{ $successCode }}):</div>
                             <ul class="list-disc pl-5 space-y-0.5 font-medium">
                                 @foreach($missingDocumentLabels as $docLabel)
                                     <li>{{ $docLabel }}</li>
                                 @endforeach
                             </ul>
-                            <p class="text-xs text-rose-800 pt-1">Puede cargarlos ahora mismo en esta solicitud o presentarlos en Secretaría/Admisiones antes del <strong>{{ $provisionalExpiresAt }}</strong>.</p>
+                            <p class="text-xs text-rose-800 pt-1">Para su solicitud <strong>N.º {{ $successCode }}</strong>, puede cargarlos ahora mismo o presentarlos en Secretaría/Admisiones antes del <strong>{{ $provisionalExpiresAt }}</strong>.</p>
                         </div>
                         @if(! $showPendingUploadForm)
                             <button type="button" wire:click="openPendingUploadForm" class="cecap-btn-primary !min-h-10 text-xs shrink-0">
@@ -124,9 +143,9 @@
             @endif
 
             <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 space-y-1">
-                <div class="font-bold">Siguiente paso obligatorio (plazo de {{ $settings->online_enrollment_provisional_days }} días):</div>
+                <div class="font-bold">Siguiente paso obligatorio — Solicitud N.º {{ $successCode }} (plazo de {{ $settings->online_enrollment_provisional_days }} días):</div>
                 <p>{{ $settings->online_enrollment_notice }}</p>
-                <p class="text-xs font-semibold pt-1">Horario de atención: {{ $settings->attention_hours }}</p>
+                <p class="text-xs font-semibold pt-1">Indique su Número de Solicitud <strong>{{ $successCode }}</strong> al acudir a las oficinas · Horario de atención: {{ $settings->attention_hours }}</p>
             </div>
 
             <div class="flex flex-wrap gap-3">
@@ -158,6 +177,9 @@
                     </button>
                 @endif
                 <button type="button" wire:click="resetForm" class="cecap-btn-secondary">Nueva Preinscripción</button>
+                <button type="button" wire:click="exitEnrollment" class="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer">
+                    Salir
+                </button>
             </div>
         </div>
     @else
@@ -407,18 +429,23 @@
             </div>
 
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-slate-200 pt-4">
-                <p class="text-xs text-slate-500">Al enviar, se generará su Planilla de Inscripción PDF descargable e imprimible (enlace seguro válido por {{ $settings->online_enrollment_provisional_days }} días).</p>
-                <button type="submit"
-                        @disabled($genderBlocked || $educationBlocked)
-                        wire:loading.attr="disabled"
-                        wire:target="file_cedula,file_atestado,submit"
-                        class="cecap-btn-primary shrink-0">
-                    <span wire:loading.remove wire:target="file_cedula,file_atestado,submit">
-                        {{ $isWaitlistMode ? 'Registrarme en Lista de Espera' : 'Enviar Preinscripción Provisional' }}
-                    </span>
-                    <span wire:loading wire:target="file_cedula,file_atestado">Subiendo documentos...</span>
-                    <span wire:loading wire:target="submit">Enviando solicitud...</span>
-                </button>
+                <p class="text-xs text-slate-500">Al enviar, se indicará su Número de Solicitud y se generará su Planilla de Inscripción PDF descargable e imprimible (enlace seguro válido por {{ $settings->online_enrollment_provisional_days }} días).</p>
+                <div class="flex flex-wrap items-center gap-2 shrink-0">
+                    <button type="button" wire:click="exitEnrollment" class="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer">
+                        Salir
+                    </button>
+                    <button type="submit"
+                            @disabled($genderBlocked || $educationBlocked)
+                            wire:loading.attr="disabled"
+                            wire:target="file_cedula,file_atestado,submit"
+                            class="cecap-btn-primary shrink-0">
+                        <span wire:loading.remove wire:target="file_cedula,file_atestado,submit">
+                            {{ $isWaitlistMode ? 'Registrarme en Lista de Espera' : 'Enviar Preinscripción Provisional' }}
+                        </span>
+                        <span wire:loading wire:target="file_cedula,file_atestado">Subiendo documentos...</span>
+                        <span wire:loading wire:target="submit">Enviando solicitud...</span>
+                    </button>
+                </div>
             </div>
         </form>
     @endif
