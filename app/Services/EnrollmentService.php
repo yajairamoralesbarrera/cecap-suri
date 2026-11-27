@@ -94,6 +94,66 @@ class EnrollmentService
         });
     }
 
+    /**
+     * Adjunta documentos faltantes a una preinscripción en línea existente (sin duplicar matrícula).
+     *
+     * @param  list<string>  $newlySubmittedDocuments
+     */
+    public function attachOnlinePendingDocuments(Enrollment $enrollment, array $newlySubmittedDocuments): Enrollment
+    {
+        if ($enrollment->source !== 'en_linea' || ! in_array($enrollment->status, ['documentacion_pendiente', 'preinscrita'], true)) {
+            throw ValidationException::withMessages([
+                'documents' => 'Esta solicitud ya no admite carga pública de documentos.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($enrollment, $newlySubmittedDocuments): Enrollment {
+            $oldStatus = $enrollment->status;
+            $requiredDocs = $enrollment->required_documents_snapshot ?? ['cedula_dimex'];
+            $mergedSubmitted = array_values(array_unique(array_merge(
+                $enrollment->submitted_documents ?? [],
+                $newlySubmittedDocuments
+            )));
+            $missing = array_values(array_diff($requiredDocs, $mergedSubmitted));
+            $docsComplete = count($missing) === 0;
+            $newStatus = $docsComplete ? 'preinscrita' : 'documentacion_pendiente';
+
+            $enrollment->update([
+                'submitted_documents' => $mergedSubmitted,
+                'documents_complete' => $docsComplete,
+                'status' => $newStatus,
+                'updated_by' => Auth::id(),
+            ]);
+
+            StudentLifecycleEvent::create([
+                'student_id' => $enrollment->student_id,
+                'enrollment_id' => $enrollment->id,
+                'event_type' => $docsComplete ? 'documentacion_completada_en_linea' : 'documento_adjuntado_en_linea',
+                'from_status' => $oldStatus,
+                'to_status' => $newStatus,
+                'description' => $docsComplete
+                    ? 'Documentación faltante cargada en línea; solicitud actualizada a Preinscrita (Provisional).'
+                    : 'Documento(s) adicional(es) cargados en línea; aún quedan requisitos pendientes.',
+                'metadata' => [
+                    'added_documents' => array_values($newlySubmittedDocuments),
+                    'missing_documents' => $missing,
+                ],
+                'recorded_by' => Auth::id(),
+                'created_at' => now(),
+            ]);
+
+            AuditService::log(
+                event: 'enrollment.online_documents_uploaded',
+                module: 'admisiones',
+                auditable: $enrollment,
+                oldValues: ['status' => $oldStatus, 'submitted_documents' => $enrollment->getOriginal('submitted_documents')],
+                newValues: ['status' => $newStatus, 'submitted_documents' => $mergedSubmitted, 'documents_complete' => $docsComplete]
+            );
+
+            return $enrollment->fresh();
+        });
+    }
+
     public function createPresencialEnrollment(
         Student $student,
         CourseEdition $edition,

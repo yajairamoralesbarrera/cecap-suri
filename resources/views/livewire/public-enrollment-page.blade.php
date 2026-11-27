@@ -27,15 +27,69 @@
                 </div>
             </div>
 
+            @if($uploadFeedback)
+                <div class="rounded-xl border border-emerald-300 bg-white px-4 py-3 text-sm font-semibold text-emerald-900">
+                    {{ $uploadFeedback }}
+                </div>
+            @endif
+
             @if(! empty($missingDocumentLabels))
-                <div class="rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-950 space-y-2">
-                    <div class="font-bold">Documentos faltantes por presentar:</div>
-                    <ul class="list-disc pl-5 space-y-0.5 font-medium">
-                        @foreach($missingDocumentLabels as $docLabel)
-                            <li>{{ $docLabel }}</li>
-                        @endforeach
-                    </ul>
-                    <p class="text-xs text-rose-800">Debe presentar {{ count($missingDocumentLabels) === 1 ? 'este documento' : 'estos documentos' }} en Secretaría/Admisiones antes del <strong>{{ $provisionalExpiresAt }}</strong> para confirmar su matrícula.</p>
+                <div class="rounded-xl border border-rose-300 bg-rose-50 p-4 text-sm text-rose-950 space-y-3">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="space-y-1">
+                            <div class="font-bold">Documentos faltantes por presentar:</div>
+                            <ul class="list-disc pl-5 space-y-0.5 font-medium">
+                                @foreach($missingDocumentLabels as $docLabel)
+                                    <li>{{ $docLabel }}</li>
+                                @endforeach
+                            </ul>
+                            <p class="text-xs text-rose-800 pt-1">Puede cargarlos ahora mismo en esta solicitud o presentarlos en Secretaría/Admisiones antes del <strong>{{ $provisionalExpiresAt }}</strong>.</p>
+                        </div>
+                        @if(! $showPendingUploadForm)
+                            <button type="button" wire:click="openPendingUploadForm" class="cecap-btn-primary !min-h-10 text-xs shrink-0">
+                                Cargar documentos faltantes ahora
+                            </button>
+                        @endif
+                    </div>
+
+                    @if($showPendingUploadForm)
+                        <form wire:submit="uploadMissingDocuments" class="rounded-xl border border-rose-200 bg-white p-4 space-y-4 text-slate-900">
+                            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
+                                <div class="text-sm font-bold text-brand-950">Adjuntar documentos pendientes a la solicitud {{ $successCode }}</div>
+                                <button type="button" wire:click="closePendingUploadForm" class="cecap-btn-secondary !min-h-8 !px-3 text-xs">Cancelar</button>
+                            </div>
+
+                            @if($errors->any())
+                                <div class="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
+                                    <ul class="list-disc pl-4 space-y-1">
+                                        @foreach($errors->all() as $err)
+                                            <li>{{ $err }}</li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+                            @endif
+
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                @if(in_array('cedula_dimex', $missingDocumentKeys, true))
+                                    <div>
+                                        <label for="pending_file_cedula" class="block text-sm font-semibold text-slate-700 mb-1">Copia de Cédula / DIMEX (PDF/JPG/PNG/WebP)</label>
+                                        <input id="pending_file_cedula" wire:model="pending_file_cedula" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
+                                    </div>
+                                @endif
+                                @if(in_array('atestado_academico', $missingDocumentKeys, true))
+                                    <div>
+                                        <label for="pending_file_atestado" class="block text-sm font-semibold text-slate-700 mb-1">Atestados Académicos (PDF/JPG/PNG/WebP)</label>
+                                        <input id="pending_file_atestado" wire:model="pending_file_atestado" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
+                                    </div>
+                                @endif
+                            </div>
+
+                            <div class="flex flex-wrap gap-2">
+                                <button type="submit" class="cecap-btn-primary text-xs">Guardar Documentos en esta Solicitud</button>
+                                <button type="button" wire:click="closePendingUploadForm" class="cecap-btn-secondary text-xs">Volver al resumen</button>
+                            </div>
+                        </form>
+                    @endif
                 </div>
             @endif
 
@@ -59,6 +113,11 @@
                        class="cecap-btn-secondary">
                         Descargar Planilla PDF
                     </a>
+                @endif
+                @if(! empty($missingDocumentLabels) && ! $showPendingUploadForm)
+                    <button type="button" wire:click="openPendingUploadForm" class="cecap-btn-secondary">
+                        Cargar Atestados / Documentos Faltantes
+                    </button>
                 @endif
                 <button type="button" wire:click="resetForm" class="cecap-btn-secondary">Nueva Preinscripción</button>
             </div>

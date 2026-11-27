@@ -6,6 +6,7 @@ use App\Models\CourseEdition;
 use App\Models\CrCanton;
 use App\Models\CrDistrict;
 use App\Models\CrProvince;
+use App\Models\Enrollment;
 use App\Models\InstitutionSetting;
 use App\Models\Picklist;
 use App\Models\Student;
@@ -14,6 +15,7 @@ use App\Services\EnrollmentService;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 use Livewire\WithFileUploads;
@@ -72,6 +74,9 @@ class PublicEnrollmentPage extends Component
 
     public string $educationBlockedMessage = '';
 
+    #[Locked]
+    public ?int $createdEnrollmentId = null;
+
     public ?string $successCode = null;
 
     public ?string $successStatus = null;
@@ -82,6 +87,17 @@ class PublicEnrollmentPage extends Component
 
     /** @var list<string> */
     public array $missingDocumentLabels = [];
+
+    /** @var list<string> */
+    public array $missingDocumentKeys = [];
+
+    public bool $showPendingUploadForm = false;
+
+    public ?string $uploadFeedback = null;
+
+    public $pending_file_cedula = null;
+
+    public $pending_file_atestado = null;
 
     public function updatedGender(string $value): void
     {
@@ -265,16 +281,83 @@ class PublicEnrollmentPage extends Component
             return;
         }
 
+        $this->createdEnrollmentId = $enrollment->id;
         $this->successCode = $enrollment->enrollment_code;
         $this->successStatus = $enrollment->status;
         $this->provisionalExpiresAt = $enrollment->provisional_expires_at?->format('d/m/Y H:i');
+        $this->missingDocumentKeys = $enrollment->missingDocuments();
         $this->missingDocumentLabels = $enrollment->missingDocumentLabels();
+        $this->showPendingUploadForm = false;
+        $this->uploadFeedback = null;
         $this->signedPlanillaUrl = URL::temporarySignedRoute(
             'inscripcion.planilla.publica',
             now()->addDays(max(1, (int) $settings->online_enrollment_provisional_days)),
             ['enrollment' => $enrollment->id],
             absolute: false
         );
+    }
+
+    public function openPendingUploadForm(): void
+    {
+        $this->resetValidation();
+        $this->uploadFeedback = null;
+        $this->showPendingUploadForm = true;
+    }
+
+    public function closePendingUploadForm(): void
+    {
+        $this->resetValidation();
+        $this->reset(['pending_file_cedula', 'pending_file_atestado']);
+        $this->showPendingUploadForm = false;
+    }
+
+    public function uploadMissingDocuments(EnrollmentService $enrollmentService, AttachmentService $attachmentService): void
+    {
+        if (! $this->createdEnrollmentId) {
+            return;
+        }
+
+        $this->validate([
+            'pending_file_cedula' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+            'pending_file_atestado' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:10240'],
+        ]);
+
+        if (! $this->pending_file_cedula && ! $this->pending_file_atestado) {
+            $this->addError('pending_file_atestado', 'Seleccione al menos un documento (PDF, JPG, PNG o WebP) antes de guardar.');
+
+            return;
+        }
+
+        $enrollment = Enrollment::with('student')->findOrFail($this->createdEnrollmentId);
+        $addedDocs = [];
+
+        if ($this->pending_file_cedula) {
+            $attachmentService->store($enrollment->student, $this->pending_file_cedula, 'cedula_dimex', 'Cédula/DIMEX adjuntada posteriormente en línea');
+            $addedDocs[] = 'cedula_dimex';
+        }
+        if ($this->pending_file_atestado) {
+            $attachmentService->store($enrollment->student, $this->pending_file_atestado, 'atestado_academico', 'Atestado académico adjuntado posteriormente en línea');
+            $addedDocs[] = 'atestado_academico';
+        }
+
+        try {
+            $updated = $enrollmentService->attachOnlinePendingDocuments($enrollment, $addedDocs);
+        } catch (ValidationException $e) {
+            foreach ($e->errors() as $field => $messages) {
+                $this->addError($field, $messages[0]);
+            }
+
+            return;
+        }
+
+        $this->successStatus = $updated->status;
+        $this->missingDocumentKeys = $updated->missingDocuments();
+        $this->missingDocumentLabels = $updated->missingDocumentLabels();
+        $this->reset(['pending_file_cedula', 'pending_file_atestado']);
+        $this->showPendingUploadForm = false;
+        $this->uploadFeedback = $updated->documents_complete
+            ? sprintf('Documentos guardados en la solicitud %s. Su documentación está ahora completa (estado: Preinscrita Provisional) y su Planilla PDF se ha actualizado.', $updated->enrollment_code)
+            : sprintf('Documento(s) guardados en la solicitud %s. Aún quedan documentos pendientes indicados abajo.', $updated->enrollment_code);
     }
 
     public function resetForm(): void
@@ -284,8 +367,9 @@ class PublicEnrollmentPage extends Component
             'second_last_name', 'email', 'phone', 'birth_date', 'province_id',
             'canton_id', 'district_id', 'address_detail', 'emergency_contact_name',
             'emergency_contact_phone', 'notes', 'file_cedula', 'file_atestado',
-            'successCode', 'successStatus', 'signedPlanillaUrl', 'provisionalExpiresAt',
-            'missingDocumentLabels',
+            'createdEnrollmentId', 'successCode', 'successStatus', 'signedPlanillaUrl',
+            'provisionalExpiresAt', 'missingDocumentLabels', 'missingDocumentKeys',
+            'showPendingUploadForm', 'uploadFeedback', 'pending_file_cedula', 'pending_file_atestado',
         ]);
         $this->gender = 'femenino';
         $this->genderBlocked = false;

@@ -113,12 +113,31 @@ it('registers incomplete online pre-enrollment as documentacion_pendiente and se
     $signedUrl = $component->get('signedPlanillaUrl');
     expect($signedUrl)->toStartWith('/inscripcion/planilla/'.$enrollment->id);
 
-    // Debe funcionar incluso detrás de proxy reverso HTTPS con Host distinto
+    // Permitir regresar / cargar los documentos faltantes sobre la MISMA solicitud sin duplicarla
+    $component
+        ->call('openPendingUploadForm')
+        ->assertSet('showPendingUploadForm', true)
+        ->set('pending_file_cedula', UploadedFile::fake()->create('cedula.pdf', 120, 'application/pdf'))
+        ->set('pending_file_atestado', UploadedFile::fake()->create('atestado.pdf', 150, 'application/pdf'))
+        ->call('uploadMissingDocuments')
+        ->assertHasNoErrors()
+        ->assertSet('showPendingUploadForm', false)
+        ->assertSet('successStatus', 'preinscrita')
+        ->assertSet('missingDocumentLabels', []);
+
+    expect(Enrollment::count())->toBe(1);
+    $enrollment->refresh();
+    expect($enrollment->status)->toBe('preinscrita');
+    expect($enrollment->documents_complete)->toBeTrue();
+    expect($enrollment->missingDocuments())->toBe([]);
+    expect(AuditLog::where('event', 'enrollment.online_documents_uploaded')->where('auditable_id', (string) $enrollment->id)->exists())->toBeTrue();
+
+    // La Planilla PDF firmada debe funcionar incluso detrás de proxy reverso HTTPS con Host distinto
     $proxyHeaders = ['Host' => 'preview.cecap-proxy.test', 'X-Forwarded-Proto' => 'https'];
     $this->withHeaders($proxyHeaders)->get($signedUrl.'&vista=html')
         ->assertOk()
         ->assertSee($enrollment->enrollment_code)
-        ->assertSee('Atestados Académicos (Títulos / Notas)');
+        ->assertSee('[X] Atestados Académicos (Títulos / Notas)');
     $this->withHeaders($proxyHeaders)->get($signedUrl)
         ->assertOk()
         ->assertHeader('content-type', 'application/pdf');
