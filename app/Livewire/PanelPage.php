@@ -43,7 +43,7 @@ class PanelPage extends Component
             ->first();
 
         $stats = [
-            'students' => Student::count(),
+            'students' => Student::confirmedDirectory()->count(),
             'active_editions' => CourseEdition::whereIn('status', ['abierta', 'en_curso'])->count(),
             'pending_admissions' => Enrollment::whereIn('status', ['preinscrita', 'documentacion_pendiente'])->count(),
             'confirmed_enrollments' => Enrollment::whereIn('status', ['confirmada', 'en_curso'])->count(),

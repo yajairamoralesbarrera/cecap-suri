@@ -117,6 +117,14 @@ class Student extends Model
             ->sum(fn (FeeCharge $c) => max(0, (float) $c->net_amount - (float) $c->paid_amount));
     }
 
+    /** @var list<string> */
+    public const CONFIRMED_ENROLLMENT_STATUSES = ['confirmada', 'en_curso', 'egresada', 'graduada'];
+
+    public function scopeConfirmedDirectory($query)
+    {
+        return $query->whereHas('enrollments', fn ($q) => $q->whereIn('status', self::CONFIRMED_ENROLLMENT_STATUSES));
+    }
+
     public static function nextCode(): string
     {
         $year = now()->format('Y');

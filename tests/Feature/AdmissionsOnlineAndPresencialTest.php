@@ -719,6 +719,66 @@ it('rejects emails without valid TLD termination and redirects Salir on /inscrip
         ->assertRedirect('https://proyectosuri.org/');
 });
 
+it('shows students in Directorio de Alumnas only once they have a confirmed enrollment', function () {
+    $admin = User::where('email', 'superadmin@cecap.or.cr')->firstOrFail();
+    $cat = AcademicCategory::create(['code' => 'CAT-DIR', 'name' => 'Directorio', 'created_by' => $admin->id]);
+    $course = Course::create([
+        'academic_category_id' => $cat->id,
+        'code' => 'CUR-DIR-01',
+        'name' => 'Curso Directorio',
+        'program_type' => 'curso_corto',
+        'required_education_level' => 'primaria_completa',
+        'default_max_capacity' => 15,
+        'required_documents' => ['cedula_dimex'],
+        'created_by' => $admin->id,
+    ]);
+    $edition = CourseEdition::create([
+        'course_id' => $course->id,
+        'code' => 'COH-DIR-01',
+        'name' => 'Cohorte Directorio',
+        'shift_id' => AcademicShift::firstOrFail()->id,
+        'modality_id' => AcademicModality::firstOrFail()->id,
+        'start_date' => now()->addDays(5)->toDateString(),
+        'end_date' => now()->addMonths(2)->toDateString(),
+        'max_capacity' => 15,
+        'is_public_enrollment_open' => true,
+        'created_by' => $admin->id,
+    ]);
+
+    // 1. Preinscripción web (preinscrita) NO debe aparecer en Directorio de Alumnas
+    Livewire::test(PublicEnrollmentPage::class)
+        ->set('course_edition_id', $edition->id)
+        ->set('identification_number', '1-9800-0001')
+        ->set('first_name', 'Valeria')
+        ->set('last_name', 'Solís')
+        ->set('email', 'valeria.solis@correo.com')
+        ->set('phone', '8800-9801')
+        ->set('education_level', 'bachillerato_secundaria')
+        ->set('file_cedula', UploadedFile::fake()->create('cedula.pdf', 100, 'application/pdf'))
+        ->call('submit')
+        ->assertHasNoErrors();
+
+    $enrollment = Enrollment::firstOrFail();
+    expect($enrollment->status)->toBe('preinscrita');
+
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->call('setTab', 'students')
+        ->assertSee('Directorio de Alumnas (0)')
+        ->assertDontSee('Valeria Solís');
+
+    // 2. Al confirmar la matrícula, aparece automáticamente en Directorio de Alumnas
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->call('startConfirmEnrollment', $enrollment->id)
+        ->call('submitConfirmation')
+        ->assertHasNoErrors()
+        ->call('setTab', 'students')
+        ->assertSee('Directorio de Alumnas (1)')
+        ->assertSee('Valeria Solís');
+});
+
+
 
 
 

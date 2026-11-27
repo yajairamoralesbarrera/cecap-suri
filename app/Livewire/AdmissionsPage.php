@@ -786,7 +786,12 @@ class AdmissionsPage extends Component
     {
         return view('livewire.admissions-page', [
             'enrollments' => Enrollment::with(['student.attachments', 'edition.course'])->latest()->limit(60)->get(),
-            'students' => Student::with('attachments')->withCount('enrollments')->latest()->limit(60)->get(),
+            'students' => Student::confirmedDirectory()
+                ->with('attachments')
+                ->withCount(['enrollments' => fn ($q) => $q->whereIn('status', Student::CONFIRMED_ENROLLMENT_STATUSES)])
+                ->latest()
+                ->limit(60)
+                ->get(),
             'editions' => CourseEdition::with('course')->whereIn('status', ['abierta', 'planificada', 'en_curso'])->orderByDesc('id')->get(),
             'selectedEdition' => $this->course_edition_id ? CourseEdition::with('course')->find($this->course_edition_id) : null,
             'confirmingEnrollment' => $this->confirmingEnrollmentId ? Enrollment::with(['student', 'edition.course'])->find($this->confirmingEnrollmentId) : null,

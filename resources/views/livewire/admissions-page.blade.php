@@ -679,7 +679,10 @@
     {{-- TAB: DIRECTORIO ALUMNAS --}}
     @if($tab === 'students')
         <div class="cecap-card overflow-x-auto">
-            <h2 class="text-base font-bold text-slate-900 mb-3">Directorio de Alumnas y Adjuntos Privados</h2>
+            <div class="mb-3">
+                <h2 class="text-base font-bold text-slate-900">Directorio de Alumnas y Adjuntos Privados</h2>
+                <p class="text-xs text-slate-500 mt-0.5">Se actualiza únicamente con alumnas que tienen al menos una inscripción en estado <strong>Confirmada</strong> (o superior). Las preinscripciones, listas de espera y solicitudes rechazadas se gestionan en Cola de Admisiones.</p>
+            </div>
             <table class="w-full text-sm text-left">
                 <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
                     <tr><th class="py-2 pr-3">Código</th><th class="py-2 pr-3">Alumna</th><th class="py-2 pr-3">Contacto</th><th class="py-2 pr-3">Adjuntos</th><th class="py-2">Acciones</th></tr>
