@@ -1414,6 +1414,37 @@ class AcademicPage extends Component
             : sprintf('Edición %s ocultada de /inscripcion (sin borrado físico).', $edition->code);
     }
 
+    public function closeEdition(int $editionId): void
+    {
+        $this->authorizeManage();
+        $edition = CourseEdition::with('course')->findOrFail($editionId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $edition->course->academic_category_id, $allowedCategoryIds, true)) {
+            return;
+        }
+
+        $old = ['status' => $edition->status, 'is_public_enrollment_open' => $edition->is_public_enrollment_open];
+        $edition->update([
+            'status' => 'cancelada',
+            'is_public_enrollment_open' => false,
+        ]);
+
+        if ($this->editingEditionId === $edition->id) {
+            $this->editingEditionId = null;
+        }
+
+        AuditService::log(
+            event: 'academic.edition_closed',
+            module: 'academico',
+            auditable: $edition,
+            oldValues: $old,
+            newValues: ['status' => 'cancelada', 'is_public_enrollment_open' => false],
+            reason: 'Edición cerrada / retirada de oferta activa desde Académico'
+        );
+
+        $this->feedback = sprintf('Edición %s cerrada y retirada de matrícula en línea y presencial (historial preservado en auditoría).', $edition->code);
+    }
+
     public function createSchedule(ScheduleConflictService $conflictService): void
     {
         abort_unless(Auth::user()->hasEffectivePermission('academico.schedules.manage'), 403);
@@ -1523,6 +1554,7 @@ class AcademicPage extends Component
             ->with(['category', 'subjects'])
             ->orderByDesc('id');
         $editionsQuery = CourseEdition::query()
+            ->where('status', '!=', 'cancelada')
             ->whereHas('course', fn ($q) => $q->whereNull('archived_at'))
             ->with(['course.category', 'shift', 'modality', 'classroom', 'teacher', 'schedules'])
             ->orderByDesc('id');

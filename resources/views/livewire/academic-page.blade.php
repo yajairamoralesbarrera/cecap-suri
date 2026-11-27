@@ -216,7 +216,10 @@
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @forelse($courses as $c)
-                            @php $courseEnrolledCount = $c->totalEnrollmentsCount(); @endphp
+                            @php
+                                $courseEnrolledCount = $c->totalEnrollmentsCount();
+                                $courseActiveCount = $c->activeEnrollmentsCount();
+                            @endphp
                             <tr wire:key="course-row-{{ $c->id }}" class="{{ ($editingCourseId === $c->id || $duplicatingCourseId === $c->id || $closingCourseId === $c->id || $deletingCourseId === $c->id || ($managingCourse && $managingCourse->id === $c->id)) ? 'bg-slate-50/80' : '' }}">
                                 <td class="py-2.5 pr-3 font-mono text-xs font-bold">
                                     {{ $c->code }}
@@ -226,7 +229,7 @@
                                 </td>
                                 <td class="py-2.5 pr-3 font-semibold text-slate-900">
                                     {{ $c->name }}
-                                    <div class="text-xs text-slate-500">{{ $c->category?->name }} · {{ $courseEnrolledCount }} inscrita(s)</div>
+                                    <div class="text-xs text-slate-500">{{ $c->category?->name }} · {{ $courseActiveCount }} inscrita(s) activa(s)</div>
                                     @if($c->isClosed() && $c->closure_reason)
                                         <div class="text-[11px] text-amber-800 font-medium mt-0.5">Cierre: {{ $c->closure_reason }}</div>
                                     @endif
@@ -873,6 +876,9 @@
                                             <button type="button" wire:click="editEdition({{ $ed->id }})" class="cecap-btn-secondary !min-h-9 !px-2.5 text-xs">Editar</button>
                                             <button type="button" wire:click="toggleEditionPublicOpen({{ $ed->id }})" class="cecap-badge cursor-pointer {{ $ed->is_public_enrollment_open ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-200 text-slate-600' }}">
                                                 {{ $ed->is_public_enrollment_open ? 'En línea: Abierta' : 'En línea: Oculta' }}
+                                            </button>
+                                            <button type="button" wire:click="closeEdition({{ $ed->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-rose-300 bg-white px-2.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 cursor-pointer">
+                                                {{ $ed->activeEnrollmentsCount() === 0 ? 'Retirar' : 'Cerrar Edición' }}
                                             </button>
                                         </div>
                                     @endif

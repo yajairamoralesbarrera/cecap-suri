@@ -107,6 +107,14 @@ class Course extends Model
             ->count();
     }
 
+    public function activeEnrollmentsCount(): int
+    {
+        return Enrollment::query()
+            ->whereHas('edition', fn ($q) => $q->where('course_id', $this->id))
+            ->whereIn('status', ['confirmada', 'preinscrita', 'documentacion_pendiente'])
+            ->count();
+    }
+
     /**
      * Inscripciones activas o en espera asociadas a las ediciones de este curso que deben ser notificadas en un cierre institucional.
      */
