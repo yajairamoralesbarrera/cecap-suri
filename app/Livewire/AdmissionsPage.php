@@ -163,6 +163,12 @@ class AdmissionsPage extends Component
 
     public ?int $showingArchivedStudentId = null;
 
+    public string $queue_search = '';
+
+    public string $queue_status_filter = '';
+
+    public string $queue_edition_filter = '';
+
     // Decisión del funcionario en matrícula presencial (cupo disponible o cupo máximo alcanzado)
     public string $presencial_action = 'inscribir'; // inscribir | lista_espera | rechazar
 
@@ -177,6 +183,13 @@ class AdmissionsPage extends Component
     public bool $selectedEditionIsFull = false;
 
     public string $selectedEditionCapacityInfo = '';
+
+    public function resetQueueFilters(): void
+    {
+        $this->queue_search = '';
+        $this->queue_status_filter = '';
+        $this->queue_edition_filter = '';
+    }
 
     public function setTab(string $tab): void
     {
@@ -1069,8 +1082,55 @@ class AdmissionsPage extends Component
             ? $matchedStudent->attachments->where('status', 'activo')->values()
             : collect();
 
+        $enrollmentsQuery = Enrollment::with(['student.attachments', 'edition.course'])->latest();
+
+        if ($this->queue_status_filter === 'pendiente_autorizacion') {
+            $enrollmentsQuery->where('reenrollment_authorized', false)
+                ->whereNotNull('reenrollment_reason')
+                ->where('reenrollment_reason', '!=', '');
+        } elseif ($this->queue_status_filter !== '') {
+            $enrollmentsQuery->where('status', $this->queue_status_filter);
+        }
+
+        if ($this->queue_edition_filter !== '') {
+            $enrollmentsQuery->where('course_edition_id', (int) $this->queue_edition_filter);
+        }
+
+        $qSearch = trim($this->queue_search);
+        if ($qSearch !== '') {
+            $like = '%'.strtolower($qSearch).'%';
+            $normalizedId = strtoupper((string) preg_replace('/[^0-9A-Za-z]/', '', $qSearch));
+            $enrollmentsQuery->where(function ($q) use ($like, $normalizedId): void {
+                $q->whereRaw('LOWER(enrollment_code) LIKE ?', [$like])
+                    ->orWhereHas('student', function ($sq) use ($like, $normalizedId): void {
+                        $sq->whereRaw('LOWER(first_name) LIKE ?', [$like])
+                            ->orWhereRaw('LOWER(last_name) LIKE ?', [$like])
+                            ->orWhereRaw('LOWER(second_last_name) LIKE ?', [$like])
+                            ->orWhereRaw('LOWER(identification_number) LIKE ?', [$like])
+                            ->orWhereRaw('LOWER(email) LIKE ?', [$like]);
+                        if ($normalizedId !== '') {
+                            $sq->orWhereRaw("UPPER(REGEXP_REPLACE(identification_number, '[^0-9A-Za-z]', '', 'g')) LIKE ?", ['%'.$normalizedId.'%']);
+                        }
+                    });
+            });
+        }
+
+        $queueStatusOptions = [
+            'preinscrita' => 'Preinscrita',
+            'documentacion_pendiente' => 'Documentación Pendiente',
+            'lista_espera' => 'Lista de Espera',
+            'pendiente_autorizacion' => 'Pendiente de Autorización (Sin aprobar)',
+            'confirmada' => 'Confirmada',
+            'en_curso' => 'En Curso',
+            'reprobada' => 'Reprobada / Sin Aprobar',
+            'graduada' => 'Graduada',
+            'rechazada' => 'Rechazada',
+        ];
+
         return view('livewire.admissions-page', [
-            'enrollments' => Enrollment::with(['student.attachments', 'edition.course'])->latest()->limit(60)->get(),
+            'enrollments' => $enrollmentsQuery->limit(100)->get(),
+            'queueEditions' => CourseEdition::with('course')->orderByDesc('id')->get(),
+            'queueStatusOptions' => $queueStatusOptions,
             'students' => Student::confirmedDirectory()
                 ->with([
                     'attachments',

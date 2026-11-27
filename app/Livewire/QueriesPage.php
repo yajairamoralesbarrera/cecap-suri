@@ -76,6 +76,9 @@ class QueriesPage extends Component
         return view('livewire.queries-page', [
             'matches' => $matches,
             'selected' => $selected,
+            'idTypes' => \App\Models\Picklist::optionsFor('id_type'),
+            'genders' => \App\Models\Picklist::optionsFor('gender'),
+            'educationLevels' => \App\Models\Picklist::optionsFor('education_level'),
         ]);
     }
 }

@@ -21,8 +21,43 @@
 
     {{-- TAB: COLA DE ADMISIONES Y MATRÍCULAS --}}
     @if($tab === 'queue')
-        <div class="cecap-card overflow-x-auto">
-            <h2 class="text-base font-bold text-slate-900 mb-3">Solicitudes y Matrículas Recientes</h2>
+        <div class="cecap-card space-y-4 overflow-x-auto">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                    <h2 class="text-base font-bold text-slate-900">Solicitudes y Matrículas Recientes</h2>
+                    <p class="text-xs text-slate-500">Filtre por estado, cohorte o búsqueda rápida por alumna, cédula o número de solicitud.</p>
+                </div>
+                @if($queue_search !== '' || $queue_status_filter !== '' || $queue_edition_filter !== '')
+                    <button type="button" wire:click="resetQueueFilters" class="cecap-btn-secondary !min-h-8 !px-3 !py-1 text-xs">Limpiar filtros</button>
+                @endif
+            </div>
+
+            {{-- FILTROS POR BÚSQUEDA, ESTADO Y COHORTE --}}
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Buscar (Alumna, Cédula o MAT-...)</label>
+                    <input wire:model.live.debounce.250ms="queue_search" type="search" class="cecap-input" placeholder="Nombre, cédula/DIMEX o solicitud...">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Filtrar por Estado</label>
+                    <select wire:model.live="queue_status_filter" class="cecap-input">
+                        <option value="">-- Todos los estados --</option>
+                        @foreach($queueStatusOptions as $stCode => $stLabel)
+                            <option value="{{ $stCode }}">{{ $stLabel }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Filtrar por Cohorte</label>
+                    <select wire:model.live="queue_edition_filter" class="cecap-input">
+                        <option value="">-- Todas las cohortes --</option>
+                        @foreach($queueEditions as $qEd)
+                            <option value="{{ $qEd->id }}">{{ $qEd->course?->name }} — {{ $qEd->name }} [{{ $qEd->code }}]</option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+
             <table class="w-full text-sm text-left">
                 <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
                     <tr>
@@ -30,18 +65,18 @@
                         <th class="py-2 pr-3">Alumna</th>
                         <th class="py-2 pr-3">Cohorte</th>
                         <th class="py-2 pr-3">Estado</th>
-                        <th class="py-2 pr-3">Checklist</th>
-                        <th class="py-2">Acciones</th>
+                        <th class="py-2">Checklist</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                     @forelse($enrollments as $enr)
-                        <tr wire:key="enr-row-{{ $enr->id }}" class="{{ ($confirmingEnrollmentId === $enr->id || $rejectingEnrollmentId === $enr->id || $attachingEnrollmentId === $enr->id || $reopeningEnrollmentId === $enr->id) ? 'bg-slate-50/80' : '' }}">
-                            <td class="py-2.5 pr-3 font-mono text-xs font-bold">{{ $enr->enrollment_code }}<div class="text-[11px] text-slate-400">{{ $enr->source }}</div></td>
-                            <td class="py-2.5 pr-3 font-semibold text-slate-900">{{ $enr->student?->full_name }}<div class="text-xs text-slate-500">{{ $enr->student?->identification_number }} · {{ $enr->student?->email }}</div></td>
-                            <td class="py-2.5 pr-3 text-xs">{{ $enr->edition?->course?->name }}<div class="text-slate-500">{{ $enr->edition?->name }}</div></td>
-                            <td class="py-2.5 pr-3">
-                                <span class="cecap-badge {{ $enr->status === 'confirmada' ? 'bg-emerald-100 text-emerald-900' : ($enr->status === 'rechazada' ? 'bg-rose-100 text-rose-900' : ($enr->status === 'lista_espera' ? 'bg-indigo-100 text-indigo-900' : ($enr->status === 'documentacion_pendiente' ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-800'))) }}">
+                        @php $enrPanelOpen = $confirmingEnrollmentId === $enr->id || $rejectingEnrollmentId === $enr->id || $attachingEnrollmentId === $enr->id || $reopeningEnrollmentId === $enr->id; @endphp
+                        <tr wire:key="enr-row-{{ $enr->id }}" class="{{ $enrPanelOpen ? 'bg-slate-50/80' : '' }} border-b-0">
+                            <td class="pt-2.5 pb-1.5 pr-3 font-mono text-xs font-bold">{{ $enr->enrollment_code }}<div class="text-[11px] font-normal text-slate-400">{{ $enr->source }}</div></td>
+                            <td class="pt-2.5 pb-1.5 pr-3 font-semibold text-slate-900">{{ $enr->student?->full_name }}<div class="text-xs font-normal text-slate-500">{{ $enr->student?->identification_number }} · {{ $enr->student?->email }}</div></td>
+                            <td class="pt-2.5 pb-1.5 pr-3 text-xs">{{ $enr->edition?->course?->name }}<div class="text-slate-500">{{ $enr->edition?->name }}</div></td>
+                            <td class="pt-2.5 pb-1.5 pr-3">
+                                <span class="cecap-badge {{ $enr->status === 'confirmada' ? 'bg-emerald-100 text-emerald-900' : (in_array($enr->status, ['rechazada', 'reprobada'], true) ? 'bg-rose-100 text-rose-900' : ($enr->status === 'lista_espera' ? 'bg-indigo-100 text-indigo-900' : ($enr->status === 'documentacion_pendiente' ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-800'))) }}">
                                     {{ strtoupper(str_replace('_', ' ', $enr->status)) }}
                                 </span>
                                 @if($enr->exception_authorized)
@@ -63,29 +98,31 @@
                                     <div class="text-[11px] text-amber-800 font-semibold mt-0.5">Pendiente autorización: {{ $enr->reenrollment_reason }}</div>
                                 @endif
                             </td>
-                            <td class="py-2.5 pr-3 text-xs">
+                            <td class="pt-2.5 pb-1.5 text-xs">
                                 @if($enr->documents_complete)
                                     <span class="font-semibold text-emerald-700">Completo</span>
                                 @else
                                     <span class="font-semibold text-rose-700">Falta:</span> {{ implode(', ', $enr->missingDocumentLabels()) }}
                                 @endif
                             </td>
-                            <td class="py-2.5">
-                                <div class="flex flex-wrap gap-1.5">
+                        </tr>
+                        <tr wire:key="enr-actions-{{ $enr->id }}" class="{{ $enrPanelOpen ? 'bg-slate-50/80' : 'bg-slate-50/40' }}">
+                            <td colspan="5" class="pt-1 pb-2.5 px-1">
+                                <div class="flex flex-wrap items-center gap-1.5">
                                     @if(in_array($enr->status, ['preinscrita', 'documentacion_pendiente', 'lista_espera'], true) && auth()->user()->hasEffectivePermission('admisiones.manage'))
-                                        <button type="button" wire:click="startConfirmEnrollment({{ $enr->id }})" class="cecap-btn-primary !min-h-9 !px-3 text-xs">Confirmar</button>
-                                        <button type="button" wire:click="startRejectEnrollment({{ $enr->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-rose-300 bg-white px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50 cursor-pointer">Rechazar</button>
+                                        <button type="button" wire:click="startConfirmEnrollment({{ $enr->id }})" class="cecap-btn-primary !min-h-8 !px-3 !py-1 text-xs">Confirmar</button>
+                                        <button type="button" wire:click="startRejectEnrollment({{ $enr->id }})" class="inline-flex min-h-8 items-center justify-center rounded-xl border border-rose-300 bg-white px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50 cursor-pointer">Rechazar</button>
                                     @endif
                                     @if($enr->status === 'rechazada' && auth()->user()->hasEffectivePermission('admisiones.manage'))
-                                        <button type="button" wire:click="startReopenEnrollment({{ $enr->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-emerald-400 bg-emerald-50 px-3 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 cursor-pointer">Reabrir</button>
+                                        <button type="button" wire:click="startReopenEnrollment({{ $enr->id }})" class="inline-flex min-h-8 items-center justify-center rounded-xl border border-emerald-400 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 cursor-pointer">Reabrir</button>
                                     @endif
                                     @if(auth()->user()->hasEffectivePermission('admisiones.manage'))
-                                        <button type="button" wire:click="startAttachEnrollment({{ $enr->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-amber-300 bg-amber-50 px-3 text-xs font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer">Adjuntos</button>
+                                        <button type="button" wire:click="startAttachEnrollment({{ $enr->id }})" class="inline-flex min-h-8 items-center justify-center rounded-xl border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer">Adjuntos</button>
                                     @endif
                                     <button type="button"
                                             data-pdf-modal-url="{{ route('pdf.planilla', $enr) }}"
                                             data-pdf-modal-title="Planilla {{ $enr->enrollment_code }}"
-                                            class="cecap-btn-secondary !min-h-9 !px-3 text-xs">
+                                            class="cecap-btn-secondary !min-h-8 !px-3 !py-1 text-xs">
                                         Planilla PDF
                                     </button>
                                 </div>
@@ -94,7 +131,7 @@
 
                         @if($confirmingEnrollment && $confirmingEnrollment->id === $enr->id)
                             <tr wire:key="enr-confirm-{{ $enr->id }}">
-                                <td colspan="6" class="py-3 px-1">
+                                <td colspan="5" class="py-3 px-1">
                                     <div class="rounded-2xl border-2 border-brand-700 bg-brand-50/70 p-4 space-y-4">
                                         <div class="flex flex-wrap items-center justify-between gap-2">
                                             <h3 class="text-sm sm:text-base font-bold text-brand-950">Confirmar Matrícula {{ $confirmingEnrollment->enrollment_code }} — {{ $confirmingEnrollment->student?->full_name }}</h3>
@@ -192,7 +229,7 @@
 
                         @if($rejectingEnrollment && $rejectingEnrollment->id === $enr->id)
                             <tr wire:key="enr-reject-{{ $enr->id }}">
-                                <td colspan="6" class="py-3 px-1">
+                                <td colspan="5" class="py-3 px-1">
                                     <div class="rounded-2xl border-2 border-rose-400 bg-rose-50/80 p-4 space-y-4">
                                         <div class="flex flex-wrap items-center justify-between gap-2">
                                             <h3 class="text-sm sm:text-base font-bold text-rose-950">Rechazar Solicitud {{ $rejectingEnrollment->enrollment_code }} — {{ $rejectingEnrollment->student?->full_name }}</h3>
@@ -242,7 +279,7 @@
 
                         @if($attachingEnrollment && $attachingEnrollment->id === $enr->id)
                             <tr wire:key="enr-attach-{{ $enr->id }}">
-                                <td colspan="6" class="py-3 px-1">
+                                <td colspan="5" class="py-3 px-1">
                                     <div class="rounded-2xl border-2 border-amber-400 bg-amber-50/80 p-4 space-y-4">
                                         <div class="flex flex-wrap items-center justify-between gap-2">
                                             <div>
@@ -335,7 +372,7 @@
 
                         @if($reopeningEnrollment && $reopeningEnrollment->id === $enr->id)
                             <tr wire:key="enr-reopen-{{ $enr->id }}">
-                                <td colspan="6" class="py-3 px-1">
+                                <td colspan="5" class="py-3 px-1">
                                     @php
                                         $reopenEd = $reopeningEnrollment->edition;
                                         $reopenAvail = $reopenEd ? $reopenEd->availableSeats() : 0;
@@ -424,7 +461,7 @@
                             </tr>
                         @endif
                     @empty
-                        <tr><td colspan="6" class="py-6 text-center text-slate-500">Sin matrículas o preinscripciones registradas.</td></tr>
+                        <tr><td colspan="5" class="py-6 text-center text-slate-500">Sin matrículas o preinscripciones registradas.</td></tr>
                     @endforelse
                 </tbody>
             </table>

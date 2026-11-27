@@ -77,11 +77,17 @@ it('integrates workshops attendance, versioned document repository without physi
     expect($doc->fresh()->current_version)->toBe(2);
     expect(RecordAttachment::where('attachable_type', InstitutionalDocument::class)->where('attachable_id', $doc->id)->count())->toBe(2);
 
-    // 3. Ventanilla Única 360° búsqueda rápida por cédula
+    // 3. Expediente Alumnas búsqueda rápida por cédula y ficha completa de datos personales
+    $student->update(['birth_date' => '1996-04-12']);
+
     Livewire::actingAs($admin)
         ->test(QueriesPage::class)
         ->set('search', '1-6644-3322')
         ->call('selectStudent', $student->id)
         ->assertSee('Valeria Araya')
+        ->assertSee('Tipo de Identificación')
+        ->assertSee('Cédula Nacional (CR)')
+        ->assertSee('1-6644-3322')
+        ->assertSee('12/04/1996')
         ->assertSee('Saldo pendiente');
 });
