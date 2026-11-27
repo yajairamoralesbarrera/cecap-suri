@@ -122,30 +122,38 @@ it('enforces Costa Rica staff legal separation (Planilla vs Servicios Profesiona
     $admin = User::where('email', 'superadmin@cecap.or.cr')->firstOrFail();
     $this->actingAs($admin);
 
-    // Profesora SIN atestados profesionales debe fallar
+    // Profesora SIN atestados profesionales ni documento de identificación debe fallar
     Livewire::test(StaffPage::class)
         ->set('staff_role_type', 'teacher')
         ->set('first_name', 'Karla')
         ->set('last_name', 'Ureña')
         ->set('identification_number', '1-9000-1111')
+        ->set('birth_date', '1988-06-15')
         ->set('email', 'karla.urena@cecap.or.cr')
         ->set('phone', '8899-0011')
         ->call('createStaff')
-        ->assertHasErrors('credentials_file');
+        ->assertHasErrors(['credentials_file', 'identification_file']);
 
-    // Profesora CON atestados profesionales pasa
+    // Profesora CON fecha de nacimiento, documento de identificación, atestados y contrato firmado pasa
     Livewire::test(StaffPage::class)
         ->set('staff_role_type', 'teacher')
         ->set('first_name', 'Karla')
         ->set('last_name', 'Ureña')
         ->set('identification_number', '1-9000-1111')
+        ->set('birth_date', '1988-06-15')
         ->set('email', 'karla.urena@cecap.or.cr')
         ->set('phone', '8899-0011')
+        ->set('identification_file', UploadedFile::fake()->create('cedula_karla.pdf', 100, 'application/pdf'))
         ->set('credentials_file', UploadedFile::fake()->create('titulo_docente.pdf', 150, 'application/pdf'))
+        ->set('signed_contract_file', UploadedFile::fake()->create('contrato_vigente_karla.pdf', 180, 'application/pdf'))
         ->call('createStaff')
         ->assertHasNoErrors();
 
     $member = StaffMember::where('identification_number', '1-9000-1111')->firstOrFail();
+    expect($member->birth_date?->toDateString())->toBe('1988-06-15');
+    expect($member->attachments()->where('document_type', 'cedula_dimex')->exists())->toBeTrue();
+    expect($member->attachments()->where('document_type', 'atestado_profesional')->exists())->toBeTrue();
+    expect($member->attachments()->where('document_type', 'contrato_pdf')->exists())->toBeTrue();
     $payroll = app(StaffPayrollService::class);
 
     // 1. Contrato Planilla Laboral CR

@@ -119,13 +119,16 @@ it('integrates StaffPage editable & uploaded PDF contracts, CR payroll vouchers,
         ->set('first_name', 'Silvia')
         ->set('last_name', 'Cordero')
         ->set('identification_number', '1-7711-8822')
+        ->set('birth_date', '1985-09-22')
         ->set('email', 'silvia.cordero@cecap.or.cr')
         ->set('phone', '8800-7711')
+        ->set('identification_file', UploadedFile::fake()->create('cedula_silvia.jpg', 120, 'image/jpeg'))
         ->set('credentials_file', UploadedFile::fake()->create('atestados_silvia.pdf', 180, 'application/pdf'))
         ->call('createStaff')
         ->assertHasNoErrors();
 
     $staff = StaffMember::where('identification_number', '1-7711-8822')->firstOrFail();
+    expect($staff->birth_date?->toDateString())->toBe('1985-09-22');
 
     // Contrato PDF adjunto bajo Servicios Profesionales
     Livewire::actingAs($admin)
@@ -143,6 +146,18 @@ it('integrates StaffPage editable & uploaded PDF contracts, CR payroll vouchers,
 
     $contract = StaffContract::where('staff_member_id', $staff->id)->firstOrFail();
     expect($contract->attachment_id)->not->toBeNull();
+
+    // Adjuntar una nueva versión firmada sobre el contrato existente
+    $prevAttachmentId = $contract->attachment_id;
+    Livewire::actingAs($admin)
+        ->test(StaffPage::class)
+        ->call('startAttachContractFile', $contract->id)
+        ->set('existing_contract_signed_file', UploadedFile::fake()->create('contrato_firmado_v2.pdf', 210, 'application/pdf'))
+        ->set('existing_contract_signed_notes', 'Versión con firma de Dirección')
+        ->call('uploadSignedContractFile')
+        ->assertHasNoErrors();
+
+    expect($contract->fresh()->attachment_id)->not->toBe($prevAttachmentId);
 
     // Pago con clave Hacienda 50 dígitos
     Livewire::actingAs($admin)

@@ -24,6 +24,7 @@ class StaffMember extends Model
         'email',
         'phone',
         'gender',
+        'birth_date',
         'specialty',
         'academic_degree',
         'hiring_regime',
@@ -31,6 +32,13 @@ class StaffMember extends Model
         'notes',
         'created_by',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'birth_date' => 'date',
+        ];
+    }
 
     public function user(): BelongsTo
     {

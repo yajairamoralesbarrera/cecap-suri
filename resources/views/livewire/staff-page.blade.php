@@ -64,6 +64,11 @@
                             <input wire:model="second_last_name" type="text" class="cecap-input">
                         </div>
                         <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Fecha de Nacimiento *</label>
+                            <input wire:model="birth_date" type="date" required max="{{ now()->subDay()->toDateString() }}" class="cecap-input">
+                            @error('birth_date') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                        </div>
+                        <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Correo Electrónico (Obligatorio) *</label>
                             <input wire:model="email" type="email" required class="cecap-input">
                         </div>
@@ -75,17 +80,55 @@
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Especialidad / Grado</label>
                             <input wire:model="specialty" type="text" class="cecap-input" placeholder="Ej. Contabilidad / Gastronomía">
                         </div>
-                        <div class="md:col-span-3">
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">
-                                Atestados Profesionales (PDF/JPG/PNG/WebP máx 25MB)
-                                @if(in_array($staff_role_type, ['teacher', 'both'], true))
-                                    <span class="text-rose-700">* OBLIGATORIO PARA PROFESORAS</span>
+
+                        <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">
+                                    Documento de Identificación *
+                                    <span class="block text-[11px] font-normal text-slate-500">Cédula / DIMEX / Pasaporte (PDF/Imagen máx 25MB)</span>
+                                </label>
+                                <input wire:model="identification_file" type="file" required accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
+                                <div wire:loading wire:target="identification_file" class="mt-1 text-xs font-semibold text-brand-800">Subiendo documento...</div>
+                                @if($identification_file)
+                                    <div wire:loading.remove wire:target="identification_file" class="mt-1 text-xs font-semibold text-emerald-700">✓ Listo: {{ $identification_file->getClientOriginalName() }}</div>
                                 @endif
-                            </label>
-                            <input wire:model="credentials_file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
+                                @error('identification_file') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">
+                                    Atestados Profesionales
+                                    @if(in_array($staff_role_type, ['teacher', 'both'], true))
+                                        <span class="text-rose-700">* OBLIGATORIO</span>
+                                    @else
+                                        <span class="text-slate-500 font-normal">(opcional)</span>
+                                    @endif
+                                    <span class="block text-[11px] font-normal text-slate-500">Títulos / certificaciones (PDF/Imagen máx 25MB)</span>
+                                </label>
+                                <input wire:model="credentials_file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
+                                <div wire:loading wire:target="credentials_file" class="mt-1 text-xs font-semibold text-brand-800">Subiendo atestados...</div>
+                                @if($credentials_file)
+                                    <div wire:loading.remove wire:target="credentials_file" class="mt-1 text-xs font-semibold text-emerald-700">✓ Listo: {{ $credentials_file->getClientOriginalName() }}</div>
+                                @endif
+                                @error('credentials_file') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">
+                                    Contrato Existente / Ya Firmado <span class="text-slate-500 font-normal">(opcional)</span>
+                                    <span class="block text-[11px] font-normal text-slate-500">Archivo firmado o vigente (PDF/Imagen máx 25MB)</span>
+                                </label>
+                                <input wire:model="signed_contract_file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
+                                <div wire:loading wire:target="signed_contract_file" class="mt-1 text-xs font-semibold text-brand-800">Subiendo contrato...</div>
+                                @if($signed_contract_file)
+                                    <div wire:loading.remove wire:target="signed_contract_file" class="mt-1 text-xs font-semibold text-emerald-700">✓ Listo: {{ $signed_contract_file->getClientOriginalName() }}</div>
+                                @endif
+                                @error('signed_contract_file') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                            </div>
                         </div>
                     </div>
-                    <button type="submit" class="cecap-btn-primary">Guardar Colaboradora</button>
+                    <button type="submit" wire:loading.attr="disabled" wire:target="identification_file,credentials_file,signed_contract_file,createStaff" class="cecap-btn-primary disabled:opacity-60">
+                        <span wire:loading.remove wire:target="identification_file,credentials_file,signed_contract_file,createStaff">Guardar Colaboradora</span>
+                        <span wire:loading wire:target="identification_file,credentials_file,signed_contract_file,createStaff">Procesando documentos...</span>
+                    </button>
                 </form>
             @endif
 
@@ -93,21 +136,29 @@
                 <h2 class="text-base font-bold text-slate-900 mb-3">Expedientes de Personal</h2>
                 <table class="w-full text-sm text-left">
                     <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
-                        <tr><th class="py-2 pr-3">Código</th><th class="py-2 pr-3">Nombre</th><th class="py-2 pr-3">Tipo / Régimen CR</th><th class="py-2 pr-3">Contacto</th><th class="py-2">Atestados</th></tr>
+                        <tr><th class="py-2 pr-3">Código</th><th class="py-2 pr-3">Colaboradora / Identificación</th><th class="py-2 pr-3">Tipo / Régimen CR</th><th class="py-2 pr-3">Contacto</th><th class="py-2">Documentos del Expediente</th></tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @forelse($staffMembers as $st)
                             <tr>
                                 <td class="py-2.5 pr-3 font-mono text-xs font-bold">{{ $st->staff_code }}</td>
-                                <td class="py-2.5 pr-3 font-semibold">{{ $st->full_name }}<div class="text-xs text-slate-500">{{ $st->identification_number }}</div></td>
+                                <td class="py-2.5 pr-3 font-semibold">
+                                    {{ $st->full_name }}
+                                    <div class="text-xs font-normal text-slate-500">{{ $idTypes[$st->identification_type] ?? $st->identification_type }}: <span class="font-mono">{{ $st->identification_number }}</span></div>
+                                    @if($st->birth_date)
+                                        <div class="text-[11px] font-normal text-slate-500">Nacimiento: {{ $st->birth_date->format('d/m/Y') }} ({{ $st->birth_date->age }} años)</div>
+                                    @endif
+                                </td>
                                 <td class="py-2.5 pr-3 text-xs">
                                     <span class="cecap-badge bg-brand-100 text-brand-900">{{ $st->staff_role_type }}</span>
                                     <div class="mt-1 font-semibold">{{ $st->hiring_regime === 'planilla_laboral' ? 'Planilla Laboral CR' : 'Servicios Profesionales CR' }}</div>
                                 </td>
                                 <td class="py-2.5 pr-3 text-xs">{{ $st->email }}<div>{{ $st->phone }}</div></td>
-                                <td class="py-2.5 text-xs">
+                                <td class="py-2.5 text-xs space-y-0.5">
                                     @forelse($st->attachments->where('status', 'activo') as $att)
-                                        <div><a href="{{ route('attachments.download', $att->uuid) }}" class="text-brand-800 underline">{{ $att->original_name }} (v{{ $att->version }})</a></div>
+                                        <div>
+                                            <a href="{{ route('attachments.download', $att->uuid) }}" class="text-brand-800 underline font-medium">{{ $att->document_type_label }}: {{ $att->original_name }} (v{{ $att->version }})</a>
+                                        </div>
                                     @empty
                                         <span class="text-slate-400">Sin adjuntos</span>
                                     @endforelse
@@ -127,7 +178,7 @@
         <div class="space-y-6">
             @if(auth()->user()->hasEffectivePermission('personal.manage'))
                 <form wire:submit="createContract" class="cecap-card space-y-4">
-                    <h2 class="text-base font-bold text-brand-950">Emitir Contrato (Separación Legal CR: Planilla vs Servicios Profesionales)</h2>
+                    <h2 class="text-base font-bold text-brand-950">Emitir o Registrar Contrato (Separación Legal CR: Planilla vs Servicios Profesionales)</h2>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Colaboradora *</label>
@@ -147,7 +198,7 @@
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Modalidad de Documento *</label>
                             <select wire:model.live="contract_mode" class="cecap-input">
                                 <option value="editable">Contrato Editable en Plataforma (PDF generado)</option>
-                                <option value="pdf_adjunto">Subir Contrato Firmado PDF</option>
+                                <option value="pdf_adjunto">Subir Contrato Existente o Ya Firmado (PDF / Imagen)</option>
                             </select>
                         </div>
                         <div class="md:col-span-2">
@@ -181,18 +232,36 @@
                     </div>
 
                     @if($contract_mode === 'editable')
-                        <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Cláusulas Editables del Contrato</label>
-                            <textarea wire:model="contract_body" rows="3" class="cecap-input"></textarea>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Cláusulas Editables del Contrato</label>
+                                <textarea wire:model="contract_body" rows="3" class="cecap-input"></textarea>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Adjuntar Copia Ya Firmada (opcional — PDF/JPG/PNG/WebP máx 25MB)</label>
+                                <input wire:model="contract_pdf_file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
+                                <div wire:loading wire:target="contract_pdf_file" class="mt-1 text-xs font-semibold text-brand-800">Subiendo contrato...</div>
+                                @if($contract_pdf_file)
+                                    <div wire:loading.remove wire:target="contract_pdf_file" class="mt-1 text-xs font-semibold text-emerald-700">✓ Listo: {{ $contract_pdf_file->getClientOriginalName() }}</div>
+                                @endif
+                            </div>
                         </div>
                     @else
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Archivo PDF del Contrato Firmado *</label>
-                            <input wire:model="contract_pdf_file" type="file" accept=".pdf" class="cecap-input">
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Archivo del Contrato Existente / Ya Firmado (PDF o Imagen máx 25MB) *</label>
+                            <input wire:model="contract_pdf_file" type="file" required accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
+                            <div wire:loading wire:target="contract_pdf_file" class="mt-1 text-xs font-semibold text-brand-800">Subiendo contrato...</div>
+                            @if($contract_pdf_file)
+                                <div wire:loading.remove wire:target="contract_pdf_file" class="mt-1 text-xs font-semibold text-emerald-700">✓ Listo: {{ $contract_pdf_file->getClientOriginalName() }}</div>
+                            @endif
+                            @error('contract_pdf_file') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
                         </div>
                     @endif
 
-                    <button type="submit" class="cecap-btn-primary">Crear Contrato</button>
+                    <button type="submit" wire:loading.attr="disabled" wire:target="contract_pdf_file,createContract" class="cecap-btn-primary disabled:opacity-60">
+                        <span wire:loading.remove wire:target="contract_pdf_file,createContract">Guardar Contrato</span>
+                        <span wire:loading wire:target="contract_pdf_file,createContract">Procesando archivo...</span>
+                    </button>
                 </form>
             @endif
 
@@ -200,23 +269,67 @@
                 <h2 class="text-base font-bold text-slate-900 mb-3">Contratos Vigentes</h2>
                 <table class="w-full text-sm text-left">
                     <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
-                        <tr><th class="py-2 pr-3">Contrato</th><th class="py-2 pr-3">Colaboradora</th><th class="py-2 pr-3">Régimen CR</th><th class="py-2 pr-3">Bruto</th><th class="py-2">Documento</th></tr>
+                        <tr><th class="py-2 pr-3">Contrato</th><th class="py-2 pr-3">Colaboradora</th><th class="py-2 pr-3">Régimen CR</th><th class="py-2 pr-3">Bruto</th><th class="py-2">Documentos</th></tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @forelse($contracts as $ct)
-                            <tr>
+                            <tr wire:key="contract-row-{{ $ct->id }}" class="{{ $attachingContractId === $ct->id ? 'bg-slate-50/80' : '' }}">
                                 <td class="py-2.5 pr-3 font-mono text-xs font-bold">{{ $ct->contract_number }}</td>
-                                <td class="py-2.5 pr-3 font-semibold">{{ $ct->staffMember?->full_name }}<div class="text-xs text-slate-500">{{ $ct->title }}</div></td>
+                                <td class="py-2.5 pr-3 font-semibold">{{ $ct->staffMember?->full_name }}<div class="text-xs font-normal text-slate-500">{{ $ct->title }}</div></td>
                                 <td class="py-2.5 pr-3 text-xs">{{ $ct->hiring_regime === 'planilla_laboral' ? 'Planilla Laboral' : 'Servicios Profesionales' }}</td>
                                 <td class="py-2.5 pr-3 font-bold">₡{{ number_format((float) $ct->gross_salary_or_rate, 2) }}</td>
                                 <td class="py-2.5">
-                                    @if($ct->contract_mode === 'pdf_adjunto' && $ct->attachment)
-                                        <a href="{{ route('attachments.download', $ct->attachment->uuid) }}" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Descargar PDF Adjunto</a>
-                                    @else
-                                        <button type="button" data-pdf-modal-url="{{ route('pdf.contrato', $ct) }}" data-pdf-modal-title="Contrato {{ $ct->contract_number }}" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Contrato PDF</button>
-                                    @endif
+                                    <div class="flex flex-wrap gap-1.5">
+                                        @if($ct->contract_mode === 'editable')
+                                            <button type="button" data-pdf-modal-url="{{ route('pdf.contrato', $ct) }}" data-pdf-modal-title="Contrato {{ $ct->contract_number }}" class="cecap-btn-secondary !min-h-8 !px-2.5 !py-1 text-xs">Contrato PDF</button>
+                                        @endif
+                                        @if($ct->attachment)
+                                            <a href="{{ route('attachments.download', $ct->attachment->uuid) }}" class="inline-flex min-h-8 items-center justify-center rounded-xl border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-900 hover:bg-emerald-100">Ver Contrato Firmado (v{{ $ct->attachment->version }})</a>
+                                        @endif
+                                        @if(auth()->user()->hasEffectivePermission('personal.manage'))
+                                            <button type="button" wire:click="startAttachContractFile({{ $ct->id }})" class="inline-flex min-h-8 items-center justify-center rounded-xl border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer">
+                                                {{ $ct->attachment ? 'Actualizar Firmado' : 'Subir Contrato Firmado' }}
+                                            </button>
+                                        @endif
+                                    </div>
                                 </td>
                             </tr>
+                            @if($attachingContractId === $ct->id)
+                                <tr wire:key="contract-attach-{{ $ct->id }}">
+                                    <td colspan="5" class="py-3 px-1">
+                                        <form wire:submit="uploadSignedContractFile" class="rounded-2xl border-2 border-amber-400 bg-amber-50/80 p-4 space-y-3">
+                                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                                <div>
+                                                    <h3 class="text-sm font-bold text-amber-950">Subir Archivo de Contrato Firmado — {{ $ct->contract_number }} ({{ $ct->staffMember?->full_name }})</h3>
+                                                    <p class="text-xs text-amber-900">Se almacena de forma privada y versionada con SHA-256 (sin borrar versiones anteriores).</p>
+                                                </div>
+                                                <button type="button" wire:click="cancelAttachContractFile" class="cecap-btn-secondary !min-h-8 !px-3 !py-1 text-xs">Cancelar</button>
+                                            </div>
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Archivo de Contrato Firmado (PDF/Imagen máx 25MB) *</label>
+                                                    <input wire:model="existing_contract_signed_file" type="file" required accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
+                                                    <div wire:loading wire:target="existing_contract_signed_file" class="mt-1 text-xs font-semibold text-brand-800">Subiendo archivo...</div>
+                                                    @if($existing_contract_signed_file)
+                                                        <div wire:loading.remove wire:target="existing_contract_signed_file" class="mt-1 text-xs font-semibold text-emerald-700">✓ Listo: {{ $existing_contract_signed_file->getClientOriginalName() }}</div>
+                                                    @endif
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Observación (opcional)</label>
+                                                    <input wire:model="existing_contract_signed_notes" type="text" class="cecap-input" placeholder="Ej. Contrato escaneado con firmas autógrafas">
+                                                </div>
+                                            </div>
+                                            <div class="flex flex-wrap gap-2">
+                                                <button type="submit" wire:loading.attr="disabled" wire:target="existing_contract_signed_file,uploadSignedContractFile" class="cecap-btn-primary text-xs sm:text-sm disabled:opacity-60">
+                                                    <span wire:loading.remove wire:target="existing_contract_signed_file,uploadSignedContractFile">Guardar Contrato Firmado</span>
+                                                    <span wire:loading wire:target="existing_contract_signed_file,uploadSignedContractFile">Subiendo...</span>
+                                                </button>
+                                                <button type="button" wire:click="cancelAttachContractFile" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
+                                            </div>
+                                        </form>
+                                    </td>
+                                </tr>
+                            @endif
                         @empty
                             <tr><td colspan="5" class="py-6 text-center text-slate-500">Sin contratos registrados.</td></tr>
                         @endforelse

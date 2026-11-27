@@ -43,15 +43,28 @@ class StaffPage extends Component
 
     public string $phone = '';
 
+    public string $birth_date = '';
+
     public string $specialty = '';
 
     public string $academic_degree = '';
 
     public string $hiring_regime = 'planilla_laboral';
 
+    public $identification_file = null;
+
     public $credentials_file = null;
 
-    // Contrato CR (Planilla Laboral vs Servicios Profesionales; editable o PDF adjunto)
+    public $signed_contract_file = null;
+
+    // Carga inline de contrato firmado sobre un contrato existente
+    public ?int $attachingContractId = null;
+
+    public $existing_contract_signed_file = null;
+
+    public string $existing_contract_signed_notes = '';
+
+    // Contrato CR (Planilla Laboral vs Servicios Profesionales; editable o archivo adjunto)
     public ?int $contract_staff_id = null;
 
     public string $contract_regime = 'planilla_laboral';
@@ -136,10 +149,13 @@ class StaffPage extends Component
             'last_name' => ['required', 'string', 'max:100'],
             'identification_type' => ['required', 'string', 'max:40', \Illuminate\Validation\Rule::in($validIdTypes)],
             'identification_number' => ['required', 'string', 'max:40', new \App\Rules\ValidIdentificationNumber($this->identification_type), 'unique:staff_members,identification_number'],
+            'birth_date' => ['required', 'date', 'before:today'],
             'email' => ['required', 'email', 'max:255', new \App\Rules\ValidEmailDomain()], // OBLIGATORIO
             'phone' => ['required', 'string', 'max:30'],
             'hiring_regime' => ['required', 'in:planilla_laboral,servicios_profesionales'],
+            'identification_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
             'credentials_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'signed_contract_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
         ];
 
         // Atestados Profesionales OBLIGATORIOS para Profesoras (teacher / both)
@@ -149,7 +165,10 @@ class StaffPage extends Component
 
         $this->validate($rules, [
             'identification_type.in' => 'Seleccione un tipo de identificación válido.',
+            'birth_date.required' => 'La fecha de nacimiento es obligatoria en el expediente de Personal.',
+            'birth_date.before' => 'La fecha de nacimiento debe ser anterior a hoy.',
             'email.required' => 'El correo electrónico es obligatorio en el módulo de Personal.',
+            'identification_file.required' => 'Debe adjuntar el documento de identificación (Cédula / DIMEX / Pasaporte).',
             'credentials_file.required' => 'Los Atestados Profesionales (títulos/certificaciones) son OBLIGATORIOS para Profesoras (docente o mixto).',
         ]);
 
@@ -161,6 +180,7 @@ class StaffPage extends Component
             'second_last_name' => $this->second_last_name ?: null,
             'identification_type' => $this->identification_type,
             'identification_number' => trim($this->identification_number),
+            'birth_date' => $this->birth_date,
             'email' => strtolower(trim($this->email)),
             'phone' => trim($this->phone),
             'specialty' => $this->specialty ?: null,
@@ -170,13 +190,22 @@ class StaffPage extends Component
             'created_by' => Auth::id(),
         ]);
 
+        if ($this->identification_file) {
+            $attachmentService->store($member, $this->identification_file, 'cedula_dimex', 'Documento de identificación personal');
+        }
+
         if ($this->credentials_file) {
             $attachmentService->store($member, $this->credentials_file, 'atestado_profesional', 'Atestados profesionales verificados al ingreso');
         }
 
-        AuditService::log('staff.member_created', 'personal', $member, null, $member->only(['staff_code', 'staff_role_type', 'email', 'hiring_regime']));
-        $this->reset(['first_name', 'last_name', 'second_last_name', 'identification_number', 'email', 'phone', 'specialty', 'academic_degree', 'credentials_file']);
-        $this->feedback = 'Colaboradora registrada correctamente con su expediente privado.';
+        if ($this->signed_contract_file) {
+            $attachmentService->store($member, $this->signed_contract_file, 'contrato_pdf', 'Contrato existente / firmado adjunto al ingreso');
+        }
+
+        AuditService::log('staff.member_created', 'personal', $member, null, $member->only(['staff_code', 'staff_role_type', 'email', 'hiring_regime', 'birth_date']));
+        $this->reset(['first_name', 'last_name', 'second_last_name', 'identification_number', 'birth_date', 'email', 'phone', 'specialty', 'academic_degree', 'identification_file', 'credentials_file', 'signed_contract_file']);
+        $this->identification_type = 'cedula_nacional';
+        $this->feedback = 'Colaboradora registrada correctamente con su expediente y documentos privados.';
     }
 
     public function createContract(AttachmentService $attachmentService): void
@@ -190,13 +219,16 @@ class StaffPage extends Component
             'contract_title' => ['required', 'string', 'max:180'],
             'contract_start_date' => ['required', 'date'],
             'contract_gross' => ['required', 'numeric', 'min:1'],
+            'contract_pdf_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
         ];
 
         if ($this->contract_mode === 'pdf_adjunto') {
-            $rules['contract_pdf_file'] = ['required', 'file', 'mimes:pdf', 'max:25600'];
+            $rules['contract_pdf_file'] = ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'];
         }
 
-        $this->validate($rules);
+        $this->validate($rules, [
+            'contract_pdf_file.required' => 'Seleccione el archivo del contrato existente o ya firmado (PDF o imagen).',
+        ]);
 
         $member = StaffMember::findOrFail($this->contract_staff_id);
         if ($member->requiresProfessionalCredentials() && ! $member->hasActiveProfessionalCredentials()) {
@@ -206,8 +238,8 @@ class StaffPage extends Component
         }
 
         $attachmentId = null;
-        if ($this->contract_mode === 'pdf_adjunto' && $this->contract_pdf_file) {
-            $att = $attachmentService->store($member, $this->contract_pdf_file, 'contrato_pdf', 'Contrato PDF firmado');
+        if ($this->contract_pdf_file) {
+            $att = $attachmentService->store($member, $this->contract_pdf_file, 'contrato_pdf', 'Contrato existente / firmado adjunto');
             $attachmentId = $att->id;
         }
 
@@ -233,9 +265,64 @@ class StaffPage extends Component
             'created_by' => Auth::id(),
         ]);
 
-        AuditService::log('staff.contract_created', 'personal', $contract, null, $contract->only(['contract_number', 'hiring_regime', 'contract_mode']));
+        AuditService::log('staff.contract_created', 'personal', $contract, null, $contract->only(['contract_number', 'hiring_regime', 'contract_mode', 'attachment_id']));
         $this->contract_pdf_file = null;
         $this->feedback = sprintf('Contrato %s creado bajo régimen %s.', $contract->contract_number, $contract->hiring_regime);
+    }
+
+    public function startAttachContractFile(int $contractId): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('personal.manage'), 403);
+        $this->attachingContractId = $contractId;
+        $this->existing_contract_signed_file = null;
+        $this->existing_contract_signed_notes = '';
+        $this->resetValidation();
+        $this->feedback = null;
+    }
+
+    public function cancelAttachContractFile(): void
+    {
+        $this->attachingContractId = null;
+        $this->reset(['existing_contract_signed_file', 'existing_contract_signed_notes']);
+        $this->resetValidation();
+    }
+
+    public function uploadSignedContractFile(AttachmentService $attachmentService): void
+    {
+        abort_unless(Auth::user()->hasEffectivePermission('personal.manage'), 403);
+        if (! $this->attachingContractId) {
+            return;
+        }
+
+        $this->validate([
+            'existing_contract_signed_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'existing_contract_signed_notes' => ['nullable', 'string', 'max:500'],
+        ], [
+            'existing_contract_signed_file.required' => 'Seleccione el archivo del contrato firmado (PDF, JPG, PNG o WebP).',
+        ]);
+
+        $contract = StaffContract::with('staffMember')->findOrFail($this->attachingContractId);
+        $att = $attachmentService->store(
+            attachable: $contract->staffMember,
+            file: $this->existing_contract_signed_file,
+            documentType: 'contrato_pdf',
+            notes: $this->existing_contract_signed_notes ?: ('Contrato firmado adjunto a '.$contract->contract_number)
+        );
+
+        $oldAttachmentId = $contract->attachment_id;
+        $contract->update(['attachment_id' => $att->id]);
+
+        AuditService::log(
+            event: 'staff.contract_signed_uploaded',
+            module: 'personal',
+            auditable: $contract,
+            oldValues: ['attachment_id' => $oldAttachmentId],
+            newValues: ['attachment_id' => $att->id, 'version' => $att->version],
+            reason: $this->existing_contract_signed_notes ?: 'Archivo de contrato firmado adjuntado'
+        );
+
+        $this->cancelAttachContractFile();
+        $this->feedback = sprintf('Archivo de contrato firmado (v%d) adjuntado correctamente al contrato %s.', $att->version, $contract->contract_number);
     }
 
     public function recordPayment(StaffPayrollService $payrollService): void
