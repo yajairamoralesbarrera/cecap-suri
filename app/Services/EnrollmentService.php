@@ -660,12 +660,21 @@ class EnrollmentService
         ?string $notes = null
     ): Enrollment {
         return DB::transaction(function () use ($enrollment, $addedDocumentKeys, $notes): Enrollment {
+            $enrollment->loadMissing('student.attachments');
             $oldStatus = $enrollment->status;
             $oldSubmitted = $enrollment->submitted_documents ?? [];
             $requiredDocs = $enrollment->required_documents_snapshot ?? ['cedula_dimex'];
 
+            $activeAttachmentTypes = $enrollment->student
+                ? $enrollment->student->attachments()
+                    ->where('status', 'activo')
+                    ->pluck('document_type')
+                    ->all()
+                : [];
+
             $mergedSubmitted = array_values(array_unique(array_merge(
                 $oldSubmitted,
+                $activeAttachmentTypes,
                 array_values(array_filter($addedDocumentKeys))
             )));
             $missing = array_values(array_diff($requiredDocs, $mergedSubmitted));
@@ -692,8 +701,9 @@ class EnrollmentService
                 'from_status' => $oldStatus,
                 'to_status' => $newStatus,
                 'description' => trim(sprintf(
-                    'Documento(s) adjuntado(s) desde Admisiones: %s.%s',
+                    'Documento(s) adjuntado(s) desde Admisiones: %s.%s%s',
                     implode(', ', $addedLabels),
+                    $docsComplete ? ' Documentación completa.' : '',
                     $cleanNotes ? ' Nota: '.$cleanNotes : ''
                 )),
                 'metadata' => [
@@ -716,6 +726,38 @@ class EnrollmentService
 
             return $enrollment->fresh(['student.attachments', 'edition.course']);
         });
+    }
+
+    /**
+     * Sincroniza los adjuntos activos del expediente de una alumna con todas sus solicitudes
+     * incompletas (pendientes, lista de espera, confirmadas con excepción o rechazadas).
+     *
+     * @param  list<string>  $addedDocumentKeys
+     */
+    public function syncStudentAttachmentsToEnrollments(
+        Student $student,
+        array $addedDocumentKeys = [],
+        ?string $notes = null
+    ): int {
+        $enrollments = Enrollment::query()
+            ->where('student_id', $student->id)
+            ->where(function ($q) {
+                $q->whereIn('status', ['documentacion_pendiente', 'preinscrita', 'lista_espera'])
+                    ->orWhere(function ($q2) {
+                        $q2->whereIn('status', ['confirmada', 'rechazada'])->where('documents_complete', false);
+                    });
+            })
+            ->get();
+
+        foreach ($enrollments as $enr) {
+            $this->attachDocumentsToEnrollment(
+                enrollment: $enr,
+                addedDocumentKeys: $addedDocumentKeys,
+                notes: $notes ?: 'Sincronizado automáticamente desde expediente de alumna'
+            );
+        }
+
+        return $enrollments->count();
     }
 
     /**

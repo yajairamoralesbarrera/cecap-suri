@@ -393,14 +393,22 @@ class AdmissionsPage extends Component
         $this->tab = 'queue';
     }
 
+    public function updatedAttachmentFile(): void
+    {
+        if ($this->attachment_file && $this->attachment_doc_type && ! in_array($this->attachment_doc_type, $this->submitted_documents, true)) {
+            $this->submitted_documents[] = $this->attachment_doc_type;
+        }
+    }
+
     public function startConfirmEnrollment(int $enrollmentId): void
     {
-        $enr = Enrollment::findOrFail($enrollmentId);
+        $enr = Enrollment::with('student.attachments')->findOrFail($enrollmentId);
         $this->rejectingEnrollmentId = null;
         $this->attachingEnrollmentId = null;
         $this->reopeningEnrollmentId = null;
         $this->confirmingEnrollmentId = $enr->id;
-        $this->confirm_docs = $enr->submitted_documents ?? [];
+        $activeTypes = $enr->student?->attachments?->where('status', 'activo')->pluck('document_type')->all() ?? [];
+        $this->confirm_docs = array_values(array_unique(array_merge($enr->submitted_documents ?? [], $activeTypes)));
         $this->confirm_exception = false;
         $this->confirm_exception_reason = '';
         $this->confirm_exception_date = now()->addDays(15)->toDateString();
@@ -519,12 +527,27 @@ class AdmissionsPage extends Component
         $this->showingArchivedStudentId = $this->showingArchivedStudentId === $studentId ? null : $studentId;
     }
 
-    public function restoreAttachment(int $attachmentId, AttachmentService $attachmentService): void
+    public function restoreAttachment(int $attachmentId, AttachmentService $attachmentService, EnrollmentService $enrollmentService): void
     {
         abort_unless(Auth::user()->hasEffectivePermission('admisiones.manage'), 403);
         $att = RecordAttachment::findOrFail($attachmentId);
         $attachmentService->restore($att, 'Restaurado desde Directorio de Alumnas');
-        $this->feedback = sprintf('Adjunto %s (v%d) restaurado nuevamente a estado ACTIVO.', $att->document_type_label, $att->version);
+
+        $syncedCount = 0;
+        if ($att->attachable_type === Student::class) {
+            $student = Student::find($att->attachable_id);
+            if ($student) {
+                $syncedCount = $enrollmentService->syncStudentAttachmentsToEnrollments(
+                    student: $student,
+                    addedDocumentKeys: [$att->document_type],
+                    notes: 'Adjunto restaurado a estado activo'
+                );
+            }
+        }
+
+        $this->feedback = $syncedCount > 0
+            ? sprintf('Adjunto %s (v%d) restaurado a ACTIVO y checklist actualizado en %d solicitud(es).', $att->document_type_label, $att->version, $syncedCount)
+            : sprintf('Adjunto %s (v%d) restaurado nuevamente a estado ACTIVO.', $att->document_type_label, $att->version);
     }
 
     public function startAttachEnrollment(int $enrollmentId): void
@@ -587,9 +610,13 @@ class AdmissionsPage extends Component
             $this->attachingEnrollmentId = null;
         }
 
-        $this->feedback = $updated->documents_complete
-            ? sprintf('Adjunto guardado en %s. Documentación completa (estado actual: %s).', $updated->enrollment_code, strtoupper(str_replace('_', ' ', $updated->status)))
-            : sprintf('Adjunto guardado en %s. Aún falta: %s.', $updated->enrollment_code, implode(', ', $updated->missingDocumentLabels()));
+        if ($updated->documents_complete) {
+            $this->feedback = $updated->status === 'rechazada'
+                ? sprintf('Adjunto guardado en %s. Documentación COMPLETA. Ahora puede pulsar «Reabrir» para reactivar esta solicitud.', $updated->enrollment_code)
+                : sprintf('Adjunto guardado en %s. Documentación COMPLETA (estado actualizado: %s).', $updated->enrollment_code, strtoupper(str_replace('_', ' ', $updated->status)));
+        } else {
+            $this->feedback = sprintf('Adjunto guardado en %s. Aún falta: %s.', $updated->enrollment_code, implode(', ', $updated->missingDocumentLabels()));
+        }
     }
 
     public function startReopenEnrollment(int $enrollmentId): void
@@ -720,28 +747,16 @@ class AdmissionsPage extends Component
             notes: $this->student_attachment_notes ?: 'Adjunto agregado al expediente desde Directorio de Alumnas'
         );
 
-        // Sincronizar automáticamente el checklist en las inscripciones abiertas o incompletas de esta alumna
-        $openEnrollments = Enrollment::query()
-            ->where('student_id', $student->id)
-            ->where(function ($q) {
-                $q->whereIn('status', ['documentacion_pendiente', 'preinscrita', 'lista_espera'])
-                    ->orWhere(function ($q2) {
-                        $q2->where('status', 'confirmada')->where('documents_complete', false);
-                    });
-            })
-            ->get();
-
-        foreach ($openEnrollments as $enr) {
-            $enrollmentService->attachDocumentsToEnrollment(
-                enrollment: $enr,
-                addedDocumentKeys: [$this->student_attachment_doc_type],
-                notes: $this->student_attachment_notes ?: 'Sincronizado desde expediente de alumna'
-            );
-        }
+        // Sincronizar automáticamente el checklist en TODAS las solicitudes incompletas (pendientes, lista de espera, confirmadas con excepción o rechazadas)
+        $syncedCount = $enrollmentService->syncStudentAttachmentsToEnrollments(
+            student: $student,
+            addedDocumentKeys: [$this->student_attachment_doc_type],
+            notes: $this->student_attachment_notes ?: 'Sincronizado desde expediente de alumna'
+        );
 
         $this->cancelAttachStudent();
-        $this->feedback = $openEnrollments->isNotEmpty()
-            ? sprintf('Adjunto %s (v%d) guardado en el expediente de %s y checklist actualizado en %d solicitud(es).', $att->document_type_label, $att->version, $student->full_name, $openEnrollments->count())
+        $this->feedback = $syncedCount > 0
+            ? sprintf('Adjunto %s (v%d) guardado en el expediente de %s y checklist actualizado automáticamente en %d solicitud(es).', $att->document_type_label, $att->version, $student->full_name, $syncedCount)
             : sprintf('Adjunto %s (v%d) guardado en el expediente de %s.', $att->document_type_label, $att->version, $student->full_name);
     }
 

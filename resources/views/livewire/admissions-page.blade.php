@@ -45,7 +45,11 @@
                                     {{ strtoupper(str_replace('_', ' ', $enr->status)) }}
                                 </span>
                                 @if($enr->exception_authorized)
-                                    <div class="text-[11px] text-amber-700 font-semibold mt-0.5">Excepción hasta {{ $enr->exception_commitment_date?->format('d/m/Y') }}</div>
+                                    @if($enr->documents_complete)
+                                        <div class="text-[11px] text-emerald-700 font-semibold mt-0.5">✓ Excepción documental cumplida</div>
+                                    @else
+                                        <div class="text-[11px] text-amber-700 font-semibold mt-0.5">Excepción hasta {{ $enr->exception_commitment_date?->format('d/m/Y') }}</div>
+                                    @endif
                                 @endif
                                 @if($enr->status === 'rechazada' && $enr->rejection_reason_label)
                                     <div class="text-[11px] text-rose-700 font-medium mt-0.5">Motivo: {{ $enr->rejection_reason_label }}</div>
@@ -223,13 +227,27 @@
                                             </div>
                                         @endif
 
-                                        @php $attachMissing = $attachingEnrollment->missingDocumentLabels(); @endphp
-                                        <div class="rounded-xl border {{ empty($attachMissing) ? 'border-emerald-300 bg-emerald-50 text-emerald-900' : 'border-rose-200 bg-white text-rose-900' }} px-3 py-2 text-xs">
-                                            @if(empty($attachMissing))
-                                                <strong>Documentación completa.</strong> Puede subir una nueva versión si requiere reemplazar algún archivo.
-                                            @else
-                                                <strong>Documentos faltantes actuales:</strong> {{ implode(', ', $attachMissing) }}
-                                            @endif
+                                        @php
+                                            $attachMissing = $attachingEnrollment->missingDocumentLabels();
+                                            $attachReqKeys = $attachingEnrollment->required_documents_snapshot ?? ['cedula_dimex'];
+                                            $attachSubKeys = $attachingEnrollment->submitted_documents ?? [];
+                                        @endphp
+                                        <div class="rounded-xl border {{ empty($attachMissing) ? 'border-emerald-300 bg-emerald-50 text-emerald-900' : 'border-rose-200 bg-white text-rose-900' }} px-3 py-2.5 text-xs space-y-2">
+                                            <div>
+                                                @if(empty($attachMissing))
+                                                    <strong>✓ Documentación completa.</strong> Todos los requisitos de esta solicitud están cubiertos. Puede subir una nueva versión si requiere reemplazar algún archivo.
+                                                @else
+                                                    <strong>Documentos faltantes actuales:</strong> {{ implode(', ', $attachMissing) }}
+                                                @endif
+                                            </div>
+                                            <div class="flex flex-wrap gap-2">
+                                                @foreach($attachReqKeys as $rk)
+                                                    @php $hasDoc = in_array($rk, $attachSubKeys, true); @endphp
+                                                    <span class="cecap-badge {{ $hasDoc ? 'bg-emerald-100 text-emerald-900' : 'bg-rose-100 text-rose-900' }}">
+                                                        {{ $hasDoc ? '✓' : '✗' }} {{ $documentTypes[$rk] ?? $rk }}
+                                                    </span>
+                                                @endforeach
+                                            </div>
                                         </div>
 
                                         @php $activeAtts = $attachingEnrollment->student?->attachments?->where('status', 'activo') ?? collect(); @endphp

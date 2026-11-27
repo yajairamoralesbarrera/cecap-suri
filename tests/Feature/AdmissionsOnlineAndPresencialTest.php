@@ -619,6 +619,42 @@ it('supports inline attachment uploads in /admisiones, audited reopening of reje
 
     expect($enr2->fresh()->documents_complete)->toBeTrue();
     expect($enr2->fresh()->status)->toBe('lista_espera');
+
+    // 6. Confirmar con excepción (sin atestado) y luego subir el atestado faltante desde Adjuntos -> cambia a Completo y muestra Excepción cumplida
+    $edition2 = createSampleEdition('curso_tecnico');
+    $student3 = Student::create([
+        'student_code' => Student::nextCode(),
+        'first_name' => 'Lorena',
+        'last_name' => 'Pacheco',
+        'identification_type' => 'cedula_nacional',
+        'identification_number' => '1-9000-0003',
+        'email' => 'lorena.pacheco@correo.cr',
+        'phone' => '8800-9003',
+        'gender' => 'femenino',
+        'education_level' => 'bachillerato_secundaria',
+    ]);
+    $enrExc = app(EnrollmentService::class)->createPresencialEnrollment(
+        student: $student3,
+        edition: $edition2,
+        submittedDocuments: ['cedula_dimex'],
+        confirmImmediately: true,
+        authorizeException: true,
+        exceptionReason: 'Título pendiente del MEP',
+        exceptionCommitmentDate: now()->addDays(10)->toDateString()
+    );
+    expect($enrExc->documents_complete)->toBeFalse();
+
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->call('startAttachEnrollment', $enrExc->id)
+        ->set('enr_attachment_doc_type', 'atestado_academico')
+        ->set('enr_attachment_file', UploadedFile::fake()->create('titulo_lorena.pdf', 110, 'application/pdf'))
+        ->call('uploadEnrollmentAttachment')
+        ->assertHasNoErrors()
+        ->assertSee('Excepción documental cumplida');
+
+    expect($enrExc->fresh()->documents_complete)->toBeTrue();
+    expect($enrExc->fresh()->status)->toBe('confirmada');
 });
 
 
