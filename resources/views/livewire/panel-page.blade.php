@@ -46,7 +46,7 @@
                 <div class="mt-2 text-2xl font-bold text-brand-800">{{ $stats['graduations'] }}</div>
             </div>
             <div class="cecap-card">
-                <div class="text-xs font-semibold uppercase text-slate-500">Personal Activo</div>
+                <div class="text-xs font-semibold uppercase text-slate-500">Colaboradores Activos</div>
                 <div class="mt-2 text-2xl font-bold text-slate-800">{{ $stats['staff'] }}</div>
             </div>
         </div>

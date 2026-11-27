@@ -1,13 +1,16 @@
 <?php
 
+use App\Livewire\DirectionPage;
 use App\Models\AuditLog;
 use App\Models\InstitutionSetting;
+use App\Models\StaffMember;
 use App\Models\Student;
 use App\Models\User;
 use App\Services\GovernanceService;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
+use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
 
 beforeEach(function () {
@@ -115,7 +118,29 @@ it('enforces admin/superadmin role guards, safe cloning, custom permissions, and
         'phone' => '8800-0002',
     ], 'TempPass2026!'))->toThrow(ValidationException::class);
 
-    // Clonación válida crea usuario nuevo con must_change_password=true y mismos roles
+    // Clonación exige que la persona exista primero en Colaboradores (todo rol distinto a super_admin)
+    expect(fn () => $governance->cloneUserPermissionsToNewUser($superAdmin, $direccion, [
+        'name' => 'Subdirectora',
+        'email' => 'subdir@cecap.or.cr',
+        'identification_number' => '1-8000-0002',
+        'phone' => '8800-0002',
+    ], 'TempPass2026!'))->toThrow(ValidationException::class);
+
+    $staffSubdir = StaffMember::create([
+        'staff_code' => StaffMember::nextCode(),
+        'staff_role_type' => 'staff',
+        'first_name' => 'Subdirectora',
+        'last_name' => 'CeCap',
+        'identification_type' => 'cedula_nacional',
+        'identification_number' => '1-8000-0002',
+        'email' => 'subdir@cecap.or.cr',
+        'phone' => '8800-0002',
+        'birth_date' => '1985-03-20',
+        'status' => 'activo',
+        'created_by' => $superAdmin->id,
+    ]);
+
+    // Clonación válida crea usuario nuevo con must_change_password=true, mismos roles y enlaza Colaborador
     $cloned = $governance->cloneUserPermissionsToNewUser($superAdmin, $direccion, [
         'name' => 'Subdirectora',
         'email' => 'subdir@cecap.or.cr',
@@ -125,6 +150,30 @@ it('enforces admin/superadmin role guards, safe cloning, custom permissions, and
 
     expect($cloned->must_change_password)->toBeTrue();
     expect($cloned->hasRole('direccion'))->toBeTrue();
+    expect($staffSubdir->fresh()->user_id)->toBe($cloned->id);
+
+    // El único rol exento de estar en Colaboradores es super_admin
+    Livewire::actingAs($superAdmin)
+        ->test(DirectionPage::class)
+        ->set('new_user_name', 'Soporte Super Admin')
+        ->set('new_user_email', 'soporte.sa@cecap.or.cr')
+        ->set('new_user_id_num', '1-8000-0099')
+        ->set('new_user_phone', '8800-0099')
+        ->set('new_user_password', 'SuperAdmin2026!')
+        ->set('new_user_roles', ['super_admin'])
+        ->call('createUser')
+        ->assertHasNoErrors();
+
+    $secondSuperAdmin = User::where('email', 'soporte.sa@cecap.or.cr')->firstOrFail();
+    expect($secondSuperAdmin->hasRole('super_admin'))->toBeTrue();
+
+    // Si a ese Super Admin (que no está en Colaboradores) se le intenta añadir otro rol, se bloquea
+    Livewire::actingAs($superAdmin)
+        ->test(DirectionPage::class)
+        ->call('editUserAccess', $secondSuperAdmin->id)
+        ->set('edit_roles', ['super_admin', 'secretaria'])
+        ->call('saveUserAccess')
+        ->assertHasErrors('edit_roles');
 
     // Desactivación global de módulo bloquea acceso
     $setting = InstitutionSetting::current();

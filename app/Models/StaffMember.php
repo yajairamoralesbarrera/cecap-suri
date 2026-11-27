@@ -82,6 +82,25 @@ class StaffMember extends Model
         ])));
     }
 
+    public static function findByIdentification(string $identification): ?self
+    {
+        $clean = trim($identification);
+        if ($clean === '') {
+            return null;
+        }
+
+        $normalized = strtoupper((string) preg_replace('/[^0-9A-Za-z]/', '', $clean));
+
+        return static::query()
+            ->where(function ($q) use ($clean, $normalized): void {
+                $q->where('identification_number', $clean);
+                if ($normalized !== '') {
+                    $q->orWhereRaw("UPPER(REGEXP_REPLACE(identification_number, '[^0-9A-Za-z]', '', 'g')) = ?", [$normalized]);
+                }
+            })
+            ->first();
+    }
+
     public static function nextCode(): string
     {
         $year = now()->format('Y');

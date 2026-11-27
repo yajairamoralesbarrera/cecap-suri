@@ -9,20 +9,20 @@
     @endif
 
     <div class="flex flex-wrap gap-2">
-        <button type="button" wire:click="setTab('directory')" class="{{ $tab === 'directory' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Directorio y Atestados ({{ $staffMembers->count() }})</button>
+        <button type="button" wire:click="setTab('directory')" class="{{ $tab === 'directory' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Directorio de Colaboradores ({{ $staffMembers->count() }})</button>
         <button type="button" wire:click="setTab('contracts')" class="{{ $tab === 'contracts' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Contratos CR ({{ $contracts->count() }})</button>
         <button type="button" wire:click="setTab('payments')" class="{{ $tab === 'payments' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Pagos y Comprobantes CR ({{ $payments->count() }})</button>
     </div>
 
-    {{-- TAB: DIRECTORIO Y ATESTADOS --}}
+    {{-- TAB: DIRECTORIO DE COLABORADORES --}}
     @if($tab === 'directory')
         <div class="space-y-6">
             @if(auth()->user()->hasEffectivePermission('personal.manage'))
                 <form wire:submit="createStaff" class="cecap-card space-y-4">
-                    <h2 class="text-base font-bold text-brand-950">Registrar Personal / Profesora (Correo y Atestados Obligatorios para Docentes)</h2>
+                    <h2 class="text-base font-bold text-brand-950">Registrar Colaborador(a) / Profesora (Correo, Identificación y Atestados Obligatorios para Docentes)</h2>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Perfil de Personal *</label>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Perfil de Colaborador(a) *</label>
                             <select wire:model.live="staff_role_type" class="cecap-input">
                                 <option value="teacher">Profesora (Atestados Obligatorios)</option>
                                 <option value="both">Docente + Administrativo (Atestados Obligatorios)</option>
@@ -133,7 +133,7 @@
             @endif
 
             <div class="cecap-card overflow-x-auto">
-                <h2 class="text-base font-bold text-slate-900 mb-3">Expedientes de Personal</h2>
+                <h2 class="text-base font-bold text-slate-900 mb-3">Expedientes de Colaboradores</h2>
                 <table class="w-full text-sm text-left">
                     <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
                         <tr><th class="py-2 pr-3">Código</th><th class="py-2 pr-3">Colaboradora / Identificación</th><th class="py-2 pr-3">Tipo / Régimen CR</th><th class="py-2 pr-3">Contacto</th><th class="py-2">Documentos del Expediente</th></tr>

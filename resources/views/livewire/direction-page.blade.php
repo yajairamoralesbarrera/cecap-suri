@@ -37,7 +37,7 @@
                     <a href="{{ route('direccion.export', 'students') }}" class="cecap-btn-secondary text-xs">Alumnas CSV</a>
                     <a href="{{ route('direccion.export', 'enrollments') }}" class="cecap-btn-secondary text-xs">Matrículas CSV</a>
                     <a href="{{ route('direccion.export', 'payments') }}" class="cecap-btn-secondary text-xs">Recibos Caja CSV</a>
-                    <a href="{{ route('direccion.export', 'staff_payments') }}" class="cecap-btn-secondary text-xs">Pagos Personal CR CSV</a>
+                    <a href="{{ route('direccion.export', 'staff_payments') }}" class="cecap-btn-secondary text-xs">Pagos Colaboradores CSV</a>
                     <a href="{{ route('direccion.export', 'audit_logs') }}" class="cecap-btn-secondary text-xs">Auditoría CSV</a>
                 </div>
             </div>
@@ -62,6 +62,16 @@
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <form wire:submit="createUser" class="cecap-card space-y-3">
                     <h2 class="text-base font-bold text-brand-950">Crear Usuario (must_change_password = true)</h2>
+                    <p class="text-xs text-slate-600">Todo rol distinto a <strong>Super Administrador</strong> requiere que la persona esté registrada primero en <a href="{{ route('personal') }}" class="font-semibold text-brand-800 underline">Colaboradores</a>.</p>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Seleccionar desde Colaboradores (autollenar)</label>
+                        <select wire:model.live="new_user_staff_id" class="cecap-input">
+                            <option value="">-- Seleccione colaborador(a) o digite Super Admin --</option>
+                            @foreach($collaborators as $col)
+                                <option value="{{ $col->id }}">{{ $col->full_name }} ({{ $col->identification_number }} · {{ $col->email }})</option>
+                            @endforeach
+                        </select>
+                    </div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <input wire:model="new_user_name" type="text" required class="cecap-input" placeholder="Nombre completo *">
                         <input wire:model="new_user_email" type="email" required class="cecap-input" placeholder="Correo institucional *">
@@ -113,6 +123,15 @@
                         <option value="">-- Usuario modelo a clonar --</option>
                         @foreach($users as $u)<option value="{{ $u->id }}">{{ $u->name }} ({{ $u->role_labels }})</option>@endforeach
                     </select>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Seleccionar persona desde Colaboradores (autollenar)</label>
+                        <select wire:model.live="clone_staff_id" class="cecap-input">
+                            <option value="">-- Seleccione colaborador(a) registrado(a) --</option>
+                            @foreach($collaborators as $col)
+                                <option value="{{ $col->id }}">{{ $col->full_name }} ({{ $col->identification_number }} · {{ $col->email }})</option>
+                            @endforeach
+                        </select>
+                    </div>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <input wire:model="clone_name" type="text" required class="cecap-input" placeholder="Nombre persona nueva *">
                         <input wire:model="clone_email" type="email" required class="cecap-input" placeholder="Correo nuevo único *">

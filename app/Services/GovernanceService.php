@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\StaffMember;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -10,6 +11,48 @@ use Spatie\Permission\Models\Role;
 
 class GovernanceService
 {
+    public function requiresCollaboratorRecord(array $targetRoles): bool
+    {
+        foreach ($targetRoles as $role) {
+            if ($role !== 'super_admin') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function assertCollaboratorRegistered(
+        array $targetRoles,
+        ?string $identificationNumber,
+        ?string $email = null,
+        ?int $userId = null,
+        string $errorKey = 'new_user_id_num'
+    ): ?StaffMember {
+        if (! $this->requiresCollaboratorRecord($targetRoles)) {
+            return null;
+        }
+
+        $staff = null;
+        if ($userId) {
+            $staff = StaffMember::where('user_id', $userId)->first();
+        }
+        if (! $staff && filled($identificationNumber)) {
+            $staff = StaffMember::findByIdentification((string) $identificationNumber);
+        }
+        if (! $staff && filled($email)) {
+            $staff = StaffMember::whereRaw('LOWER(email) = ?', [strtolower(trim((string) $email))])->first();
+        }
+
+        if (! $staff || $staff->status !== 'activo') {
+            throw ValidationException::withMessages([
+                $errorKey => 'El único rol exento es Super Administrador. Para asignar cualquier otro rol, la persona debe estar registrada y activa primero en el módulo Colaboradores.',
+            ]);
+        }
+
+        return $staff;
+    }
+
     public function assertCanAssignRoles(User $actor, array $targetRoles, ?User $targetUser = null): void
     {
         $currentRoles = $targetUser ? $targetUser->getRoleNames()->all() : [];
@@ -76,10 +119,17 @@ class GovernanceService
             ]);
         }
 
+        $collaborator = $this->assertCollaboratorRegistered(
+            targetRoles: $roles,
+            identificationNumber: $newUserData['identification_number'] ?? null,
+            email: $newUserData['email'] ?? null,
+            errorKey: 'clone_id_num'
+        );
+
         $newUser = User::create([
             'name' => $newUserData['name'],
             'email' => strtolower(trim($newUserData['email'])),
-            'identification_type' => $newUserData['identification_type'] ?? 'cedula_nacional',
+            'identification_type' => $collaborator?->identification_type ?? ($newUserData['identification_type'] ?? 'cedula_nacional'),
             'identification_number' => $newUserData['identification_number'] ?? null,
             'phone' => $newUserData['phone'] ?? null,
             'gender' => $newUserData['gender'] ?? 'femenino',
@@ -90,6 +140,10 @@ class GovernanceService
             'created_by' => $actor->id,
             'updated_by' => $actor->id,
         ]);
+
+        if ($collaborator && ! $collaborator->user_id) {
+            $collaborator->update(['user_id' => $newUser->id]);
+        }
 
         $newUser->syncRoles($roles);
 
@@ -115,6 +169,7 @@ class GovernanceService
                 'source_email' => $sourceUser->email,
                 'roles' => $roles,
                 'uses_custom_permissions' => $sourceUser->uses_custom_permissions,
+                'staff_member_id' => $collaborator?->id,
             ]
         );
 

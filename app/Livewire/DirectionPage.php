@@ -11,6 +11,7 @@ use App\Models\GraduationRecord;
 use App\Models\InstitutionSetting;
 use App\Models\PaymentReceipt;
 use App\Models\Picklist;
+use App\Models\StaffMember;
 use App\Models\Student;
 use App\Models\User;
 use App\Services\AuditService;
@@ -34,6 +35,8 @@ class DirectionPage extends Component
     public ?string $issuedTempPassword = null;
 
     // Tab 2: Crear Usuario Nuevo (siempre must_change_password = true)
+    public ?int $new_user_staff_id = null;
+
     public string $new_user_name = '';
 
     public string $new_user_email = '';
@@ -66,6 +69,8 @@ class DirectionPage extends Component
 
     // Clonación segura de permisos (exige datos personales nuevos)
     public ?int $clone_source_user_id = null;
+
+    public ?int $clone_staff_id = null;
 
     public string $clone_name = '';
 
@@ -148,6 +153,40 @@ class DirectionPage extends Component
         $this->resetValidation();
     }
 
+    public function updatedNewUserStaffId($value): void
+    {
+        if (! $value) {
+            return;
+        }
+
+        $staff = StaffMember::find((int) $value);
+        if (! $staff) {
+            return;
+        }
+
+        $this->new_user_name = $staff->full_name;
+        $this->new_user_email = (string) $staff->email;
+        $this->new_user_id_num = (string) $staff->identification_number;
+        $this->new_user_phone = (string) ($staff->phone ?? '');
+    }
+
+    public function updatedCloneStaffId($value): void
+    {
+        if (! $value) {
+            return;
+        }
+
+        $staff = StaffMember::find((int) $value);
+        if (! $staff) {
+            return;
+        }
+
+        $this->clone_name = $staff->full_name;
+        $this->clone_email = (string) $staff->email;
+        $this->clone_id_num = (string) $staff->identification_number;
+        $this->clone_phone = (string) ($staff->phone ?? '');
+    }
+
     public function createUser(GovernanceService $governance): void
     {
         abort_unless(Auth::user()->hasEffectivePermission('direccion.users.manage'), 403);
@@ -163,8 +202,17 @@ class DirectionPage extends Component
 
         try {
             $governance->assertCanAssignRoles(Auth::user(), $this->new_user_roles);
+            $collaborator = $governance->assertCollaboratorRegistered(
+                targetRoles: $this->new_user_roles,
+                identificationNumber: $this->new_user_id_num,
+                email: $this->new_user_email,
+                errorKey: 'new_user_id_num'
+            );
         } catch (ValidationException $e) {
-            $this->addError('new_user_roles', collect($e->errors())->flatten()->first());
+            foreach ($e->errors() as $key => $messages) {
+                $targetKey = $key === 'roles' ? 'new_user_roles' : $key;
+                $this->addError($targetKey, $messages[0]);
+            }
 
             return;
         }
@@ -172,7 +220,7 @@ class DirectionPage extends Component
         $user = User::create([
             'name' => trim($this->new_user_name),
             'email' => strtolower(trim($this->new_user_email)),
-            'identification_type' => 'cedula_nacional',
+            'identification_type' => $collaborator?->identification_type ?? 'cedula_nacional',
             'identification_number' => trim($this->new_user_id_num),
             'phone' => trim($this->new_user_phone),
             'gender' => 'femenino',
@@ -183,6 +231,10 @@ class DirectionPage extends Component
             'created_by' => Auth::id(),
             'updated_by' => Auth::id(),
         ]);
+
+        if ($collaborator && ! $collaborator->user_id) {
+            $collaborator->update(['user_id' => $user->id]);
+        }
 
         $user->syncRoles($this->new_user_roles);
 
@@ -195,7 +247,7 @@ class DirectionPage extends Component
         }
 
         AuditService::log('governance.user_created', 'direccion', $user, null, ['email' => $user->email, 'roles' => $this->new_user_roles, 'must_change_password' => true]);
-        $this->reset(['new_user_name', 'new_user_email', 'new_user_id_num', 'new_user_phone', 'new_user_password', 'new_user_categories']);
+        $this->reset(['new_user_staff_id', 'new_user_name', 'new_user_email', 'new_user_id_num', 'new_user_phone', 'new_user_password', 'new_user_categories']);
         $this->feedback = 'Usuario creado con cambio obligatorio de contraseña en su primer ingreso.';
     }
 
@@ -255,10 +307,21 @@ class DirectionPage extends Component
 
         try {
             $governance->assertCanAssignRoles(Auth::user(), $this->edit_roles, $target);
+            $collaborator = $governance->assertCollaboratorRegistered(
+                targetRoles: $this->edit_roles,
+                identificationNumber: $target->identification_number,
+                email: $target->email,
+                userId: $target->id,
+                errorKey: 'edit_roles'
+            );
         } catch (ValidationException $e) {
             $this->addError('edit_roles', collect($e->errors())->flatten()->first());
 
             return;
+        }
+
+        if ($collaborator && ! $collaborator->user_id) {
+            $collaborator->update(['user_id' => $target->id]);
         }
 
         $target->syncRoles($this->edit_roles);
@@ -377,7 +440,7 @@ class DirectionPage extends Component
             return;
         }
 
-        $this->reset(['clone_name', 'clone_email', 'clone_id_num', 'clone_phone', 'clone_temp_password']);
+        $this->reset(['clone_staff_id', 'clone_name', 'clone_email', 'clone_id_num', 'clone_phone', 'clone_temp_password']);
         $this->feedback = sprintf('Permisos clonados de forma segura al nuevo usuario %s (exige cambio de contraseña al entrar).', $cloned->email);
     }
 
@@ -477,6 +540,7 @@ class DirectionPage extends Component
                 'graduations' => GraduationRecord::where('status', 'emitido')->count(),
             ],
             'users' => User::with(['roles', 'academicCategories'])->orderBy('id')->get(),
+            'collaborators' => StaffMember::where('status', 'activo')->orderBy('first_name')->get(),
             'rolesCatalog' => config('cecap.roles'),
             'allPermissions' => Permission::orderBy('name')->pluck('name')->all(),
             'categories' => AcademicCategory::orderBy('name')->get(),

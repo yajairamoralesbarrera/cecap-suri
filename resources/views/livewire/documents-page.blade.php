@@ -25,8 +25,8 @@
                 <div>
                     <label class="block text-sm font-semibold text-slate-700 mb-1">Visibilidad *</label>
                     <select wire:model="visibility" class="cecap-input">
-                        <option value="interno">Interno (Personal)</option>
-                        <option value="alumnas">Alumnas y Personal</option>
+                        <option value="interno">Interno (Colaboradores)</option>
+                        <option value="alumnas">Alumnas y Colaboradores</option>
                         <option value="publico">Público</option>
                         <option value="direccion">Solo Dirección</option>
                     </select>

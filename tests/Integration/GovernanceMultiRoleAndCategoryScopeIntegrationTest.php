@@ -3,6 +3,7 @@
 use App\Livewire\AcademicPage;
 use App\Livewire\DirectionPage;
 use App\Models\AcademicCategory;
+use App\Models\StaffMember;
 use App\Models\Student;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
@@ -27,6 +28,7 @@ it('integrates quick category creation, multi-role user provisioning (profesora 
     $catModa = AcademicCategory::where('code', 'CAT-MODA')->firstOrFail();
     $catOther = AcademicCategory::create(['code' => 'CAT-OTRA', 'name' => 'Otra Categoría', 'created_by' => $superAdmin->id]);
 
+    // Sin registro previo en Colaboradores, crear usuario con roles distintos a super_admin debe bloquearse
     Livewire::actingAs($superAdmin)
         ->test(DirectionPage::class)
         ->set('new_user_name', 'Rebeca Morales')
@@ -37,11 +39,35 @@ it('integrates quick category creation, multi-role user provisioning (profesora 
         ->set('new_user_roles', ['profesora', 'alumna', 'coordinador_categoria'])
         ->set('new_user_categories', [$catModa->id])
         ->call('createUser')
+        ->assertHasErrors('new_user_id_num');
+
+    $staffRebeca = StaffMember::create([
+        'staff_code' => StaffMember::nextCode(),
+        'staff_role_type' => 'both',
+        'first_name' => 'Rebeca',
+        'last_name' => 'Morales',
+        'identification_type' => 'cedula_nacional',
+        'identification_number' => '1-5511-2233',
+        'email' => 'rebeca.morales@cecap.or.cr',
+        'phone' => '8844-5566',
+        'birth_date' => '1988-05-14',
+        'status' => 'activo',
+        'created_by' => $superAdmin->id,
+    ]);
+
+    Livewire::actingAs($superAdmin)
+        ->test(DirectionPage::class)
+        ->set('new_user_staff_id', $staffRebeca->id)
+        ->set('new_user_password', 'TempInicial2026!')
+        ->set('new_user_roles', ['profesora', 'alumna', 'coordinador_categoria'])
+        ->set('new_user_categories', [$catModa->id])
+        ->call('createUser')
         ->assertHasNoErrors();
 
     $multiUser = User::where('email', 'rebeca.morales@cecap.or.cr')->firstOrFail();
     expect($multiUser->must_change_password)->toBeTrue();
     expect($multiUser->activeAcademicCategoryIds())->toBe([$catModa->id]);
+    expect($staffRebeca->fresh()->user_id)->toBe($multiUser->id);
 
     // Enlace de expediente estudiantil para comprobar portal multirrol
     Student::create([

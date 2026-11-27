@@ -17,7 +17,7 @@ use Livewire\Component;
 use Livewire\WithFileUploads;
 
 #[Layout('layouts.app')]
-#[Title('Personal y Contratos CR')]
+#[Title('Colaboradores')]
 class StaffPage extends Component
 {
     use WithFileUploads;
@@ -165,9 +165,9 @@ class StaffPage extends Component
 
         $this->validate($rules, [
             'identification_type.in' => 'Seleccione un tipo de identificación válido.',
-            'birth_date.required' => 'La fecha de nacimiento es obligatoria en el expediente de Personal.',
+            'birth_date.required' => 'La fecha de nacimiento es obligatoria en el expediente de Colaboradores.',
             'birth_date.before' => 'La fecha de nacimiento debe ser anterior a hoy.',
-            'email.required' => 'El correo electrónico es obligatorio en el módulo de Personal.',
+            'email.required' => 'El correo electrónico es obligatorio en el módulo de Colaboradores.',
             'identification_file.required' => 'Debe adjuntar el documento de identificación (Cédula / DIMEX / Pasaporte).',
             'credentials_file.required' => 'Los Atestados Profesionales (títulos/certificaciones) son OBLIGATORIOS para Profesoras (docente o mixto).',
         ]);

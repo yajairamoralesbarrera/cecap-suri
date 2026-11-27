@@ -19,7 +19,7 @@ return [
         ],
         'administracion_caja' => [
             'label' => 'Administración / Caja',
-            'description' => 'Planes de cobro, becas, caja, emisión de recibos REC-YYYY-NNNNN, reversos auditados, morosidad y pagos de personal CR.',
+            'description' => 'Planes de cobro, becas, caja, emisión de recibos REC-YYYY-NNNNN, reversos auditados, morosidad y pagos de colaboradores.',
             'is_critical' => false,
         ],
         'coordinacion_academica' => [
@@ -61,7 +61,7 @@ return [
         'seguimiento' => 'Seguimiento Académico',
         'finanzas' => 'Finanzas y Caja',
         'graduacion' => 'Graduación y Diplomas',
-        'personal' => 'Personal y Contratos CR',
+        'personal' => 'Colaboradores',
         'actividades' => 'Talleres y Actividades',
         'documentos' => 'Repositorio Documental',
         'consultas' => 'Expediente Alumnas',
