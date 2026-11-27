@@ -481,12 +481,15 @@ it('allows logical deletion of courses only when 0 students are enrolled, and su
 
     expect($enrolledCourse->fresh()->archived_at)->toBeNull();
 
-    // 3. Curso CON alumnas inscritas SÍ se puede cerrar manualmente por decisión institucional enviando correo a las alumnas
+    // 3. Curso CON alumnas inscritas SÍ se puede cerrar manualmente por decisión institucional (exige picklist) enviando correo a las alumnas
     Livewire::actingAs($admin)
         ->test(AcademicPage::class)
         ->call('startCloseCourse', $enrolledCourse->id)
         ->assertSet('closingCourseId', $enrolledCourse->id)
-        ->set('course_closure_reason', 'Reprogramación por decisión de Dirección Académica')
+        ->call('confirmCloseCourse')
+        ->assertHasErrors('course_closure_reason_code')
+        ->set('course_closure_reason_code', 'reprogramacion_calendario')
+        ->set('course_closure_reason', 'Se abrirá nuevamente en agosto')
         ->set('course_closure_message', 'Por decisión institucional este curso fue cerrado. Por favor manténgase pendiente para la nueva oferta académica.')
         ->set('course_closure_notify_students', true)
         ->call('confirmCloseCourse')
@@ -496,6 +499,7 @@ it('allows logical deletion of courses only when 0 students are enrolled, and su
     $enrolledCourse->refresh();
     $edition->refresh();
     expect($enrolledCourse->isClosed())->toBeTrue();
+    expect($enrolledCourse->closure_reason)->toContain('Reprogramación de calendario académico');
     expect($enrolledCourse->is_active)->toBeFalse();
     expect($edition->status)->toBe('cancelada');
     expect($edition->is_public_enrollment_open)->toBeFalse();

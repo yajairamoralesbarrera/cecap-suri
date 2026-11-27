@@ -134,6 +134,15 @@ class CostaRicaCatalogSeeder extends Seeder
                 ['trasladar_otra_edicion', 'Reubicar en otra edición con cupo disponible'],
                 ['rechazar_cupo_lleno', 'No matricular — Cupo agotado (notificar por correo)'],
             ],
+            'course_closure_reason' => [
+                ['cupo_minimo_no_alcanzado', 'Cupo mínimo no alcanzado'],
+                ['decision_institucional', 'Decisión institucional / Dirección Académica'],
+                ['reprogramacion_calendario', 'Reprogramación de calendario académico'],
+                ['indisponibilidad_docente', 'Indisponibilidad de profesora / docente'],
+                ['actualizacion_curricular', 'Actualización curricular del curso o programa'],
+                ['fuerza_mayor', 'Fuerza mayor / situación operativa'],
+                ['otro_motivo_cierre', 'Otro motivo institucional'],
+            ],
         ];
 
         foreach ($picklists as $group => $items) {

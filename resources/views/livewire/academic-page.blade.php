@@ -548,9 +548,20 @@
                                             </div>
 
                                             <div class="space-y-3">
-                                                <div>
-                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Motivo del Cierre Institucional (Auditoría) *</label>
-                                                    <input wire:model="course_closure_reason" type="text" required class="cecap-input" placeholder="Ej. Reprogramación académica / cupo mínimo no alcanzado por decisión institucional">
+                                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Motivo del Cierre Institucional (Picklist) *</label>
+                                                        <select wire:model="course_closure_reason_code" required class="cecap-input">
+                                                            <option value="">-- Seleccione el motivo de cierre --</option>
+                                                            @foreach($courseClosureReasons as $code => $label)
+                                                                <option value="{{ $code }}">{{ $label }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Observaciones adicionales (opcional)</label>
+                                                        <input wire:model="course_closure_reason" type="text" class="cecap-input" placeholder="Ej. Se reprogramará para el II cuatrimestre">
+                                                    </div>
                                                 </div>
                                                 <div>
                                                     <label class="block text-xs font-semibold text-slate-700 mb-1">Mensaje que recibirá cada alumna por correo *</label>

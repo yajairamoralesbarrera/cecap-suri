@@ -102,8 +102,10 @@ class AcademicPage extends Component
 
     public array $dup_subjects = [];
 
-    // Cierre manual institucional de curso (con correo a alumnas inscritas)
+    // Cierre manual institucional de curso (con picklist y correo a alumnas inscritas)
     public ?int $closingCourseId = null;
+
+    public string $course_closure_reason_code = '';
 
     public string $course_closure_reason = '';
 
@@ -783,6 +785,7 @@ class AcademicPage extends Component
         $this->managingSubjectsCourseId = null;
         $this->deletingCourseId = null;
         $this->closingCourseId = $course->id;
+        $this->course_closure_reason_code = '';
         $this->course_closure_reason = '';
         $this->course_closure_message = 'Por decisión institucional este curso ha sido cerrado. Por favor manténgase pendiente de nuestra nueva oferta académica y próximas convocatorias de CeCap SURÍ.';
         $this->course_closure_notify_students = true;
@@ -793,6 +796,7 @@ class AcademicPage extends Component
     public function cancelCloseCourse(): void
     {
         $this->closingCourseId = null;
+        $this->course_closure_reason_code = '';
         $this->course_closure_reason = '';
         $this->resetValidation();
     }
@@ -807,21 +811,36 @@ class AcademicPage extends Component
         $course = Course::with('editions')->findOrFail($this->closingCourseId);
         $allowedCategoryIds = $this->scopedCategoryIds();
         if ($allowedCategoryIds !== null && ! in_array((int) $course->academic_category_id, $allowedCategoryIds, true)) {
-            $this->addError('course_closure_reason', 'No tiene autorización sobre la categoría de este curso.');
+            $this->addError('course_closure_reason_code', 'No tiene autorización sobre la categoría de este curso.');
 
             return;
         }
 
         $this->validate([
-            'course_closure_reason' => ['required', 'string', 'min:5', 'max:500'],
+            'course_closure_reason_code' => ['required', 'string', 'max:60'],
+            'course_closure_reason' => ['nullable', 'string', 'max:500'],
             'course_closure_message' => ['required', 'string', 'min:5', 'max:1000'],
         ], [
-            'course_closure_reason.required' => 'Debe indicar el motivo del cierre institucional del curso.',
-            'course_closure_reason.min' => 'El motivo del cierre debe tener al menos 5 caracteres.',
+            'course_closure_reason_code.required' => 'Debe seleccionar el motivo del cierre institucional del catálogo (picklist).',
             'course_closure_message.required' => 'Debe indicar el mensaje que se enviará a las alumnas inscritas.',
         ]);
 
-        $cleanReason = trim($this->course_closure_reason);
+        $reasonPicklist = Picklist::query()
+            ->where('group_key', 'course_closure_reason')
+            ->where('code', $this->course_closure_reason_code)
+            ->where('is_active', true)
+            ->first();
+
+        if (! $reasonPicklist) {
+            $this->addError('course_closure_reason_code', 'Debe seleccionar un motivo de cierre válido del catálogo.');
+
+            return;
+        }
+
+        $extraNotes = trim($this->course_closure_reason);
+        $cleanReason = $extraNotes !== ''
+            ? $reasonPicklist->label.' — '.$extraNotes
+            : $reasonPicklist->label;
         $cleanMessage = trim($this->course_closure_message);
         $notifiableEnrollments = $course->activeNotifiableEnrollments();
 
@@ -1626,6 +1645,7 @@ class AcademicPage extends Component
             'classrooms' => Classroom::where('is_active', true)->orderBy('name')->get(),
             'teachers' => User::role('profesora')->where('is_active', true)->orderBy('name')->get(),
             'educationLevels' => Picklist::optionsFor('education_level'),
+            'courseClosureReasons' => Picklist::optionsFor('course_closure_reason'),
             'documentTypes' => config('cecap.document_types'),
             'daysOfWeek' => config('cecap.days_of_week'),
         ]);
