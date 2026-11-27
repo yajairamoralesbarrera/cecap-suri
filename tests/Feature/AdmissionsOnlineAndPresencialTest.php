@@ -435,4 +435,56 @@ it('routes full editions to online waitlist on /inscripcion, enforces presencial
         ->assertSee('LISTA DE ESPERA');
 });
 
+it('allows presencial officer to check availability first and directly enroll, waitlist, or reject with picklist and email even when seats are available', function () {
+    \Illuminate\Support\Facades\Mail::fake();
+    $admin = User::where('email', 'superadmin@cecap.or.cr')->firstOrFail();
+    $edition = createSampleEdition('curso_corto'); // 20 cupos disponibles
+
+    // Acción presencial directa: crear en Lista de Espera
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->set('tab', 'enroll')
+        ->set('course_edition_id', $edition->id)
+        ->assertSet('selectedEditionIsFull', false)
+        ->assertSee('CUPO DISPONIBLE')
+        ->set('presencial_action', 'lista_espera')
+        ->set('identification_number', '1-8000-0001')
+        ->set('first_name', 'Rebeca')
+        ->set('last_name', 'Vega')
+        ->set('email', 'rebeca.vega@correo.cr')
+        ->set('phone', '8800-8001')
+        ->set('gender', 'femenino')
+        ->call('createPresencialEnrollment')
+        ->assertHasNoErrors();
+
+    $wait = Enrollment::whereHas('student', fn ($q) => $q->where('identification_number', '1-8000-0001'))->firstOrFail();
+    expect($wait->status)->toBe('lista_espera');
+    expect($edition->fresh()->availableSeats())->toBe(20);
+
+    // Acción presencial directa: rechazar con picklist y correo (bloquea si falta motivo)
+    Livewire::actingAs($admin)
+        ->test(\App\Livewire\AdmissionsPage::class)
+        ->set('tab', 'enroll')
+        ->set('course_edition_id', $edition->id)
+        ->set('presencial_action', 'rechazar')
+        ->set('identification_number', '1-8000-0002')
+        ->set('first_name', 'Mónica')
+        ->set('last_name', 'Salas')
+        ->set('email', 'monica.salas@correo.cr')
+        ->set('phone', '8800-8002')
+        ->set('gender', 'femenino')
+        ->call('createPresencialEnrollment')
+        ->assertHasErrors('presencial_rejection_reason_code')
+        ->set('presencial_rejection_reason_code', 'nivel_academico_insuficiente')
+        ->set('presencial_rejection_notes', 'Se recomienda iniciar en nivel básico.')
+        ->call('createPresencialEnrollment')
+        ->assertHasNoErrors();
+
+    $rej = Enrollment::whereHas('student', fn ($q) => $q->where('identification_number', '1-8000-0002'))->firstOrFail();
+    expect($rej->status)->toBe('rechazada');
+    expect($rej->rejection_reason_code)->toBe('nivel_academico_insuficiente');
+    \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\EnrollmentRejectedMail::class, fn ($mail) => $mail->hasTo('monica.salas@correo.cr'));
+});
+
+
 

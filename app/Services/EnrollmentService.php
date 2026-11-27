@@ -177,17 +177,27 @@ class EnrollmentService
         ?string $exceptionCommitmentDate = null,
         ?string $notes = null,
         ?string $capacityDecisionCode = null,
-        ?string $capacityDecisionNotes = null
+        ?string $capacityDecisionNotes = null,
+        string $presencialAction = 'inscribir',
+        ?string $rejectionReasonCode = null,
+        ?string $rejectionNotes = null
     ): Enrollment {
         $edition->loadMissing('course');
-        if (! $authorizeException && ($eduError = $edition->course?->educationLevelRequirementError($student->education_level))) {
+        $isFull = $edition->availableSeats() <= 0;
+        $isDirectRejection = (! $isFull && $presencialAction === 'rechazar')
+            || ($isFull && $capacityDecisionCode === 'rechazar_cupo_lleno');
+        $isDirectWaitlist = (! $isFull && $presencialAction === 'lista_espera')
+            || ($isFull && $capacityDecisionCode === 'lista_espera');
+
+        if (! $isDirectRejection && ! $authorizeException && ($eduError = $edition->course?->educationLevelRequirementError($student->education_level))) {
             throw ValidationException::withMessages([
                 'education_level' => $eduError.' Si Dirección autoriza una excepción, marque la casilla de excepción e indique motivo y fecha compromiso.',
             ]);
         }
 
-        $isFull = $edition->availableSeats() <= 0;
         $decisionRecord = null;
+        $rejectionPicklistRecord = null;
+
         if ($isFull) {
             if (! filled($capacityDecisionCode)) {
                 throw ValidationException::withMessages([
@@ -213,7 +223,7 @@ class EnrollmentService
 
             if ($capacityDecisionCode === 'trasladar_otra_edicion') {
                 throw ValidationException::withMessages([
-                    'course_edition_id' => 'Decisión seleccionada: Reubicar en otra edición. Seleccione otra edición con cupos disponibles en el campo "Edición a Matricular".',
+                    'course_edition_id' => 'Decisión seleccionada: Reubicar en otra edición. Seleccione otra edición con cupos disponibles en el campo "Curso / Edición a Matricular".',
                 ]);
             }
 
@@ -222,16 +232,36 @@ class EnrollmentService
                     'full_capacity_notes' => 'Para autorizar un sobrecupo excepcional debe indicar la justificación u observación de auditoría.',
                 ]);
             }
+        } elseif ($presencialAction === 'rechazar') {
+            if (! filled($rejectionReasonCode)) {
+                throw ValidationException::withMessages([
+                    'presencial_rejection_reason_code' => 'Debe seleccionar un motivo de rechazo del catálogo (picklist).',
+                ]);
+            }
+
+            $rejectionPicklistRecord = Picklist::query()
+                ->where('group_key', 'enrollment_rejection_reason')
+                ->where('code', $rejectionReasonCode)
+                ->where('is_active', true)
+                ->first();
+
+            if (! $rejectionPicklistRecord) {
+                throw ValidationException::withMessages([
+                    'presencial_rejection_reason_code' => 'El motivo de rechazo seleccionado no es válido o está inactivo.',
+                ]);
+            }
         }
 
-        $this->scheduleConflicts->assertStudentHasNoScheduleConflict($student, $edition);
+        if (! $isDirectRejection) {
+            $this->scheduleConflicts->assertStudentHasNoScheduleConflict($student, $edition);
+        }
 
         $requiredDocs = $edition->course->required_documents ?? ['cedula_dimex'];
         $submitted = array_values(array_unique($submittedDocuments));
         $missing = array_values(array_diff($requiredDocs, $submitted));
         $docsComplete = count($missing) === 0;
 
-        $skipDocBlock = $isFull && in_array($capacityDecisionCode, ['lista_espera', 'rechazar_cupo_lleno'], true);
+        $skipDocBlock = $isDirectRejection || $isDirectWaitlist;
         if (! $skipDocBlock && $confirmImmediately && ! $docsComplete && ! $authorizeException) {
             $missingLabels = $this->documentLabels($missing);
             throw ValidationException::withMessages([
@@ -239,13 +269,14 @@ class EnrollmentService
             ]);
         }
 
-        if ($authorizeException && (! filled($exceptionReason) || ! filled($exceptionCommitmentDate))) {
+        if (! $skipDocBlock && $authorizeException && (! filled($exceptionReason) || ! filled($exceptionCommitmentDate))) {
             throw ValidationException::withMessages([
                 'exception_reason' => 'Para autorizar una excepción documental debe indicar el motivo y la fecha compromiso.',
             ]);
         }
 
         $cleanCapacityNotes = filled($capacityDecisionNotes) ? trim((string) $capacityDecisionNotes) : null;
+        $cleanRejectionNotes = filled($rejectionNotes) ? trim((string) $rejectionNotes) : null;
 
         $enrollment = DB::transaction(function () use (
             $student,
@@ -260,7 +291,11 @@ class EnrollmentService
             $notes,
             $capacityDecisionCode,
             $cleanCapacityNotes,
-            $decisionRecord
+            $decisionRecord,
+            $presencialAction,
+            $rejectionReasonCode,
+            $cleanRejectionNotes,
+            $rejectionPicklistRecord
         ): Enrollment {
             $lockedEdition = CourseEdition::whereKey($edition->id)->lockForUpdate()->firstOrFail();
             $lockedIsFull = $lockedEdition->availableSeats() <= 0;
@@ -279,21 +314,36 @@ class EnrollmentService
             $status = $confirmImmediately
                 ? 'confirmada'
                 : ($docsComplete ? 'preinscrita' : 'documentacion_pendiente');
-            $rejectionReasonCode = null;
+            $finalRejectionReasonCode = null;
+            $finalRejectionNotes = null;
             $rejectedAt = null;
             $rejectedBy = null;
+            $finalCapacityDecision = null;
 
             if ($lockedIsFull) {
+                $finalCapacityDecision = $capacityDecisionCode;
                 if ($capacityDecisionCode === 'lista_espera') {
                     $status = 'lista_espera';
                     $effectiveConfirm = false;
                 } elseif ($capacityDecisionCode === 'rechazar_cupo_lleno') {
                     $status = 'rechazada';
                     $effectiveConfirm = false;
-                    $rejectionReasonCode = 'cupo_agotado';
+                    $finalRejectionReasonCode = 'cupo_agotado';
+                    $finalRejectionNotes = $cleanCapacityNotes;
                     $rejectedAt = now();
                     $rejectedBy = Auth::id();
                 }
+            } elseif ($presencialAction === 'lista_espera') {
+                $status = 'lista_espera';
+                $effectiveConfirm = false;
+                $finalCapacityDecision = 'lista_espera';
+            } elseif ($presencialAction === 'rechazar') {
+                $status = 'rechazada';
+                $effectiveConfirm = false;
+                $finalRejectionReasonCode = $rejectionReasonCode;
+                $finalRejectionNotes = $cleanRejectionNotes;
+                $rejectedAt = now();
+                $rejectedBy = Auth::id();
             }
 
             $enrollment = Enrollment::create([
@@ -307,17 +357,17 @@ class EnrollmentService
                 'required_documents_snapshot' => array_values($requiredDocs),
                 'submitted_documents' => $submitted,
                 'documents_complete' => $docsComplete,
-                'exception_authorized' => $authorizeException,
-                'exception_reason' => $authorizeException ? $exceptionReason : null,
-                'exception_commitment_date' => $authorizeException ? $exceptionCommitmentDate : null,
-                'exception_authorized_by' => $authorizeException ? Auth::id() : null,
-                'exception_authorized_at' => $authorizeException ? now() : null,
-                'rejection_reason_code' => $rejectionReasonCode,
-                'rejection_notes' => $rejectionReasonCode ? $cleanCapacityNotes : null,
+                'exception_authorized' => $effectiveConfirm && $authorizeException,
+                'exception_reason' => ($effectiveConfirm && $authorizeException) ? $exceptionReason : null,
+                'exception_commitment_date' => ($effectiveConfirm && $authorizeException) ? $exceptionCommitmentDate : null,
+                'exception_authorized_by' => ($effectiveConfirm && $authorizeException) ? Auth::id() : null,
+                'exception_authorized_at' => ($effectiveConfirm && $authorizeException) ? now() : null,
+                'rejection_reason_code' => $finalRejectionReasonCode,
+                'rejection_notes' => $finalRejectionNotes,
                 'rejected_at' => $rejectedAt,
                 'rejected_by' => $rejectedBy,
-                'capacity_decision_code' => $lockedIsFull ? $capacityDecisionCode : null,
-                'notes' => $notes ?: $cleanCapacityNotes,
+                'capacity_decision_code' => $finalCapacityDecision,
+                'notes' => $notes ?: ($finalRejectionNotes ?: $cleanCapacityNotes),
                 'created_by' => Auth::id(),
                 'updated_by' => Auth::id(),
             ]);
@@ -327,18 +377,20 @@ class EnrollmentService
             }
 
             $lifecycleType = match (true) {
-                $lockedIsFull && $capacityDecisionCode === 'lista_espera' => 'lista_espera_presencial',
-                $lockedIsFull && $capacityDecisionCode === 'rechazar_cupo_lleno' => 'solicitud_rechazada',
+                $status === 'lista_espera' => 'lista_espera_presencial',
+                $status === 'rechazada' => 'solicitud_rechazada',
                 $lockedIsFull && $capacityDecisionCode === 'autorizar_sobrecupo' => 'sobrecupo_autorizado',
                 $effectiveConfirm => 'matricula_confirmada',
                 default => 'solicitud_presencial',
             };
 
-            $lifecycleDesc = $lockedIsFull && $decisionRecord
-                ? sprintf('Decisión presencial por cupo lleno (%s)%s', $decisionRecord->label, $cleanCapacityNotes ? ': '.$cleanCapacityNotes : '.')
-                : ($authorizeException
-                    ? sprintf('Matrícula confirmada por excepción documental (compromiso: %s). Motivo: %s', $exceptionCommitmentDate, $exceptionReason)
-                    : sprintf('Matrícula presencial registrada en estado %s para %s.', $status, $edition->name));
+            $lifecycleDesc = match (true) {
+                $lockedIsFull && $decisionRecord !== null => sprintf('Decisión presencial por cupo lleno (%s)%s', $decisionRecord->label, $cleanCapacityNotes ? ': '.$cleanCapacityNotes : '.'),
+                $status === 'rechazada' && $rejectionPicklistRecord !== null => sprintf('Solicitud presencial rechazada (%s)%s', $rejectionPicklistRecord->label, $cleanRejectionNotes ? ': '.$cleanRejectionNotes : '.'),
+                $status === 'lista_espera' => sprintf('Solicitante registrada presencialmente en Lista de Espera para %s.', $edition->name),
+                $effectiveConfirm && $authorizeException => sprintf('Matrícula confirmada por excepción documental (compromiso: %s). Motivo: %s', $exceptionCommitmentDate, $exceptionReason),
+                default => sprintf('Matrícula presencial registrada en estado %s para %s.', $status, $edition->name),
+            };
 
             StudentLifecycleEvent::create([
                 'student_id' => $student->id,
@@ -348,18 +400,19 @@ class EnrollmentService
                 'to_status' => $status,
                 'description' => $lifecycleDesc,
                 'metadata' => [
-                    'exception_authorized' => $authorizeException,
-                    'capacity_decision_code' => $lockedIsFull ? $capacityDecisionCode : null,
+                    'exception_authorized' => $effectiveConfirm && $authorizeException,
+                    'capacity_decision_code' => $finalCapacityDecision,
+                    'rejection_reason_code' => $finalRejectionReasonCode,
                 ],
                 'recorded_by' => Auth::id(),
                 'created_at' => now(),
             ]);
 
             $auditEvent = match (true) {
-                $lockedIsFull && $capacityDecisionCode === 'lista_espera' => 'enrollment.presencial_waitlisted',
+                $status === 'lista_espera' => 'enrollment.presencial_waitlisted',
                 $lockedIsFull && $capacityDecisionCode === 'autorizar_sobrecupo' => 'enrollment.presencial_overcapacity_authorized',
-                $lockedIsFull && $capacityDecisionCode === 'rechazar_cupo_lleno' => 'enrollment.rejected',
-                $authorizeException => 'enrollment.confirmed_with_exception',
+                $status === 'rechazada' => 'enrollment.rejected',
+                $effectiveConfirm && $authorizeException => 'enrollment.confirmed_with_exception',
                 default => 'enrollment.presencial_created',
             };
 
@@ -368,23 +421,24 @@ class EnrollmentService
                 module: 'admisiones',
                 auditable: $enrollment,
                 newValues: $enrollment->only(['enrollment_code', 'status', 'documents_complete', 'exception_authorized', 'exception_commitment_date', 'capacity_decision_code', 'rejection_reason_code']),
-                reason: $cleanCapacityNotes ?: ($authorizeException ? $exceptionReason : ($decisionRecord?->label))
+                reason: $finalRejectionNotes ?: ($cleanCapacityNotes ?: ($authorizeException ? $exceptionReason : ($rejectionPicklistRecord?->label ?: $decisionRecord?->label)))
             );
 
             return $enrollment->fresh(['student', 'edition.course']);
         });
 
-        // Si el funcionario decidió rechazar por cupo lleno, notificar por correo a la solicitante
+        // Si el funcionario decidió rechazar (por cupo lleno o acción directa), notificar por correo a la solicitante
         if ($enrollment->status === 'rechazada' && filled($enrollment->student?->email)) {
+            $mailReasonCode = $enrollment->rejection_reason_code ?: 'cupo_agotado';
             try {
                 Mail::to($enrollment->student->email)->send(new EnrollmentRejectedMail(
                     enrollment: $enrollment,
-                    reasonLabel: Picklist::labelFor('enrollment_rejection_reason', 'cupo_agotado'),
-                    additionalNotes: $cleanCapacityNotes,
+                    reasonLabel: Picklist::labelFor('enrollment_rejection_reason', $mailReasonCode),
+                    additionalNotes: $enrollment->rejection_notes,
                     settings: InstitutionSetting::current()
                 ));
             } catch (\Throwable $e) {
-                Log::warning('No se pudo enviar correo de rechazo por cupo lleno', [
+                Log::warning('No se pudo enviar correo de rechazo presencial', [
                     'enrollment_id' => $enrollment->id,
                     'error' => $e->getMessage(),
                 ]);
