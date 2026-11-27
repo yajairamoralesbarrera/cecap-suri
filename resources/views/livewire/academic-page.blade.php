@@ -217,40 +217,40 @@
                             <th class="py-2 pr-3">Curso / Programa</th>
                             <th class="py-2 pr-3">Tipo</th>
                             <th class="py-2 pr-3">Nivel Previo</th>
-                            <th class="py-2 pr-3">Cap. Defecto</th>
+                            <th class="py-2 pr-3">Cap.</th>
                             <th class="py-2 pr-3">Checklist</th>
-                            <th class="py-2 pr-3">Materias / Módulos</th>
-                            <th class="py-2">Acciones</th>
+                            <th class="py-2">Materias / Módulos</th>
                         </tr>
                     </thead>
-                    <tbody class="divide-y divide-slate-100">
+                    <tbody>
                         @forelse($courses as $c)
                             @php
                                 $courseEnrolledCount = $c->totalEnrollmentsCount();
                                 $courseActiveCount = $c->activeEnrollmentsCount();
                                 $cIsPrograma = $c->program_type === 'programa';
+                                $rowActive = ($editingCourseId === $c->id || $duplicatingCourseId === $c->id || $closingCourseId === $c->id || $deletingCourseId === $c->id || ($managingCourse && $managingCourse->id === $c->id));
                             @endphp
-                            <tr wire:key="course-row-{{ $c->id }}" class="{{ ($editingCourseId === $c->id || $duplicatingCourseId === $c->id || $closingCourseId === $c->id || $deletingCourseId === $c->id || ($managingCourse && $managingCourse->id === $c->id)) ? 'bg-slate-50/80' : '' }}">
-                                <td class="py-2.5 pr-3 font-mono text-xs font-bold">
+                            <tr wire:key="course-row-{{ $c->id }}" class="{{ $rowActive ? 'bg-slate-50/80' : '' }} {{ auth()->user()->hasEffectivePermission('academico.manage') ? '' : 'border-b border-slate-200' }}">
+                                <td class="pt-3 pb-1.5 pr-3 font-mono text-xs font-bold align-top">
                                     {{ $c->code }}
                                     @if($c->isClosed())
                                         <div class="mt-1"><span class="cecap-badge bg-amber-100 text-amber-950">CERRADO</span></div>
                                     @endif
                                 </td>
-                                <td class="py-2.5 pr-3 font-semibold text-slate-900">
+                                <td class="pt-3 pb-1.5 pr-3 font-semibold text-slate-900 align-top">
                                     {{ $c->name }}
                                     <div class="text-xs text-slate-500">{{ $c->category?->name }} · {{ $courseActiveCount }} inscrita(s) activa(s)</div>
                                     @if($c->isClosed() && $c->closure_reason)
                                         <div class="text-[11px] text-amber-800 font-medium mt-0.5">Cierre: {{ $c->closure_reason }}</div>
                                     @endif
                                 </td>
-                                <td class="py-2.5 pr-3"><span class="cecap-badge bg-brand-100 text-brand-900">{{ $c->program_type_label }}</span></td>
-                                <td class="py-2.5 pr-3 text-xs">{{ $educationLevels[$c->required_education_level] ?? $c->required_education_level }}</td>
-                                <td class="py-2.5 pr-3 font-semibold">{{ $c->default_max_capacity }}</td>
-                                <td class="py-2.5 pr-3 text-xs">
+                                <td class="pt-3 pb-1.5 pr-3 align-top"><span class="cecap-badge bg-brand-100 text-brand-900">{{ $c->program_type_label }}</span></td>
+                                <td class="pt-3 pb-1.5 pr-3 text-xs align-top">{{ $educationLevels[$c->required_education_level] ?? $c->required_education_level }}</td>
+                                <td class="pt-3 pb-1.5 pr-3 font-semibold align-top">{{ $c->default_max_capacity }}</td>
+                                <td class="pt-3 pb-1.5 pr-3 text-xs align-top">
                                     {{ collect($c->required_documents ?? [])->map(fn ($dk) => $documentTypes[$dk] ?? $dk)->implode(', ') }}
                                 </td>
-                                <td class="py-2.5 pr-3 text-xs">
+                                <td class="pt-3 pb-1.5 text-xs align-top">
                                     @if($c->subjects->isNotEmpty())
                                         <div class="font-semibold text-slate-800">{{ $c->subjects->count() }} {{ $cIsPrograma ? 'módulo(s)' : 'materia(s)' }}</div>
                                         @foreach($c->subjects as $sub)
@@ -260,28 +260,30 @@
                                         <span class="text-slate-400">0</span>
                                     @endif
                                 </td>
-                                <td class="py-2.5">
-                                    @if(auth()->user()->hasEffectivePermission('academico.manage'))
-                                        <div class="flex flex-wrap gap-1.5">
-                                            <button type="button" wire:click="editCourse({{ $c->id }})" class="cecap-btn-secondary !min-h-9 !px-2.5 text-xs">Editar</button>
-                                            <button type="button" wire:click="startDuplicateCourse({{ $c->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-indigo-300 bg-indigo-50 px-2.5 text-xs font-semibold text-indigo-800 hover:bg-indigo-100 cursor-pointer">Duplicar</button>
-                                            <button type="button" wire:click="openCourseSubjects({{ $c->id }})" class="cecap-btn-secondary !min-h-9 !px-2.5 text-xs">{{ $cIsPrograma ? '+ Módulos' : '+ Materias' }}</button>
+                            </tr>
+                            @if(auth()->user()->hasEffectivePermission('academico.manage'))
+                                <tr wire:key="course-actions-{{ $c->id }}" class="border-b border-slate-200 {{ $rowActive ? 'bg-slate-50/80' : '' }}">
+                                    <td colspan="7" class="pt-0 pb-3">
+                                        <div class="flex flex-wrap items-center gap-1.5">
+                                            <button type="button" wire:click="editCourse({{ $c->id }})" class="cecap-btn-secondary !min-h-8 !px-2.5 text-xs">Editar</button>
+                                            <button type="button" wire:click="startDuplicateCourse({{ $c->id }})" class="inline-flex min-h-8 items-center justify-center rounded-xl border border-indigo-300 bg-indigo-50 px-2.5 text-xs font-semibold text-indigo-800 hover:bg-indigo-100 cursor-pointer">Duplicar</button>
+                                            <button type="button" wire:click="openCourseSubjects({{ $c->id }})" class="cecap-btn-secondary !min-h-8 !px-2.5 text-xs">{{ $cIsPrograma ? '+ Módulos' : '+ Materias' }}</button>
                                             @if($c->isClosed())
-                                                <button type="button" wire:click="reopenClosedCourse({{ $c->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-emerald-400 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 cursor-pointer">Reabrir</button>
+                                                <button type="button" wire:click="reopenClosedCourse({{ $c->id }})" class="inline-flex min-h-8 items-center justify-center rounded-xl border border-emerald-400 bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 cursor-pointer">Reabrir</button>
                                             @else
-                                                <button type="button" wire:click="startCloseCourse({{ $c->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-amber-400 bg-amber-50 px-2.5 text-xs font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer">Cerrar Curso</button>
+                                                <button type="button" wire:click="startCloseCourse({{ $c->id }})" class="inline-flex min-h-8 items-center justify-center rounded-xl border border-amber-400 bg-amber-50 px-2.5 text-xs font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer">Cerrar Curso</button>
                                             @endif
                                             @if($courseEnrolledCount === 0)
-                                                <button type="button" wire:click="startDeleteCourse({{ $c->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-rose-300 bg-white px-2.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 cursor-pointer">Eliminar</button>
+                                                <button type="button" wire:click="startDeleteCourse({{ $c->id }})" class="inline-flex min-h-8 items-center justify-center rounded-xl border border-rose-300 bg-white px-2.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 cursor-pointer">Eliminar</button>
                                             @endif
                                             <button type="button" wire:click="toggleCourseActive({{ $c->id }})" class="cecap-badge cursor-pointer {{ $c->is_active ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-200 text-slate-600' }}">{{ $c->is_active ? 'Activo' : 'Inactivo' }}</button>
                                         </div>
-                                    @endif
-                                </td>
-                            </tr>
+                                    </td>
+                                </tr>
+                            @endif
                             @if($editingCourseId === $c->id)
                                 <tr wire:key="course-edit-{{ $c->id }}">
-                                    <td colspan="8" class="py-3 px-1">
+                                    <td colspan="7" class="py-3 px-1">
                                         <form wire:submit="createCourse" class="rounded-2xl border-2 border-brand-700 bg-brand-50/60 p-4 space-y-4">
                                             <div class="flex flex-wrap items-center justify-between gap-2">
                                                 <h3 class="text-sm sm:text-base font-bold text-brand-950">Editar Características del Curso {{ $c->code }} (Cambio Auditado)</h3>
@@ -374,7 +376,7 @@
                             @endif
                             @if($duplicatingCourseId === $c->id)
                                 <tr wire:key="course-dup-{{ $c->id }}">
-                                    <td colspan="8" class="py-3 px-1">
+                                    <td colspan="7" class="py-3 px-1">
                                         <form wire:submit="saveDuplicatedCourse" class="rounded-2xl border-2 border-indigo-500 bg-indigo-50/70 p-4 space-y-4">
                                             <div class="flex flex-wrap items-center justify-between gap-2">
                                                 <div>
@@ -517,7 +519,7 @@
                             @endif
                             @if($closingCourse && $closingCourse->id === $c->id)
                                 <tr wire:key="course-close-{{ $c->id }}">
-                                    <td colspan="8" class="py-3 px-1">
+                                    <td colspan="7" class="py-3 px-1">
                                         <form wire:submit="confirmCloseCourse" class="rounded-2xl border-2 border-amber-500 bg-amber-50/80 p-4 space-y-4">
                                             <div class="flex flex-wrap items-center justify-between gap-2">
                                                 <div>
@@ -574,7 +576,7 @@
                             @endif
                             @if($deletingCourse && $deletingCourse->id === $c->id)
                                 <tr wire:key="course-delete-{{ $c->id }}">
-                                    <td colspan="8" class="py-3 px-1">
+                                    <td colspan="7" class="py-3 px-1">
                                         <form wire:submit="confirmDeleteCourse" class="rounded-2xl border-2 border-rose-400 bg-rose-50/80 p-4 space-y-3">
                                             <div class="flex flex-wrap items-center justify-between gap-2">
                                                 <div>
@@ -601,7 +603,7 @@
                             @endif
                             @if($managingCourse && $managingCourse->id === $c->id)
                                 <tr wire:key="course-subjects-{{ $c->id }}">
-                                    <td colspan="8" class="py-3 px-1">
+                                    <td colspan="7" class="py-3 px-1">
                                         <div class="rounded-2xl border-2 border-brand-700 bg-brand-50/50 p-4 space-y-4">
                                             <div class="flex flex-wrap items-center justify-between gap-2">
                                                 <div>
@@ -751,7 +753,7 @@
                                 </tr>
                             @endif
                         @empty
-                            <tr><td colspan="8" class="py-6 text-center text-slate-500">Sin cursos registrados.</td></tr>
+                            <tr><td colspan="7" class="py-6 text-center text-slate-500">Sin cursos registrados.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
