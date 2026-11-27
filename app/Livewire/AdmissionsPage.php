@@ -1082,13 +1082,23 @@ class AdmissionsPage extends Component
             ? $matchedStudent->attachments->where('status', 'activo')->values()
             : collect();
 
-        $enrollmentsQuery = Enrollment::with(['student.attachments', 'edition.course'])->latest();
+        $admissionsQueueStatuses = [
+            'preinscrita',
+            'documentacion_pendiente',
+            'lista_espera',
+            'confirmada',
+            'rechazada',
+        ];
+
+        $enrollmentsQuery = Enrollment::with(['student.attachments', 'edition.course'])
+            ->whereIn('status', $admissionsQueueStatuses)
+            ->latest();
 
         if ($this->queue_status_filter === 'pendiente_autorizacion') {
             $enrollmentsQuery->where('reenrollment_authorized', false)
                 ->whereNotNull('reenrollment_reason')
                 ->where('reenrollment_reason', '!=', '');
-        } elseif ($this->queue_status_filter !== '') {
+        } elseif ($this->queue_status_filter !== '' && in_array($this->queue_status_filter, $admissionsQueueStatuses, true)) {
             $enrollmentsQuery->where('status', $this->queue_status_filter);
         }
 
@@ -1119,11 +1129,8 @@ class AdmissionsPage extends Component
             'preinscrita' => 'Preinscrita',
             'documentacion_pendiente' => 'Documentación Pendiente',
             'lista_espera' => 'Lista de Espera',
-            'pendiente_autorizacion' => 'Pendiente de Autorización (Sin aprobar)',
+            'pendiente_autorizacion' => 'Pendiente de Autorización (Curso sin aprobar)',
             'confirmada' => 'Confirmada',
-            'en_curso' => 'En Curso',
-            'reprobada' => 'Reprobada / Sin Aprobar',
-            'graduada' => 'Graduada',
             'rechazada' => 'Rechazada',
         ];
 

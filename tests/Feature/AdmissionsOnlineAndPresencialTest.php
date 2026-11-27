@@ -1178,15 +1178,18 @@ it('allows re-enrollment in the same course/program/subject when previously unap
     expect($dianaOnline->reenrollment_authorized)->toBeFalse();
     expect($dianaOnline->reenrollment_reason)->toBe('Curso anteriormente sin aprobar');
 
-    // 4. Cola de Admisiones: filtrar por estado (pendiente_autorizacion / reprobada) y por cohorte
+    // 4. Cola de Admisiones: excluye estados académicos (reprobada/en_curso/graduada) y filtra por estado de admisión y por cohorte
     Livewire::actingAs($admin)
         ->test(\App\Livewire\AdmissionsPage::class)
-        ->set('queue_status_filter', 'reprobada')
-        ->assertSee('Sofía Vargas')
-        ->assertDontSee('Diana Salas')
+        ->assertDontSee($priorEnr->enrollment_code) // reprobada no aparece en Cola de Admisiones
+        ->assertDontSee('En Curso')
+        ->assertDontSee('Reprobada / Sin Aprobar')
+        ->set('queue_status_filter', 'confirmada')
+        ->assertSee($newPresencial->enrollment_code)
+        ->assertDontSee($dianaOnline->enrollment_code)
         ->set('queue_status_filter', 'pendiente_autorizacion')
-        ->assertSee('Diana Salas')
-        ->assertDontSee('Sofía Vargas')
+        ->assertSee($dianaOnline->enrollment_code)
+        ->assertDontSee($newPresencial->enrollment_code)
         ->set('queue_status_filter', '')
         ->set('queue_edition_filter', (string) $techEd2->id)
         ->assertSee('Diana Salas')
