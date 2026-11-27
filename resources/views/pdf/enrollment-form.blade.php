@@ -72,7 +72,7 @@
     </div>
 
     <div class="section">
-        <div class="section-title">2. Datos del Programa y Edición</div>
+        <div class="section-title">2. Datos del Programa y Cohorte</div>
         <table>
             <tr>
                 <th>Curso / Programa</th>
@@ -81,7 +81,7 @@
                 <td>{{ $enrollment->edition?->course?->category?->name }}</td>
             </tr>
             <tr>
-                <th>Edición / Cohorte</th>
+                <th>Cohorte</th>
                 <td>{{ $enrollment->edition?->name }} ({{ $enrollment->edition?->code }})</td>
                 <th>Turno / Modalidad</th>
                 <td>{{ $enrollment->edition?->shift?->name }} · {{ $enrollment->edition?->modality?->name }}</td>
@@ -136,7 +136,7 @@
     @if($enrollment->status === 'lista_espera')
         <div class="notice" style="background:#eef2ff; border-color:#6366f1;">
             <strong>SOLICITUD REGISTRADA EN LISTA DE ESPERA:</strong><br>
-            El grupo seleccionado ya alcanzó su cupo máximo ({{ (int) $enrollment->edition?->max_capacity }} estudiantes). Su solicitud ha quedado registrada en orden de ingreso y Secretaría le contactará si se libera un cupo o se habilita una nueva edición.<br>
+            El grupo seleccionado ya alcanzó su cupo máximo ({{ (int) $enrollment->edition?->max_capacity }} estudiantes). Su solicitud ha quedado registrada en orden de ingreso y Secretaría le contactará si se libera un cupo o se habilita una nueva cohorte.<br>
             @if(! empty($missingDocLabels))
                 <strong>Documentos pendientes por entregar:</strong> {{ implode(', ', $missingDocLabels) }}<br>
             @endif

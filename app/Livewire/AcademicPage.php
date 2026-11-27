@@ -102,16 +102,12 @@ class AcademicPage extends Component
 
     public array $dup_subjects = [];
 
-    // Cierre manual institucional de curso (con picklist y correo a alumnas inscritas)
+    // Cierre administrativo de curso en catálogo (sin envío de correos a alumnas; las notificaciones se gestionan por cohorte)
     public ?int $closingCourseId = null;
 
     public string $course_closure_reason_code = '';
 
     public string $course_closure_reason = '';
-
-    public string $course_closure_message = 'Por decisión institucional este curso ha sido cerrado. Por favor manténgase pendiente de nuestra nueva oferta académica y próximas convocatorias de CeCap SURÍ.';
-
-    public bool $course_closure_notify_students = true;
 
     // Eliminación lógica de curso (solo permitida si no tiene alumnas inscritas)
     public ?int $deletingCourseId = null;
@@ -207,6 +203,19 @@ class AcademicPage extends Component
     public int $edit_ed_installments_count = 1;
 
     public bool $edit_ed_public_open = true;
+
+    // Cierre inline de cohorte (con picklist de motivo y correo institucional a las alumnas de la cohorte)
+    public ?int $closingEditionId = null;
+
+    public string $edition_closure_type = 'cancelada';
+
+    public string $edition_closure_reason_code = '';
+
+    public string $edition_closure_notes = '';
+
+    public string $edition_closure_message = 'Por decisión institucional esta cohorte ha sido cerrada. Por favor manténgase pendiente de nuestra nueva oferta académica y próximas convocatorias de CeCap SURÍ.';
+
+    public bool $edition_closure_notify_students = true;
 
     // Horario anti-choque
     public ?int $sch_edition_id = null;
@@ -476,7 +485,7 @@ class AcademicPage extends Component
             AuditService::log('academic.course_updated', 'academico', $course, $old, $course->only(array_keys($old)));
             $this->cancelEditCourse();
             $this->feedback = $syncedEditions > 0
-                ? sprintf('Curso %s actualizado con el mismo código (capacidad sincronizada en %d edición(es) abierta(s)).', $course->code, $syncedEditions)
+                ? sprintf('Curso %s actualizado con el mismo código (capacidad sincronizada en %d cohorte(s) abierta(s)).', $course->code, $syncedEditions)
                 : sprintf('Curso %s actualizado correctamente manteniendo su mismo código (cambio auditado).', $course->code);
 
             return;
@@ -787,8 +796,6 @@ class AcademicPage extends Component
         $this->closingCourseId = $course->id;
         $this->course_closure_reason_code = '';
         $this->course_closure_reason = '';
-        $this->course_closure_message = 'Por decisión institucional este curso ha sido cerrado. Por favor manténgase pendiente de nuestra nueva oferta académica y próximas convocatorias de CeCap SURÍ.';
-        $this->course_closure_notify_students = true;
         $this->resetValidation();
         $this->feedback = null;
     }
@@ -819,10 +826,8 @@ class AcademicPage extends Component
         $this->validate([
             'course_closure_reason_code' => ['required', 'string', 'max:60'],
             'course_closure_reason' => ['nullable', 'string', 'max:500'],
-            'course_closure_message' => ['required', 'string', 'min:5', 'max:1000'],
         ], [
             'course_closure_reason_code.required' => 'Debe seleccionar el motivo del cierre institucional del catálogo (picklist).',
-            'course_closure_message.required' => 'Debe indicar el mensaje que se enviará a las alumnas inscritas.',
         ]);
 
         $reasonPicklist = Picklist::query()
@@ -841,10 +846,8 @@ class AcademicPage extends Component
         $cleanReason = $extraNotes !== ''
             ? $reasonPicklist->label.' — '.$extraNotes
             : $reasonPicklist->label;
-        $cleanMessage = trim($this->course_closure_message);
-        $notifiableEnrollments = $course->activeNotifiableEnrollments();
 
-        $closedEditionsCount = DB::transaction(function () use ($course, $cleanReason, $notifiableEnrollments): int {
+        $hiddenCohortsCount = DB::transaction(function () use ($course, $cleanReason): int {
             $old = $course->only(['is_active', 'closed_at', 'closure_reason']);
             $course->update([
                 'is_active' => false,
@@ -853,34 +856,15 @@ class AcademicPage extends Component
                 'closure_reason' => $cleanReason,
             ]);
 
-            $openEditions = $course->editions()->whereIn('status', ['abierta', 'planificada', 'en_curso'])->get();
-            foreach ($openEditions as $ed) {
+            // Al cerrar el curso en catálogo se desactiva la inscripción pública de cohortes abiertas
+            // sin enviar correo a las alumnas; el cierre individual y notificación se gestionan en Cohortes.
+            $openCohorts = $course->editions()
+                ->whereIn('status', ['abierta', 'planificada', 'en_curso'])
+                ->where('is_public_enrollment_open', true)
+                ->get();
+            foreach ($openCohorts as $ed) {
                 $ed->update([
-                    'status' => 'cancelada',
                     'is_public_enrollment_open' => false,
-                ]);
-            }
-
-            foreach ($notifiableEnrollments as $enr) {
-                StudentLifecycleEvent::create([
-                    'student_id' => $enr->student_id,
-                    'enrollment_id' => $enr->id,
-                    'event_type' => 'curso_cerrado_institucional',
-                    'from_status' => $enr->status,
-                    'to_status' => $enr->status,
-                    'description' => sprintf(
-                        'Curso %s (%s) cerrado manualmente por decisión institucional. Motivo: %s',
-                        $course->name,
-                        $course->code,
-                        $cleanReason
-                    ),
-                    'metadata' => [
-                        'course_id' => $course->id,
-                        'course_code' => $course->code,
-                        'closure_reason' => $cleanReason,
-                    ],
-                    'recorded_by' => Auth::id(),
-                    'created_at' => now(),
                 ]);
             }
 
@@ -893,52 +877,20 @@ class AcademicPage extends Component
                     'is_active' => false,
                     'closed_at' => $course->closed_at?->toDateTimeString(),
                     'closure_reason' => $cleanReason,
-                    'closed_editions' => $openEditions->count(),
-                    'affected_enrollments' => $notifiableEnrollments->count(),
+                    'hidden_public_cohorts' => $openCohorts->count(),
                 ],
                 reason: $cleanReason
             );
 
-            return $openEditions->count();
+            return $openCohorts->count();
         });
-
-        $emailsSent = 0;
-        if ($this->course_closure_notify_students && $notifiableEnrollments->isNotEmpty()) {
-            $settings = InstitutionSetting::current();
-            $emailedAddresses = [];
-            foreach ($notifiableEnrollments as $enr) {
-                $email = strtolower(trim((string) ($enr->student?->email ?? '')));
-                if ($email === '' || isset($emailedAddresses[$email])) {
-                    continue;
-                }
-                $emailedAddresses[$email] = true;
-                try {
-                    Mail::to($email)->send(new CourseClosedInstitutionalMail(
-                        course: $course->fresh(),
-                        enrollment: $enr,
-                        closureReason: $cleanReason,
-                        studentMessage: $cleanMessage,
-                        settings: $settings
-                    ));
-                    $emailsSent++;
-                } catch (\Throwable $e) {
-                    Log::warning('No se pudo enviar correo de cierre institucional de curso', [
-                        'course_id' => $course->id,
-                        'enrollment_id' => $enr->id,
-                        'email' => $email,
-                        'error' => $e->getMessage(),
-                    ]);
-                }
-            }
-        }
 
         $courseCode = $course->code;
         $this->cancelCloseCourse();
         $this->feedback = sprintf(
-            'Curso %s cerrado por decisión institucional (%d edición(es) cerrada(s), %d correo(s) enviado(s) a alumnas inscritas).',
+            'Curso %s cerrado en el catálogo (%d cohorte(s) ocultada(s) de matrícula en línea; las notificaciones a alumnas se envían al cerrar cada cohorte).',
             $courseCode,
-            $closedEditionsCount,
-            $emailsSent
+            $hiddenCohortsCount
         );
     }
 
@@ -985,7 +937,7 @@ class AcademicPage extends Component
             $this->addError(
                 'course_delete_reason',
                 sprintf(
-                    'No se puede eliminar el curso %s porque tiene %d alumna(s) inscrita(s) en sus ediciones. Utilice el botón «Cerrar Curso» para cerrarlo por decisión institucional y notificar a las alumnas.',
+                    'No se puede eliminar el curso %s porque tiene %d alumna(s) inscrita(s) en sus cohortes. Utilice «Cerrar Curso» para descontinuarlo del catálogo o cierre cada cohorte desde la pestaña Cohortes.',
                     $course->code,
                     $enrolledCount
                 )
@@ -1328,7 +1280,7 @@ class AcademicPage extends Component
         $course = Course::findOrFail($this->ed_course_id);
         $allowedCategoryIds = $this->scopedCategoryIds();
         if ($allowedCategoryIds !== null && ! in_array((int) $course->academic_category_id, $allowedCategoryIds, true)) {
-            $this->addError('ed_course_id', 'No puede crear ediciones fuera de sus categorías asignadas.');
+            $this->addError('ed_course_id', 'No puede crear cohortes fuera de sus categorías asignadas.');
 
             return;
         }
@@ -1354,7 +1306,7 @@ class AcademicPage extends Component
 
         AuditService::log('academic.edition_created', 'academico', $edition, null, $edition->only(['code', 'name', 'max_capacity']));
         $this->reset(['ed_code', 'ed_name']);
-        $this->feedback = 'Edición creada con capacidad autollenada y lista para matrícula.';
+        $this->feedback = 'Cohorte creada con capacidad autollenada y lista para matrícula.';
     }
 
     public function editEdition(int $editionId): void
@@ -1363,11 +1315,12 @@ class AcademicPage extends Component
         $edition = CourseEdition::with('course')->findOrFail($editionId);
         $allowedCategoryIds = $this->scopedCategoryIds();
         if ($allowedCategoryIds !== null && ! in_array((int) $edition->course->academic_category_id, $allowedCategoryIds, true)) {
-            $this->addError('ed_course_id', 'No tiene autorización sobre la categoría de esta edición.');
+            $this->addError('ed_course_id', 'No tiene autorización sobre la categoría de esta cohorte.');
 
             return;
         }
 
+        $this->closingEditionId = null;
         $this->editingEditionId = $edition->id;
         $this->edit_ed_code = $edition->code;
         $this->edit_ed_name = $edition->name;
@@ -1402,7 +1355,7 @@ class AcademicPage extends Component
         $edition = CourseEdition::with('course')->findOrFail($this->editingEditionId);
         $allowedCategoryIds = $this->scopedCategoryIds();
         if ($allowedCategoryIds !== null && ! in_array((int) $edition->course->academic_category_id, $allowedCategoryIds, true)) {
-            $this->addError('edit_ed_name', 'No tiene autorización sobre la categoría de esta edición.');
+            $this->addError('edit_ed_name', 'No tiene autorización sobre la categoría de esta cohorte.');
 
             return;
         }
@@ -1431,7 +1384,7 @@ class AcademicPage extends Component
 
         $old = $edition->only(['code', 'name', 'shift_id', 'modality_id', 'classroom_id', 'teacher_id', 'start_date', 'end_date', 'max_capacity', 'enrollment_fee', 'monthly_fee', 'installments_count', 'is_public_enrollment_open']);
 
-        // El código de la edición permanece inmutable al editar
+        // El código de la cohorte permanece inmutable al editar
         $edition->update([
             'name' => trim($this->edit_ed_name),
             'shift_id' => $this->edit_ed_shift_id,
@@ -1449,7 +1402,7 @@ class AcademicPage extends Component
 
         AuditService::log('academic.edition_updated', 'academico', $edition, $old, $edition->only(array_keys($old)));
         $this->editingEditionId = null;
-        $this->feedback = sprintf('Edición %s actualizada manteniendo su mismo código (cambio auditado).', $edition->code);
+        $this->feedback = sprintf('Cohorte %s actualizada manteniendo su mismo código (cambio auditado).', $edition->code);
     }
 
     public function toggleEditionPublicOpen(int $editionId): void
@@ -1465,11 +1418,195 @@ class AcademicPage extends Component
         $edition->update(['is_public_enrollment_open' => ! $edition->is_public_enrollment_open]);
         AuditService::log('academic.edition_public_toggled', 'academico', $edition, $old, ['is_public_enrollment_open' => $edition->is_public_enrollment_open]);
         $this->feedback = $edition->is_public_enrollment_open
-            ? sprintf('Edición %s habilitada en /inscripcion.', $edition->code)
-            : sprintf('Edición %s ocultada de /inscripcion (sin borrado físico).', $edition->code);
+            ? sprintf('Cohorte %s habilitada en /inscripcion.', $edition->code)
+            : sprintf('Cohorte %s ocultada de /inscripcion (sin borrado físico).', $edition->code);
     }
 
-    public function closeEdition(int $editionId): void
+    public function startCloseEdition(int $editionId): void
+    {
+        $this->authorizeManage();
+        $edition = CourseEdition::with('course')->findOrFail($editionId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $edition->course->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('edition_closure_reason_code', 'No tiene autorización sobre la categoría de esta cohorte.');
+
+            return;
+        }
+
+        $settings = InstitutionSetting::current();
+        $this->editingEditionId = null;
+        $this->closingEditionId = $edition->id;
+        $this->edition_closure_type = 'cancelada';
+        $this->edition_closure_reason_code = '';
+        $this->edition_closure_notes = '';
+        $this->edition_closure_message = sprintf(
+            'Por decisión institucional la cohorte %s del curso/programa %s ha sido cerrada. Le invitamos a mantenerse pendiente de nuestra oferta académica y laboral, y le agradecemos pasar por las oficinas del Centro de Capacitación en nuestro horario de atención: %s.',
+            $edition->name,
+            $edition->course?->name ?? '',
+            $settings->attention_hours ?: 'Lunes a viernes de 8:00 a.m. a 4:00 p.m.'
+        );
+        $this->edition_closure_notify_students = true;
+        $this->resetValidation();
+        $this->feedback = null;
+    }
+
+    public function cancelCloseEdition(): void
+    {
+        $this->closingEditionId = null;
+        $this->edition_closure_type = 'cancelada';
+        $this->edition_closure_reason_code = '';
+        $this->edition_closure_notes = '';
+        $this->resetValidation();
+    }
+
+    public function confirmCloseEdition(): void
+    {
+        $this->authorizeManage();
+        if (! $this->closingEditionId) {
+            return;
+        }
+
+        $edition = CourseEdition::with('course')->findOrFail($this->closingEditionId);
+        $allowedCategoryIds = $this->scopedCategoryIds();
+        if ($allowedCategoryIds !== null && ! in_array((int) $edition->course->academic_category_id, $allowedCategoryIds, true)) {
+            $this->addError('edition_closure_reason_code', 'No tiene autorización sobre la categoría de esta cohorte.');
+
+            return;
+        }
+
+        $notifiableEnrollments = $edition->activeNotifiableEnrollments();
+        $isCancel = $this->edition_closure_type === 'cancelada';
+
+        $rules = [
+            'edition_closure_type' => ['required', 'in:cancelada,finalizada'],
+            'edition_closure_reason_code' => [$isCancel ? 'required' : 'nullable', 'string', 'max:60'],
+            'edition_closure_notes' => ['nullable', 'string', 'max:500'],
+        ];
+
+        if ($isCancel && $this->edition_closure_notify_students && $notifiableEnrollments->isNotEmpty()) {
+            $rules['edition_closure_message'] = ['required', 'string', 'min:5', 'max:1000'];
+        }
+
+        $this->validate($rules, [
+            'edition_closure_reason_code.required' => 'Debe seleccionar el motivo de cierre de la cohorte del catálogo (picklist).',
+            'edition_closure_message.required' => 'Debe indicar el mensaje que se enviará por correo a las alumnas de esta cohorte.',
+        ]);
+
+        $reasonLabel = 'Cohorte finalizada satisfactoriamente';
+        if ($this->edition_closure_reason_code !== '') {
+            $reasonPicklist = Picklist::query()
+                ->where('group_key', 'course_closure_reason')
+                ->where('code', $this->edition_closure_reason_code)
+                ->where('is_active', true)
+                ->first();
+
+            if (! $reasonPicklist) {
+                $this->addError('edition_closure_reason_code', 'Debe seleccionar un motivo de cierre válido del catálogo.');
+
+                return;
+            }
+            $reasonLabel = $reasonPicklist->label;
+        }
+
+        $extraNotes = trim($this->edition_closure_notes);
+        $cleanReason = $extraNotes !== ''
+            ? $reasonLabel.' — '.$extraNotes
+            : $reasonLabel;
+        $cleanMessage = trim($this->edition_closure_message);
+
+        DB::transaction(function () use ($edition, $cleanReason, $notifiableEnrollments, $isCancel): void {
+            $old = $edition->only(['status', 'is_public_enrollment_open', 'closed_at', 'closure_reason']);
+            $edition->update([
+                'status' => $this->edition_closure_type,
+                'is_public_enrollment_open' => false,
+                'closed_at' => now(),
+                'closed_by' => Auth::id(),
+                'closure_reason' => $cleanReason,
+            ]);
+
+            foreach ($notifiableEnrollments as $enr) {
+                StudentLifecycleEvent::create([
+                    'student_id' => $enr->student_id,
+                    'enrollment_id' => $enr->id,
+                    'event_type' => $isCancel ? 'cohorte_cerrada_institucional' : 'cohorte_finalizada',
+                    'from_status' => $enr->status,
+                    'to_status' => $enr->status,
+                    'description' => sprintf(
+                        'Cohorte %s (%s) del curso %s %s. Motivo: %s',
+                        $edition->name,
+                        $edition->code,
+                        $edition->course?->name ?? '',
+                        $isCancel ? 'cerrada por decisión institucional' : 'marcada como finalizada',
+                        $cleanReason
+                    ),
+                    'metadata' => [
+                        'course_id' => $edition->course_id,
+                        'course_edition_id' => $edition->id,
+                        'edition_code' => $edition->code,
+                        'closure_type' => $this->edition_closure_type,
+                        'closure_reason' => $cleanReason,
+                    ],
+                    'recorded_by' => Auth::id(),
+                    'created_at' => now(),
+                ]);
+            }
+
+            AuditService::log(
+                event: 'academic.edition_closed',
+                module: 'academico',
+                auditable: $edition,
+                oldValues: $old,
+                newValues: [
+                    'status' => $this->edition_closure_type,
+                    'is_public_enrollment_open' => false,
+                    'closed_at' => $edition->closed_at?->toDateTimeString(),
+                    'closure_reason' => $cleanReason,
+                    'affected_enrollments' => $notifiableEnrollments->count(),
+                ],
+                reason: $cleanReason
+            );
+        });
+
+        $emailsSent = 0;
+        if ($isCancel && $this->edition_closure_notify_students && $notifiableEnrollments->isNotEmpty()) {
+            $settings = InstitutionSetting::current();
+            $emailedAddresses = [];
+            $course = $edition->course;
+            foreach ($notifiableEnrollments as $enr) {
+                $email = strtolower(trim((string) ($enr->student?->email ?? '')));
+                if ($email === '' || isset($emailedAddresses[$email])) {
+                    continue;
+                }
+                $emailedAddresses[$email] = true;
+                try {
+                    Mail::to($email)->send(new CourseClosedInstitutionalMail(
+                        course: $course,
+                        enrollment: $enr,
+                        closureReason: $cleanReason,
+                        studentMessage: $cleanMessage,
+                        settings: $settings
+                    ));
+                    $emailsSent++;
+                } catch (\Throwable $e) {
+                    Log::warning('No se pudo enviar correo de cierre institucional de cohorte', [
+                        'course_edition_id' => $edition->id,
+                        'enrollment_id' => $enr->id,
+                        'email' => $email,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+        }
+
+        $code = $edition->code;
+        $statusLabel = $isCancel ? 'cerrada/cancelada' : 'finalizada';
+        $this->cancelCloseEdition();
+        $this->feedback = $isCancel
+            ? sprintf('Cohorte %s %s (%d correo(s) enviado(s) a alumnas de esta cohorte; historial preservado en auditoría).', $code, $statusLabel, $emailsSent)
+            : sprintf('Cohorte %s marcada como finalizada y retirada de matrícula activa (historial preservado en auditoría).', $code);
+    }
+
+    public function reopenEdition(int $editionId): void
     {
         $this->authorizeManage();
         $edition = CourseEdition::with('course')->findOrFail($editionId);
@@ -1478,26 +1615,22 @@ class AcademicPage extends Component
             return;
         }
 
-        $old = ['status' => $edition->status, 'is_public_enrollment_open' => $edition->is_public_enrollment_open];
+        $old = $edition->only(['status', 'is_public_enrollment_open', 'closed_at', 'closure_reason']);
         $edition->update([
-            'status' => 'cancelada',
-            'is_public_enrollment_open' => false,
+            'status' => 'abierta',
+            'closed_at' => null,
+            'closed_by' => null,
         ]);
 
-        if ($this->editingEditionId === $edition->id) {
-            $this->editingEditionId = null;
-        }
-
         AuditService::log(
-            event: 'academic.edition_closed',
+            event: 'academic.edition_reopened',
             module: 'academico',
             auditable: $edition,
             oldValues: $old,
-            newValues: ['status' => 'cancelada', 'is_public_enrollment_open' => false],
-            reason: 'Edición cerrada / retirada de oferta activa desde Académico'
+            newValues: ['status' => 'abierta', 'closed_at' => null]
         );
 
-        $this->feedback = sprintf('Edición %s cerrada y retirada de matrícula en línea y presencial (historial preservado en auditoría).', $edition->code);
+        $this->feedback = sprintf('Cohorte %s reabierta y activa nuevamente.', $edition->code);
     }
 
     public function createSchedule(ScheduleConflictService $conflictService): void
@@ -1516,7 +1649,7 @@ class AcademicPage extends Component
         $edition = CourseEdition::with('course')->findOrFail($this->sch_edition_id);
         $allowedCategoryIds = $this->scopedCategoryIds();
         if ($allowedCategoryIds !== null && ! in_array((int) $edition->course->academic_category_id, $allowedCategoryIds, true)) {
-            $this->addError('sch_edition_id', 'No tiene autorización sobre la categoría de esta edición.');
+            $this->addError('sch_edition_id', 'No tiene autorización sobre la categoría de esta cohorte.');
 
             return;
         }
@@ -1609,9 +1742,15 @@ class AcademicPage extends Component
             ->with(['category', 'subjects'])
             ->orderByDesc('id');
         $editionsQuery = CourseEdition::query()
-            ->where('status', '!=', 'cancelada')
+            ->whereNotIn('status', ['cancelada', 'finalizada'])
             ->whereHas('course', fn ($q) => $q->whereNull('archived_at'))
             ->with(['course.category', 'shift', 'modality', 'classroom', 'teacher', 'schedules'])
+            ->orderByDesc('id');
+        $closedEditionsQuery = CourseEdition::query()
+            ->whereIn('status', ['cancelada', 'finalizada'])
+            ->whereHas('course', fn ($q) => $q->whereNull('archived_at'))
+            ->with(['course.category', 'shift', 'modality', 'teacher'])
+            ->orderByDesc('closed_at')
             ->orderByDesc('id');
         $schedulesQuery = EditionSchedule::query()
             ->where('is_active', true)
@@ -1624,11 +1763,13 @@ class AcademicPage extends Component
             $categoriesQuery->whereIn('id', $scopedIds);
             $coursesQuery->whereIn('academic_category_id', $scopedIds);
             $editionsQuery->whereHas('course', fn ($q) => $q->whereIn('academic_category_id', $scopedIds));
+            $closedEditionsQuery->whereHas('course', fn ($q) => $q->whereIn('academic_category_id', $scopedIds));
             $schedulesQuery->whereHas('edition.course', fn ($q) => $q->whereIn('academic_category_id', $scopedIds));
         }
 
         $closingCourse = $this->closingCourseId ? Course::with('editions')->find($this->closingCourseId) : null;
-        $closingNotifiableCount = $closingCourse ? $closingCourse->activeNotifiableEnrollments()->count() : 0;
+        $closingEdition = $this->closingEditionId ? CourseEdition::with('course')->find($this->closingEditionId) : null;
+        $closingEditionNotifiableCount = $closingEdition ? $closingEdition->activeNotifiableEnrollments()->count() : 0;
 
         return view('livewire.academic-page', [
             'isScopedCoordinator' => $scopedIds !== null,
@@ -1636,9 +1777,11 @@ class AcademicPage extends Component
             'courses' => $coursesQuery->get(),
             'managingCourse' => $this->managingSubjectsCourseId ? Course::with('subjects')->find($this->managingSubjectsCourseId) : null,
             'closingCourse' => $closingCourse,
-            'closingNotifiableCount' => $closingNotifiableCount,
+            'closingEdition' => $closingEdition,
+            'closingEditionNotifiableCount' => $closingEditionNotifiableCount,
             'deletingCourse' => $this->deletingCourseId ? Course::find($this->deletingCourseId) : null,
             'editions' => $editionsQuery->get(),
+            'closedEditions' => $closedEditionsQuery->get(),
             'schedules' => $schedulesQuery->get(),
             'shifts' => AcademicShift::where('is_active', true)->get(),
             'modalities' => AcademicModality::where('is_active', true)->get(),

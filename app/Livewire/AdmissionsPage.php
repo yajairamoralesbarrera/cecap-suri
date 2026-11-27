@@ -699,7 +699,7 @@ class AdmissionsPage extends Component
 
         $this->cancelReopenEnrollment();
         $this->feedback = match ($reopened->status) {
-            'lista_espera' => sprintf('Solicitud %s reabierta en LISTA DE ESPERA (la edición alcanzó su cupo máximo).', $reopened->enrollment_code),
+            'lista_espera' => sprintf('Solicitud %s reabierta en LISTA DE ESPERA (la cohorte alcanzó su cupo máximo).', $reopened->enrollment_code),
             'preinscrita' => sprintf('Solicitud %s reabierta con documentación completa (estado: PREINSCRITA, lista para confirmar).', $reopened->enrollment_code),
             default => sprintf('Solicitud %s reabierta en estado %s.', $reopened->enrollment_code, strtoupper(str_replace('_', ' ', $reopened->status))),
         };

@@ -36,7 +36,7 @@
 
             @if($successStatus === 'lista_espera')
                 <div class="rounded-xl border border-indigo-300 bg-white px-4 py-3 text-sm text-indigo-950">
-                    <strong>Importante (Lista de Espera):</strong> El grupo seleccionado ya completó su matrícula máxima. Su solicitud quedó registrada en orden de ingreso y Secretaría le contactará por correo o teléfono si se libera un cupo o se habilita una nueva edición.
+                    <strong>Importante (Lista de Espera):</strong> El grupo seleccionado ya completó su matrícula máxima. Su solicitud quedó registrada en orden de ingreso y Secretaría le contactará por correo o teléfono si se libera un cupo o se habilita una nueva cohorte.
                 </div>
             @endif
 
@@ -195,9 +195,9 @@
                 </div>
             @endif
 
-            {{-- 1. Selección de Curso/Edición --}}
+            {{-- 1. Selección de Curso/Cohorte --}}
             <div class="space-y-3">
-                <h2 class="text-base font-bold text-brand-950 border-b border-slate-200 pb-2">1. Seleccione la Edición / Curso de su Interés</h2>
+                <h2 class="text-base font-bold text-brand-950 border-b border-slate-200 pb-2">1. Seleccione la Cohorte / Curso de su Interés</h2>
                 <div>
                     <label for="pub_edition" class="block text-sm font-semibold text-slate-700 mb-1">Oferta Académica Disponible *</label>
                     <select id="pub_edition" wire:model.live="course_edition_id" required class="cecap-input">

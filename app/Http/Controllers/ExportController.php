@@ -53,7 +53,7 @@ class ExportController extends Controller
 
     private function writeEnrollments($out): void
     {
-        fputcsv($out, ['Código Matrícula', 'Alumna', 'Identificación', 'Curso', 'Edición', 'Origen', 'Estado', 'Docs Completos', 'Excepción']);
+        fputcsv($out, ['Código Matrícula', 'Alumna', 'Identificación', 'Curso', 'Cohorte', 'Origen', 'Estado', 'Docs Completos', 'Excepción']);
         Enrollment::query()->with(['student', 'edition.course'])->orderBy('id')->chunk(200, function ($rows) use ($out): void {
             foreach ($rows as $e) {
                 fputcsv($out, [

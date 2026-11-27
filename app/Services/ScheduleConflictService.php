@@ -49,7 +49,7 @@ class ScheduleConflictService
                 throw ValidationException::withMessages([
                     'schedule' => sprintf(
                         'Choque de aula detectado con "%s" (%s).',
-                        $classroomConflict->edition?->name ?? 'otra edición',
+                        $classroomConflict->edition?->name ?? 'otra cohorte',
                         $classroomConflict->formatted_slot
                     ),
                 ]);
@@ -73,7 +73,7 @@ class ScheduleConflictService
                 throw ValidationException::withMessages([
                     'schedule' => sprintf(
                         'Choque de profesora detectado con "%s" (%s).',
-                        $teacherConflict->edition?->name ?? 'otra edición',
+                        $teacherConflict->edition?->name ?? 'otra cohorte',
                         $teacherConflict->formatted_slot
                     ),
                 ]);

@@ -29,7 +29,7 @@
         <tr><th>Nombre Completo</th><td>{{ $graduation->student?->full_name }}</td></tr>
         <tr><th>Identificación</th><td>{{ $graduation->student?->identification_number }}</td></tr>
         <tr><th>Programa / Curso</th><td>{{ $graduation->enrollment?->edition?->course?->name }} ({{ $graduation->enrollment?->edition?->course?->program_type_label }})</td></tr>
-        <tr><th>Edición</th><td>{{ $graduation->enrollment?->edition?->name }}</td></tr>
+        <tr><th>Cohorte</th><td>{{ $graduation->enrollment?->edition?->name }}</td></tr>
         <tr><th>Calificación Final</th><td>{{ number_format((float) $graduation->final_grade, 2) }} / 100</td></tr>
         <tr><th>Porcentaje de Asistencia</th><td>{{ number_format((float) $graduation->attendance_percent, 2) }}%</td></tr>
         <tr><th>Solvencia Financiera</th><td>

@@ -27,6 +27,9 @@ class CourseEdition extends Model
         'installments_count',
         'status',
         'is_public_enrollment_open',
+        'closed_at',
+        'closed_by',
+        'closure_reason',
         'created_by',
     ];
 
@@ -38,6 +41,7 @@ class CourseEdition extends Model
             'enrollment_fee' => 'decimal:2',
             'monthly_fee' => 'decimal:2',
             'is_public_enrollment_open' => 'boolean',
+            'closed_at' => 'datetime',
         ];
     }
 
@@ -93,5 +97,21 @@ class CourseEdition extends Model
         return $this->enrollments()
             ->where('status', 'lista_espera')
             ->count();
+    }
+
+    /**
+     * Inscripciones activas o en espera asociadas a esta cohorte que deben recibir aviso en un cierre institucional.
+     */
+    public function activeNotifiableEnrollments()
+    {
+        return $this->enrollments()
+            ->whereIn('status', ['preinscrita', 'documentacion_pendiente', 'lista_espera', 'confirmada', 'en_curso'])
+            ->with(['student', 'edition.course'])
+            ->get();
+    }
+
+    public function isClosed(): bool
+    {
+        return in_array($this->status, ['cancelada', 'finalizada'], true) || $this->closed_at !== null;
     }
 }

@@ -22,7 +22,7 @@
     <div class="flex flex-wrap gap-2">
         <button type="button" wire:click="setTab('categories')" class="{{ $tab === 'categories' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Categorías ({{ $categories->count() }})</button>
         <button type="button" wire:click="setTab('courses')" class="{{ $tab === 'courses' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Cursos y Materias ({{ $courses->count() }})</button>
-        <button type="button" wire:click="setTab('editions')" class="{{ $tab === 'editions' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Ediciones ({{ $editions->count() }})</button>
+        <button type="button" wire:click="setTab('editions')" class="{{ $tab === 'editions' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Cohortes ({{ $editions->count() }})</button>
         <button type="button" wire:click="setTab('schedules')" class="{{ $tab === 'schedules' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Horarios Anti-Choque ({{ $schedules->count() }})</button>
         <button type="button" wire:click="setTab('classrooms')" class="{{ $tab === 'classrooms' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Aulas ({{ $classrooms->count() }})</button>
     </div>
@@ -523,8 +523,8 @@
                                         <form wire:submit="confirmCloseCourse" class="rounded-2xl border-2 border-amber-500 bg-amber-50/80 p-4 space-y-4">
                                             <div class="flex flex-wrap items-center justify-between gap-2">
                                                 <div>
-                                                    <h3 class="text-sm sm:text-base font-bold text-amber-950">Cerrar Curso por Decisión Institucional — {{ $closingCourse->code }} · {{ $closingCourse->name }}</h3>
-                                                    <p class="text-xs text-amber-900">Se cerrará el curso y se ocultarán sus ediciones abiertas para matrícula, incluso si tiene alumnas inscritas.</p>
+                                                    <h3 class="text-sm sm:text-base font-bold text-amber-950">Cerrar Curso en Catálogo — {{ $closingCourse->code }} · {{ $closingCourse->name }}</h3>
+                                                    <p class="text-xs text-amber-900">Descontinúa el curso en el catálogo y oculta sus cohortes abiertas para nuevas inscripciones en línea.</p>
                                                 </div>
                                                 <button type="button" wire:click="cancelCloseCourse" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar</button>
                                             </div>
@@ -540,44 +540,30 @@
                                             @endif
 
                                             <div class="rounded-xl border border-amber-300 bg-white px-3 py-2.5 text-xs text-slate-800">
-                                                <strong>Impacto:</strong>
-                                                Hay <strong>{{ $closingNotifiableCount }} alumna(s) inscrita(s) / en espera</strong> asociadas a este curso.
-                                                @if($closingNotifiableCount > 0)
-                                                    Se enviará un correo automático con el mensaje institucional indicado abajo para que se mantengan pendientes de la nueva oferta.
-                                                @endif
+                                                <strong>Nota operativa:</strong>
+                                                El cierre del curso aplica únicamente al catálogo y <strong>no envía correos a las alumnas</strong>.
+                                                Para cerrar o cancelar una <strong>cohorte</strong> específica y notificar a sus alumnas por correo, utilice la pestaña <strong>Cohortes</strong>.
                                             </div>
 
-                                            <div class="space-y-3">
-                                                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                    <div>
-                                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Motivo del Cierre Institucional (Picklist) *</label>
-                                                        <select wire:model="course_closure_reason_code" required class="cecap-input">
-                                                            <option value="">-- Seleccione el motivo de cierre --</option>
-                                                            @foreach($courseClosureReasons as $code => $label)
-                                                                <option value="{{ $code }}">{{ $label }}</option>
-                                                            @endforeach
-                                                        </select>
-                                                    </div>
-                                                    <div>
-                                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Observaciones adicionales (opcional)</label>
-                                                        <input wire:model="course_closure_reason" type="text" class="cecap-input" placeholder="Ej. Se reprogramará para el II cuatrimestre">
-                                                    </div>
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Motivo del Cierre en Catálogo (Picklist) *</label>
+                                                    <select wire:model="course_closure_reason_code" required class="cecap-input">
+                                                        <option value="">-- Seleccione el motivo de cierre --</option>
+                                                        @foreach($courseClosureReasons as $code => $label)
+                                                            <option value="{{ $code }}">{{ $label }}</option>
+                                                        @endforeach
+                                                    </select>
                                                 </div>
                                                 <div>
-                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Mensaje que recibirá cada alumna por correo *</label>
-                                                    <textarea wire:model="course_closure_message" rows="3" required class="cecap-input"></textarea>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Observaciones adicionales (opcional)</label>
+                                                    <input wire:model="course_closure_reason" type="text" class="cecap-input" placeholder="Ej. Actualización de malla curricular para próximo año">
                                                 </div>
-                                                @if($closingNotifiableCount > 0)
-                                                    <label class="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-amber-950 cursor-pointer">
-                                                        <input type="checkbox" wire:model="course_closure_notify_students" class="h-4 w-4 rounded text-amber-700">
-                                                        <span>Enviar correo de notificación a las {{ $closingNotifiableCount }} alumna(s) inscrita(s)</span>
-                                                    </label>
-                                                @endif
                                             </div>
 
                                             <div class="flex flex-wrap gap-2">
                                                 <button type="submit" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-amber-700 px-4 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-amber-800 cursor-pointer">
-                                                    {{ $closingNotifiableCount > 0 && $course_closure_notify_students ? 'Confirmar Cierre y Notificar Alumnas' : 'Confirmar Cierre Institucional' }}
+                                                    Confirmar Cierre del Curso en Catálogo
                                                 </button>
                                                 <button type="button" wire:click="cancelCloseCourse" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
                                             </div>
@@ -772,12 +758,12 @@
         </div>
     @endif
 
-    {{-- TAB: EDICIONES --}}
+    {{-- TAB: COHORTES --}}
     @if($tab === 'editions')
         <div class="space-y-6">
             @if(auth()->user()->hasEffectivePermission('academico.manage'))
                 <form wire:submit="createEdition" class="cecap-card space-y-4">
-                    <h2 class="text-base font-bold text-brand-950">Abrir Nueva Edición (Autollenado de Capacidad y Tarifas)</h2>
+                    <h2 class="text-base font-bold text-brand-950">Abrir Nueva Cohorte (Autollenado de Capacidad y Tarifas)</h2>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label class="block text-sm font-semibold text-slate-700 mb-1">Curso Base *</label>
@@ -789,11 +775,11 @@
                             </select>
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Código Edición *</label>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Código Cohorte *</label>
                             <input wire:model="ed_code" type="text" required class="cecap-input">
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Nombre Edición *</label>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Nombre Cohorte *</label>
                             <input wire:model="ed_name" type="text" required class="cecap-input">
                         </div>
                         <div>
@@ -857,71 +843,78 @@
                             <input wire:model="ed_installments_count" type="number" min="1" class="cecap-input">
                         </div>
                     </div>
-                    <button type="submit" class="cecap-btn-primary">Crear Edición</button>
+                    <button type="submit" class="cecap-btn-primary">Crear Cohorte</button>
                 </form>
             @endif
 
             <div class="cecap-card overflow-x-auto">
-                <h2 class="text-base font-bold text-slate-900 mb-3">Ediciones Activas</h2>
+                <h2 class="text-base font-bold text-slate-900 mb-3">Cohortes Activas</h2>
                 <table class="w-full text-sm text-left">
                     <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
                         <tr>
                             <th class="py-2 pr-3">Código</th>
-                            <th class="py-2 pr-3">Edición</th>
+                            <th class="py-2 pr-3">Cohorte / Curso</th>
                             <th class="py-2 pr-3">Turno / Mod.</th>
                             <th class="py-2 pr-3">Profesora</th>
                             <th class="py-2 pr-3">Cupos</th>
-                            <th class="py-2 pr-3">Horarios</th>
-                            <th class="py-2">Acciones</th>
+                            <th class="py-2">Horarios</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @forelse($editions as $ed)
-                            <tr wire:key="edition-row-{{ $ed->id }}" class="{{ $editingEditionId === $ed->id ? 'bg-slate-50/80' : '' }}">
-                                <td class="py-2.5 pr-3 font-mono text-xs font-bold">{{ $ed->code }}</td>
-                                <td class="py-2.5 pr-3 font-semibold">{{ $ed->name }}<div class="text-xs text-slate-500">{{ $ed->start_date?->format('d/m/Y') }} - {{ $ed->end_date?->format('d/m/Y') }}</div></td>
-                                <td class="py-2.5 pr-3 text-xs">{{ $ed->shift?->name }} · {{ $ed->modality?->name }}</td>
-                                <td class="py-2.5 pr-3 text-xs">{{ $ed->teacher?->name ?? 'Por asignar' }}</td>
-                                <td class="py-2.5 pr-3 text-xs font-bold">
+                            @php
+                                $edPanelOpen = $editingEditionId === $ed->id || $closingEditionId === $ed->id;
+                            @endphp
+                            <tr wire:key="edition-row-{{ $ed->id }}" class="{{ $edPanelOpen ? 'bg-slate-50/80' : '' }} border-b-0">
+                                <td class="pt-2.5 pb-1.5 pr-3 font-mono text-xs font-bold">{{ $ed->code }}</td>
+                                <td class="pt-2.5 pb-1.5 pr-3 font-semibold">
+                                    {{ $ed->name }}
+                                    <div class="text-xs font-normal text-slate-500">{{ $ed->course?->name }} · {{ $ed->start_date?->format('d/m/Y') }} - {{ $ed->end_date?->format('d/m/Y') }}</div>
+                                </td>
+                                <td class="pt-2.5 pb-1.5 pr-3 text-xs">{{ $ed->shift?->name }} · {{ $ed->modality?->name }}</td>
+                                <td class="pt-2.5 pb-1.5 pr-3 text-xs">{{ $ed->teacher?->name ?? 'Por asignar' }}</td>
+                                <td class="pt-2.5 pb-1.5 pr-3 text-xs font-bold">
                                     {{ $ed->activeEnrollmentsCount() }} / {{ $ed->max_capacity }}
                                     @if($ed->waitlistCount() > 0)
                                         <div class="text-[11px] font-semibold text-indigo-700">Lista espera: {{ $ed->waitlistCount() }}</div>
                                     @endif
                                 </td>
-                                <td class="py-2.5 pr-3 text-xs">
+                                <td class="pt-2.5 pb-1.5 text-xs">
                                     @foreach($ed->schedules as $sch)
                                         <div>{{ $sch->formatted_slot }}</div>
                                     @endforeach
                                 </td>
-                                <td class="py-2.5">
-                                    @if(auth()->user()->hasEffectivePermission('academico.manage'))
-                                        <div class="flex flex-wrap gap-1.5">
-                                            <button type="button" wire:click="editEdition({{ $ed->id }})" class="cecap-btn-secondary !min-h-9 !px-2.5 text-xs">Editar</button>
+                            </tr>
+                            @if(auth()->user()->hasEffectivePermission('academico.manage'))
+                                <tr wire:key="edition-actions-{{ $ed->id }}" class="{{ $edPanelOpen ? 'bg-slate-50/80' : 'bg-slate-50/40' }}">
+                                    <td colspan="6" class="pt-1 pb-2.5 px-1">
+                                        <div class="flex flex-wrap items-center gap-1.5">
+                                            <button type="button" wire:click="editEdition({{ $ed->id }})" class="cecap-btn-secondary !min-h-8 !px-2.5 !py-1 text-xs">Editar</button>
                                             <button type="button" wire:click="toggleEditionPublicOpen({{ $ed->id }})" class="cecap-badge cursor-pointer {{ $ed->is_public_enrollment_open ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-200 text-slate-600' }}">
                                                 {{ $ed->is_public_enrollment_open ? 'En línea: Abierta' : 'En línea: Oculta' }}
                                             </button>
-                                            <button type="button" wire:click="closeEdition({{ $ed->id }})" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-rose-300 bg-white px-2.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 cursor-pointer">
-                                                {{ $ed->activeEnrollmentsCount() === 0 ? 'Retirar' : 'Cerrar Edición' }}
+                                            <button type="button" wire:click="startCloseEdition({{ $ed->id }})" class="inline-flex min-h-8 items-center justify-center rounded-xl border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-100 cursor-pointer">
+                                                Cerrar Cohorte
                                             </button>
                                         </div>
-                                    @endif
-                                </td>
-                            </tr>
+                                    </td>
+                                </tr>
+                            @endif
                             @if($editingEditionId === $ed->id)
                                 <tr wire:key="edition-edit-{{ $ed->id }}">
-                                    <td colspan="7" class="py-3 px-1">
+                                    <td colspan="6" class="py-3 px-1">
                                         <form wire:submit="saveEditionEdit" class="rounded-2xl border-2 border-brand-700 bg-brand-50/60 p-4 space-y-4">
                                             <div class="flex flex-wrap items-center justify-between gap-2">
-                                                <h3 class="text-sm sm:text-base font-bold text-brand-950">Editar Edición {{ $ed->code }} (Mantiene mismo código — cambio auditado)</h3>
+                                                <h3 class="text-sm sm:text-base font-bold text-brand-950">Editar Cohorte {{ $ed->code }} (Mantiene mismo código — cambio auditado)</h3>
                                                 <button type="button" wire:click="cancelEditEdition" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar</button>
                                             </div>
                                             <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                                                 <div>
-                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Código Edición (inmutable)</label>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Código Cohorte (inmutable)</label>
                                                     <input wire:model="edit_ed_code" type="text" readonly class="cecap-input bg-slate-100 text-slate-600 cursor-not-allowed font-mono">
                                                 </div>
                                                 <div>
-                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Nombre Edición *</label>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Nombre Cohorte *</label>
                                                     <input wire:model="edit_ed_name" type="text" required class="cecap-input">
                                                 </div>
                                                 <div>
@@ -984,19 +977,144 @@
                                                 <span>Visible y abierta para inscripción en línea (/inscripcion)</span>
                                             </label>
                                             <div class="flex flex-wrap gap-2">
-                                                <button type="submit" class="cecap-btn-primary text-xs sm:text-sm">Guardar Cambios de la Edición</button>
+                                                <button type="submit" class="cecap-btn-primary text-xs sm:text-sm">Guardar Cambios de la Cohorte</button>
                                                 <button type="button" wire:click="cancelEditEdition" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
                                             </div>
                                         </form>
                                     </td>
                                 </tr>
                             @endif
+                            @if($closingEdition && $closingEdition->id === $ed->id)
+                                <tr wire:key="edition-close-{{ $ed->id }}">
+                                    <td colspan="6" class="py-3 px-1">
+                                        <form wire:submit="confirmCloseEdition" class="rounded-2xl border-2 border-amber-500 bg-amber-50/80 p-4 space-y-4">
+                                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                                <div>
+                                                    <h3 class="text-sm sm:text-base font-bold text-amber-950">Cerrar Cohorte — {{ $closingEdition->code }} · {{ $closingEdition->name }}</h3>
+                                                    <p class="text-xs text-amber-900">Cierra esta cohorte del curso/programa <strong>{{ $closingEdition->course?->name }}</strong> sin cerrar el curso en el catálogo.</p>
+                                                </div>
+                                                <button type="button" wire:click="cancelCloseEdition" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar</button>
+                                            </div>
+
+                                            @if($errors->any())
+                                                <div class="rounded-xl border border-rose-300 bg-white px-3 py-2 text-xs text-rose-800">
+                                                    <ul class="list-disc pl-4 space-y-0.5">
+                                                        @foreach($errors->all() as $error)
+                                                            <li>{{ $error }}</li>
+                                                        @endforeach
+                                                    </ul>
+                                                </div>
+                                            @endif
+
+                                            <div class="rounded-xl border border-amber-300 bg-white px-3 py-2.5 text-xs text-slate-800">
+                                                <strong>Impacto en esta cohorte:</strong>
+                                                Hay <strong>{{ $closingEditionNotifiableCount }} alumna(s) inscrita(s) / en espera</strong> en esta cohorte.
+                                                @if($edition_closure_type === 'cancelada' && $closingEditionNotifiableCount > 0)
+                                                    Al confirmar el cierre anticipado, se enviará el correo institucional indicado abajo a las alumnas de esta cohorte.
+                                                @endif
+                                            </div>
+
+                                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Tipo de Cierre *</label>
+                                                    <select wire:model.live="edition_closure_type" required class="cecap-input">
+                                                        <option value="cancelada">Cancelada / Cierre anticipado</option>
+                                                        <option value="finalizada">Finalizada (grupo concluyó el curso)</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">
+                                                        Motivo de Cierre (Picklist) {{ $edition_closure_type === 'cancelada' ? '*' : '(opcional)' }}
+                                                    </label>
+                                                    <select wire:model="edition_closure_reason_code" {{ $edition_closure_type === 'cancelada' ? 'required' : '' }} class="cecap-input">
+                                                        <option value="">-- Seleccione el motivo --</option>
+                                                        @foreach($courseClosureReasons as $code => $label)
+                                                            <option value="{{ $code }}">{{ $label }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Observaciones adicionales (opcional)</label>
+                                                    <input wire:model="edition_closure_notes" type="text" class="cecap-input" placeholder="Ej. Se reprograma para el II cuatrimestre">
+                                                </div>
+                                            </div>
+
+                                            @if($edition_closure_type === 'cancelada')
+                                                <div class="space-y-3">
+                                                    <div>
+                                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Mensaje que recibirá cada alumna de esta cohorte por correo *</label>
+                                                        <textarea wire:model="edition_closure_message" rows="3" {{ $closingEditionNotifiableCount > 0 && $edition_closure_notify_students ? 'required' : '' }} class="cecap-input"></textarea>
+                                                    </div>
+                                                    @if($closingEditionNotifiableCount > 0)
+                                                        <label class="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-amber-950 cursor-pointer">
+                                                            <input type="checkbox" wire:model.live="edition_closure_notify_students" class="h-4 w-4 rounded text-amber-700">
+                                                            <span>Enviar correo de notificación a las {{ $closingEditionNotifiableCount }} alumna(s) de esta cohorte</span>
+                                                        </label>
+                                                    @endif
+                                                </div>
+                                            @endif
+
+                                            <div class="flex flex-wrap gap-2">
+                                                <button type="submit" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-amber-700 px-4 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-amber-800 cursor-pointer">
+                                                    @if($edition_closure_type === 'finalizada')
+                                                        Confirmar Finalización de Cohorte
+                                                    @elseif($closingEditionNotifiableCount > 0 && $edition_closure_notify_students)
+                                                        Confirmar Cierre y Notificar Alumnas
+                                                    @else
+                                                        Confirmar Cierre de Cohorte
+                                                    @endif
+                                                </button>
+                                                <button type="button" wire:click="cancelCloseEdition" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
+                                            </div>
+                                        </form>
+                                    </td>
+                                </tr>
+                            @endif
                         @empty
-                            <tr><td colspan="7" class="py-6 text-center text-slate-500">Sin ediciones registradas.</td></tr>
+                            <tr><td colspan="6" class="py-6 text-center text-slate-500">Sin cohortes activas registradas.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
             </div>
+
+            @if($closedEditions->isNotEmpty())
+                <div class="cecap-card overflow-x-auto bg-slate-50/70">
+                    <h2 class="text-sm font-bold text-slate-700 mb-3">Cohortes Cerradas / Finalizadas ({{ $closedEditions->count() }})</h2>
+                    <table class="w-full text-xs sm:text-sm text-left">
+                        <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
+                            <tr>
+                                <th class="py-2 pr-3">Código</th>
+                                <th class="py-2 pr-3">Cohorte / Curso</th>
+                                <th class="py-2 pr-3">Estado</th>
+                                <th class="py-2 pr-3">Motivo registrado</th>
+                                <th class="py-2">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200">
+                            @foreach($closedEditions as $ced)
+                                <tr wire:key="closed-edition-{{ $ced->id }}">
+                                    <td class="py-2 pr-3 font-mono text-xs font-bold text-slate-600">{{ $ced->code }}</td>
+                                    <td class="py-2 pr-3">
+                                        <div class="font-semibold text-slate-700">{{ $ced->name }}</div>
+                                        <div class="text-xs text-slate-500">{{ $ced->course?->name }}</div>
+                                    </td>
+                                    <td class="py-2 pr-3">
+                                        <span class="cecap-badge {{ $ced->status === 'finalizada' ? 'bg-sky-100 text-sky-900' : 'bg-amber-100 text-amber-900' }}">
+                                            {{ strtoupper($ced->status) }}
+                                        </span>
+                                    </td>
+                                    <td class="py-2 pr-3 text-xs text-slate-600">{{ $ced->closure_reason ?? '—' }}</td>
+                                    <td class="py-2">
+                                        @if(auth()->user()->hasEffectivePermission('academico.manage'))
+                                            <button type="button" wire:click="reopenEdition({{ $ced->id }})" class="cecap-btn-secondary !min-h-8 !px-2.5 !py-1 text-xs">Reabrir Cohorte</button>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @endif
         </div>
     @endif
 
@@ -1007,7 +1125,7 @@
                 <form wire:submit="createSchedule" class="cecap-card space-y-4">
                     <h2 class="text-base font-bold text-brand-950">Asignar Bloque Horario (PostgreSQL GiST)</h2>
                     <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-1">Edición *</label>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">Cohorte *</label>
                         <select wire:model.live="sch_edition_id" required class="cecap-input">
                             <option value="">-- Seleccione --</option>
                             @foreach($editions as $ed)
@@ -1059,7 +1177,7 @@
                 <h2 class="text-base font-bold text-slate-900 mb-3">Horarios Vigentes Protegidos</h2>
                 <table class="w-full text-sm text-left">
                     <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
-                        <tr><th class="py-2 pr-3">Horario</th><th class="py-2 pr-3">Edición</th><th class="py-2 pr-3">Aula</th><th class="py-2">Profesora</th></tr>
+                        <tr><th class="py-2 pr-3">Horario</th><th class="py-2 pr-3">Cohorte</th><th class="py-2 pr-3">Aula</th><th class="py-2">Profesora</th></tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @forelse($schedules as $sch)

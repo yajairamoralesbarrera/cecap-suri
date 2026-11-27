@@ -122,7 +122,7 @@ class CostaRicaCatalogSeeder extends Seeder
                 ['documentacion_incompleta', 'Documentación incompleta o no presentada en plazo'],
                 ['documentacion_invalida', 'Documentos ilegibles o no cumplen requisitos'],
                 ['nivel_academico_insuficiente', 'No cumple con el nivel académico previo requerido'],
-                ['cupo_agotado', 'Cupo máximo de la edición agotado'],
+                ['cupo_agotado', 'Cupo máximo de la cohorte agotado'],
                 ['plazo_provisional_vencido', 'Vencimiento del plazo provisional sin confirmación presencial'],
                 ['perfil_no_elegible', 'No cumple con el perfil de elegibilidad institucional'],
                 ['solicitud_duplicada', 'Solicitud duplicada o desistimiento de la solicitante'],
@@ -131,7 +131,7 @@ class CostaRicaCatalogSeeder extends Seeder
             'full_capacity_decision' => [
                 ['lista_espera', 'Ingresar en Lista de Espera'],
                 ['autorizar_sobrecupo', 'Autorizar Sobrecupo Excepcional (Auditado)'],
-                ['trasladar_otra_edicion', 'Reubicar en otra edición con cupo disponible'],
+                ['trasladar_otra_edicion', 'Reubicar en otra cohorte con cupo disponible'],
                 ['rechazar_cupo_lleno', 'No matricular — Cupo agotado (notificar por correo)'],
             ],
             'course_closure_reason' => [

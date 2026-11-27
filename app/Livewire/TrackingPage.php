@@ -116,7 +116,7 @@ class TrackingPage extends Component
     {
         abort_unless(Auth::user()->hasEffectivePermission('seguimiento.attendance.manage'), 403);
         if (! $this->selected_edition_id) {
-            $this->addError('selected_edition_id', 'Seleccione una edición primero.');
+            $this->addError('selected_edition_id', 'Seleccione una cohorte primero.');
 
             return;
         }

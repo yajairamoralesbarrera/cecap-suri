@@ -205,7 +205,7 @@ class EnrollmentService
             if (! filled($capacityDecisionCode)) {
                 throw ValidationException::withMessages([
                     'full_capacity_decision' => sprintf(
-                        'Cupo máximo alcanzado para esta edición (%d / %d cupos ocupados). El funcionario debe seleccionar una decisión del picklist para continuar.',
+                        'Cupo máximo alcanzado para esta cohorte (%d / %d cupos ocupados). El funcionario debe seleccionar una decisión del picklist para continuar.',
                         $edition->activeEnrollmentsCount(),
                         (int) $edition->max_capacity
                     ),
@@ -226,7 +226,7 @@ class EnrollmentService
 
             if ($capacityDecisionCode === 'trasladar_otra_edicion') {
                 throw ValidationException::withMessages([
-                    'course_edition_id' => 'Decisión seleccionada: Reubicar en otra edición. Seleccione otra edición con cupos disponibles en el campo "Curso / Edición a Matricular".',
+                    'course_edition_id' => 'Decisión seleccionada: Reubicar en otra cohorte. Seleccione otra cohorte con cupos disponibles en el campo "Curso / Cohorte a Matricular".',
                 ]);
             }
 
@@ -306,7 +306,7 @@ class EnrollmentService
             if ($lockedIsFull && ! filled($capacityDecisionCode)) {
                 throw ValidationException::withMessages([
                     'full_capacity_decision' => sprintf(
-                        'Cupo máximo alcanzado para esta edición (%d / %d cupos ocupados). El funcionario debe seleccionar una decisión del picklist para continuar.',
+                        'Cupo máximo alcanzado para esta cohorte (%d / %d cupos ocupados). El funcionario debe seleccionar una decisión del picklist para continuar.',
                         $lockedEdition->activeEnrollmentsCount(),
                         (int) $lockedEdition->max_capacity
                     ),
@@ -462,7 +462,7 @@ class EnrollmentService
         if ($enrollment->status === 'lista_espera' && $enrollment->edition && $enrollment->edition->availableSeats() <= 0 && ! $authorizeException) {
             throw ValidationException::withMessages([
                 'documents' => sprintf(
-                    'No hay cupos disponibles en esta edición (%d / %d) para promover desde Lista de Espera. Libere un cupo, amplíe la capacidad de la edición o autorice una excepción con motivo y fecha compromiso.',
+                    'No hay cupos disponibles en esta cohorte (%d / %d) para promover desde Lista de Espera. Libere un cupo, amplíe la capacidad de la cohorte o autorice una excepción con motivo y fecha compromiso.',
                     $enrollment->edition->activeEnrollmentsCount(),
                     (int) $enrollment->edition->max_capacity
                 ),

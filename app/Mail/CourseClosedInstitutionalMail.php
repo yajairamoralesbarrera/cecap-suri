@@ -25,11 +25,13 @@ class CourseClosedInstitutionalMail extends Mailable
 
     public function envelope(): Envelope
     {
+        $cohortName = $this->enrollment->edition?->name ?? $this->course->name;
+
         return new Envelope(
             subject: sprintf(
-                'Aviso importante sobre el curso %s (%s) — %s',
+                'Aviso importante sobre la cohorte %s (%s) — %s',
+                $cohortName,
                 $this->course->name,
-                $this->course->code,
                 $this->settings->institution_name
             ),
         );

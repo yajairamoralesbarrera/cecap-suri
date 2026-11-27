@@ -19,9 +19,9 @@
         <div class="cecap-card space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                    <label class="block text-sm font-semibold text-slate-700 mb-1">Edición / Grupo</label>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">Cohorte / Grupo</label>
                     <select wire:model.live="selected_edition_id" class="cecap-input">
-                        <option value="">-- Seleccione edición --</option>
+                        <option value="">-- Seleccione cohorte --</option>
                         @foreach($editions as $ed)
                             <option value="{{ $ed->id }}">{{ $ed->course?->name }} — {{ $ed->name }}</option>
                         @endforeach
@@ -57,7 +57,7 @@
                             </div>
                         </div>
                     @empty
-                        <p class="text-sm text-slate-500 py-4 text-center">No hay alumnas confirmadas en esta edición.</p>
+                        <p class="text-sm text-slate-500 py-4 text-center">No hay alumnas confirmadas en esta cohorte.</p>
                     @endforelse
                 </div>
 
@@ -76,7 +76,7 @@
                     <h2 class="text-base font-bold text-brand-950">Registrar Calificación</h2>
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Edición</label>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Cohorte</label>
                             <select wire:model.live="selected_edition_id" class="cecap-input">
                                 <option value="">-- Seleccione --</option>
                                 @foreach($editions as $ed)<option value="{{ $ed->id }}">{{ $ed->name }}</option>@endforeach

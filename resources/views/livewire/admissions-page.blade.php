@@ -28,7 +28,7 @@
                     <tr>
                         <th class="py-2 pr-3">Código</th>
                         <th class="py-2 pr-3">Alumna</th>
-                        <th class="py-2 pr-3">Edición</th>
+                        <th class="py-2 pr-3">Cohorte</th>
                         <th class="py-2 pr-3">Estado</th>
                         <th class="py-2 pr-3">Checklist</th>
                         <th class="py-2">Acciones</th>
@@ -175,7 +175,7 @@
                                         @endif
 
                                         <p class="text-xs sm:text-sm text-slate-700">
-                                            Se notificará por correo a <strong>{{ $rejectingEnrollment->student?->email }}</strong> y el cupo de la edición quedará libre.
+                                            Se notificará por correo a <strong>{{ $rejectingEnrollment->student?->email }}</strong> y el cupo de la cohorte quedará libre.
                                         </p>
 
                                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -190,7 +190,7 @@
                                             </div>
                                             <div>
                                                 <label class="block text-xs font-semibold text-slate-700 mb-1">Observaciones adicionales para la solicitante (opcional)</label>
-                                                <input wire:model="rejection_notes" type="text" class="cecap-input" placeholder="Ej. Puede postular nuevamente en la edición del próximo trimestre">
+                                                <input wire:model="rejection_notes" type="text" class="cecap-input" placeholder="Ej. Puede postular nuevamente en la cohorte del próximo trimestre">
                                             </div>
                                         </div>
 
@@ -401,17 +401,17 @@
         <div class="cecap-card space-y-6">
             <div>
                 <h2 class="text-base font-bold text-brand-950">Nueva Matrícula Presencial</h2>
-                <p class="text-xs text-slate-600 mt-0.5">Seleccione primero el curso/edición para verificar la disponibilidad de cupos y definir la acción antes de ingresar los datos de la solicitante.</p>
+                <p class="text-xs text-slate-600 mt-0.5">Seleccione primero el curso/cohorte para verificar la disponibilidad de cupos y definir la acción antes de ingresar los datos de la solicitante.</p>
             </div>
 
-            {{-- PASO 1: SELECCIÓN DE CURSO / EDICIÓN, DISPONIBILIDAD Y ACCIÓN --}}
+            {{-- PASO 1: SELECCIÓN DE CURSO / COHORTE, DISPONIBILIDAD Y ACCIÓN --}}
             <div class="rounded-2xl border-2 border-brand-200 bg-brand-50/40 p-4 space-y-4">
-                <div class="text-xs font-bold uppercase tracking-wide text-brand-900">1. Selección de Curso / Edición, Disponibilidad y Acción</div>
+                <div class="text-xs font-bold uppercase tracking-wide text-brand-900">1. Selección de Curso / Cohorte, Disponibilidad y Acción</div>
 
                 <div>
-                    <label class="block text-sm font-semibold text-slate-800 mb-1">Curso / Edición a Matricular *</label>
+                    <label class="block text-sm font-semibold text-slate-800 mb-1">Curso / Cohorte a Matricular *</label>
                     <select wire:model.live="course_edition_id" class="cecap-input">
-                        <option value="">-- Seleccione curso y edición --</option>
+                        <option value="">-- Seleccione curso y cohorte --</option>
                         @foreach($editions as $ed)
                             @php $avail = $ed->availableSeats(); @endphp
                             <option value="{{ $ed->id }}">
@@ -459,8 +459,8 @@
                     @if($selectedEditionIsFull)
                         <div class="rounded-xl border-2 border-indigo-400 bg-white p-4 space-y-3">
                             <div>
-                                <div class="text-sm font-bold text-indigo-950">Edición Llena ({{ $selectedEditionCapacityInfo }}) — Seleccione la Acción del Funcionario *</div>
-                                <p class="text-xs text-indigo-800 mt-0.5">Elija del picklist si registra en Lista de Espera, autoriza sobrecupo, traslada a otra edición o rechaza por cupo agotado:</p>
+                                <div class="text-sm font-bold text-indigo-950">Cohorte Llena ({{ $selectedEditionCapacityInfo }}) — Seleccione la Acción del Funcionario *</div>
+                                <p class="text-xs text-indigo-800 mt-0.5">Elija del picklist si registra en Lista de Espera, autoriza sobrecupo, traslada a otra cohorte o rechaza por cupo agotado:</p>
                             </div>
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <div>
@@ -486,7 +486,7 @@
                                 <div>
                                     <label class="block text-xs font-semibold text-slate-700 mb-1">Acción a Realizar *</label>
                                     <select wire:model.live="presencial_action" class="cecap-input font-semibold">
-                                        <option value="inscribir">Inscribir / Matricular en esta edición</option>
+                                        <option value="inscribir">Inscribir / Matricular en esta cohorte</option>
                                         <option value="lista_espera">Crear en Lista de Espera</option>
                                         <option value="rechazar">Rechazar solicitud y notificar por correo</option>
                                     </select>

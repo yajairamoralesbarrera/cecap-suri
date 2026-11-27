@@ -32,7 +32,7 @@
             </div>
 
             <p>
-                Si desea recibir orientación, completar requisitos o postular a una próxima edición, puede comunicarse con nuestra Secretaría / Admisiones:
+                Si desea recibir orientación, completar requisitos o postular a una próxima cohorte, puede comunicarse con nuestra Secretaría / Admisiones:
             </p>
 
             <div style="background: #f1f5f9; border-radius: 8px; padding: 12px 16px; font-size: 13px; color: #334155;">

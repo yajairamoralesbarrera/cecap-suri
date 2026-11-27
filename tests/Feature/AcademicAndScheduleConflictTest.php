@@ -481,17 +481,15 @@ it('allows logical deletion of courses only when 0 students are enrolled, and su
 
     expect($enrolledCourse->fresh()->archived_at)->toBeNull();
 
-    // 3. Curso CON alumnas inscritas SÍ se puede cerrar manualmente por decisión institucional (exige picklist) enviando correo a las alumnas
+    // 3. Cerrar Curso en catálogo exige picklist y NO envía correos a alumnas (las notificaciones van al cerrar cada cohorte)
     Livewire::actingAs($admin)
         ->test(AcademicPage::class)
         ->call('startCloseCourse', $enrolledCourse->id)
         ->assertSet('closingCourseId', $enrolledCourse->id)
         ->call('confirmCloseCourse')
         ->assertHasErrors('course_closure_reason_code')
-        ->set('course_closure_reason_code', 'reprogramacion_calendario')
-        ->set('course_closure_reason', 'Se abrirá nuevamente en agosto')
-        ->set('course_closure_message', 'Por decisión institucional este curso fue cerrado. Por favor manténgase pendiente para la nueva oferta académica.')
-        ->set('course_closure_notify_students', true)
+        ->set('course_closure_reason_code', 'actualizacion_curricular')
+        ->set('course_closure_reason', 'Renovación de malla para próximo año')
         ->call('confirmCloseCourse')
         ->assertHasNoErrors()
         ->assertSet('closingCourseId', null);
@@ -499,16 +497,55 @@ it('allows logical deletion of courses only when 0 students are enrolled, and su
     $enrolledCourse->refresh();
     $edition->refresh();
     expect($enrolledCourse->isClosed())->toBeTrue();
-    expect($enrolledCourse->closure_reason)->toContain('Reprogramación de calendario académico');
+    expect($enrolledCourse->closure_reason)->toContain('Actualización curricular del curso o programa');
     expect($enrolledCourse->is_active)->toBeFalse();
-    expect($edition->status)->toBe('cancelada');
     expect($edition->is_public_enrollment_open)->toBeFalse();
+    expect($edition->status)->toBe('abierta');
     expect(\App\Models\AuditLog::where('event', 'academic.course_closed_institutional')->where('auditable_id', (string) $enrolledCourse->id)->exists())->toBeTrue();
+    \Illuminate\Support\Facades\Mail::assertNothingSent();
+
+    // 4. Cerrar Cohorte exige picklist cuando es cierre/cancelación y SÍ envía correo a la alumna de esa cohorte con horario y oficinas
+    $cohortComponent = Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->call('startCloseEdition', $edition->id)
+        ->assertSet('closingEditionId', $edition->id);
+
+    expect($cohortComponent->get('edition_closure_message'))->toContain('oferta académica y laboral');
+    expect($cohortComponent->get('edition_closure_message'))->toContain('oficinas del Centro de Capacitación');
+
+    $cohortComponent
+        ->call('confirmCloseEdition')
+        ->assertHasErrors('edition_closure_reason_code')
+        ->set('edition_closure_reason_code', 'reprogramacion_calendario')
+        ->set('edition_closure_notes', 'Se abrirá nuevamente en agosto')
+        ->set('edition_closure_notify_students', true)
+        ->call('confirmCloseEdition')
+        ->assertHasNoErrors()
+        ->assertSet('closingEditionId', null);
+
+    $edition->refresh();
+    expect($edition->status)->toBe('cancelada');
+    expect($edition->closed_at)->not->toBeNull();
+    expect($edition->closure_reason)->toContain('Reprogramación de calendario académico');
+    expect(\App\Models\AuditLog::where('event', 'academic.edition_closed')->where('auditable_id', (string) $edition->id)->exists())->toBeTrue();
 
     \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\CourseClosedInstitutionalMail::class, function ($mail) {
+        $rendered = $mail->render();
+
         return $mail->hasTo('silvia.gomez@correo.cr')
-            && str_contains($mail->studentMessage, 'nueva oferta');
+            && str_contains($rendered, 'oferta académica y laboral')
+            && str_contains($rendered, 'oficinas del Centro de Capacitación')
+            && str_contains($rendered, 'Horario de atención');
     });
+
+    // 5. Reabrir la cohorte cerrada la devuelve a estado abierta
+    Livewire::actingAs($admin)
+        ->test(AcademicPage::class)
+        ->call('reopenEdition', $edition->id)
+        ->assertHasNoErrors();
+
+    expect($edition->fresh()->status)->toBe('abierta');
+    expect($edition->fresh()->closed_at)->toBeNull();
 });
 
 

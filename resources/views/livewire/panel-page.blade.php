@@ -34,7 +34,7 @@
                 <div class="mt-2 text-2xl font-bold text-brand-900">₡{{ number_format($stats['collected_month'], 0) }}</div>
             </div>
             <div class="cecap-card">
-                <div class="text-xs font-semibold uppercase text-slate-500">Ediciones Abiertas/Curso</div>
+                <div class="text-xs font-semibold uppercase text-slate-500">Cohortes Abiertas/Curso</div>
                 <div class="mt-2 text-2xl font-bold text-slate-800">{{ $stats['active_editions'] }}</div>
             </div>
             <div class="cecap-card">
