@@ -685,7 +685,14 @@
             </div>
             <table class="w-full text-sm text-left">
                 <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
-                    <tr><th class="py-2 pr-3">Código</th><th class="py-2 pr-3">Alumna</th><th class="py-2 pr-3">Contacto</th><th class="py-2 pr-3">Adjuntos</th><th class="py-2">Acciones</th></tr>
+                    <tr>
+                        <th class="py-2 pr-3">Código</th>
+                        <th class="py-2 pr-3">Alumna</th>
+                        <th class="py-2 pr-3">Contacto</th>
+                        <th class="py-2 pr-3">Curso(s) Inscrito(s)</th>
+                        <th class="py-2 pr-3">Adjuntos</th>
+                        <th class="py-2">Acciones</th>
+                    </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                     @forelse($students as $st)
@@ -693,6 +700,19 @@
                             <td class="py-2.5 pr-3 font-mono text-xs font-bold">{{ $st->student_code }}</td>
                             <td class="py-2.5 pr-3 font-semibold">{{ $st->full_name }}<div class="text-xs text-slate-500">{{ $st->identification_number }}</div></td>
                             <td class="py-2.5 pr-3 text-xs">{{ $st->email }}<div>{{ $st->phone }}</div></td>
+                            <td class="py-2.5 pr-3 text-xs space-y-1">
+                                @forelse($st->enrollments as $stEnr)
+                                    <div class="rounded-lg border border-emerald-200 bg-emerald-50/70 px-2 py-1">
+                                        <div class="font-semibold text-brand-950">{{ $stEnr->edition?->course?->name ?? 'Curso' }}</div>
+                                        <div class="text-[11px] text-slate-600">
+                                            {{ $stEnr->edition?->name }}
+                                            · <span class="font-semibold text-emerald-800">{{ strtoupper(str_replace('_', ' ', $stEnr->status)) }}</span>
+                                        </div>
+                                    </div>
+                                @empty
+                                    <span class="text-slate-400">—</span>
+                                @endforelse
+                            </td>
                             <td class="py-2.5 pr-3 text-xs space-y-1">
                                 @php
                                     $activeStudentAtts = $st->attachments->where('status', 'activo');
@@ -738,7 +758,7 @@
                         </tr>
                         @if($attachingStudent && $attachingStudent->id === $st->id)
                             <tr wire:key="student-attach-{{ $st->id }}">
-                                <td colspan="5" class="py-3 px-1">
+                                <td colspan="6" class="py-3 px-1">
                                     <form wire:submit="uploadStudentAttachment" class="rounded-2xl border-2 border-amber-400 bg-amber-50/80 p-4 space-y-3">
                                         <div class="flex flex-wrap items-center justify-between gap-2">
                                             <div>
@@ -794,7 +814,7 @@
                         @endif
                         @if($editingStudentId === $st->id)
                             <tr wire:key="student-edit-{{ $st->id }}">
-                                <td colspan="5" class="py-3 px-1">
+                                <td colspan="6" class="py-3 px-1">
                                     <div class="rounded-2xl border-2 border-brand-700 bg-brand-50/60 p-4 space-y-4">
                                         <div class="flex flex-wrap items-center justify-between gap-2">
                                             <h3 class="text-sm sm:text-base font-bold text-brand-950">Edición Controlada de Expediente — {{ $st->full_name }} ({{ $st->student_code }})</h3>
@@ -876,7 +896,7 @@
                             </tr>
                         @endif
                     @empty
-                        <tr><td colspan="5" class="py-6 text-center text-slate-500">Sin alumnas registradas.</td></tr>
+                        <tr><td colspan="6" class="py-6 text-center text-slate-500">Sin alumnas confirmadas registradas.</td></tr>
                     @endforelse
                 </tbody>
             </table>

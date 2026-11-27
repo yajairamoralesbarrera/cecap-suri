@@ -775,7 +775,9 @@ it('shows students in Directorio de Alumnas only once they have a confirmed enro
         ->assertHasNoErrors()
         ->call('setTab', 'students')
         ->assertSee('Directorio de Alumnas (1)')
-        ->assertSee('Valeria Solís');
+        ->assertSee('Valeria Solís')
+        ->assertSee('Curso Directorio')
+        ->assertSee('Cohorte Directorio');
 });
 
 
