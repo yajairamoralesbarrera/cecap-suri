@@ -10,6 +10,7 @@ use App\Models\Enrollment;
 use App\Models\Picklist;
 use App\Models\RecordAttachment;
 use App\Models\Student;
+use App\Rules\ValidEmailDomain;
 use App\Services\AttachmentService;
 use App\Services\AuditService;
 use App\Services\EnrollmentService;
@@ -246,7 +247,7 @@ class AdmissionsPage extends Component
             'identification_number' => ['required', 'string', 'max:40'],
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
-            'email' => ['required', 'email', 'max:255'], // OBLIGATORIO en creación y edición
+            'email' => ['required', 'email', 'max:255', new ValidEmailDomain()], // OBLIGATORIO en creación y edición
             'phone' => ['required', 'string', 'max:30'],
             'gender' => ['required', 'string', 'max:30'],
         ];
@@ -300,7 +301,7 @@ class AdmissionsPage extends Component
             'identification_number' => ['required', 'string', 'max:40'],
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
-            'email' => ['required', 'email', 'max:255'],
+            'email' => ['required', 'email', 'max:255', new ValidEmailDomain()],
             'phone' => ['required', 'string', 'max:30'],
             'gender' => ['required', 'string', 'max:30'],
             'education_level' => ['required', 'string', 'max:80'],

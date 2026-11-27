@@ -663,6 +663,63 @@ it('supports inline attachment uploads in /admisiones, audited reopening of reje
     expect($enrExc->fresh()->status)->toBe('confirmada');
 });
 
+it('rejects emails without valid TLD termination and redirects Salir on /inscripcion to proyectosuri.org', function () {
+    $admin = User::where('email', 'superadmin@cecap.or.cr')->firstOrFail();
+    $cat = AcademicCategory::create(['code' => 'CAT-EM', 'name' => 'Email Test', 'created_by' => $admin->id]);
+    $course = Course::create([
+        'academic_category_id' => $cat->id,
+        'code' => 'CUR-EM-01',
+        'name' => 'Curso Email',
+        'program_type' => 'curso_corto',
+        'required_education_level' => 'primaria_completa',
+        'default_max_capacity' => 15,
+        'required_documents' => ['cedula_dimex'],
+        'created_by' => $admin->id,
+    ]);
+    $edition = CourseEdition::create([
+        'course_id' => $course->id,
+        'code' => 'COH-EM-01',
+        'name' => 'Cohorte Email',
+        'shift_id' => AcademicShift::firstOrFail()->id,
+        'modality_id' => AcademicModality::firstOrFail()->id,
+        'start_date' => now()->addDays(5)->toDateString(),
+        'end_date' => now()->addMonths(2)->toDateString(),
+        'max_capacity' => 15,
+        'is_public_enrollment_open' => true,
+        'created_by' => $admin->id,
+    ]);
+
+    foreach (['maria@gmail', 'maria@gmail.c', 'maria@gmail.con', 'maria@gmail.123'] as $badEmail) {
+        Livewire::test(PublicEnrollmentPage::class)
+            ->set('course_edition_id', $edition->id)
+            ->set('identification_number', '1-9900-0001')
+            ->set('first_name', 'María')
+            ->set('last_name', 'Campos')
+            ->set('email', $badEmail)
+            ->set('phone', '8800-9901')
+            ->set('education_level', 'bachillerato_secundaria')
+            ->call('submit')
+            ->assertHasErrors('email');
+    }
+
+    Livewire::test(PublicEnrollmentPage::class)
+        ->set('course_edition_id', $edition->id)
+        ->set('identification_number', '1-9900-0002')
+        ->set('first_name', 'María')
+        ->set('last_name', 'Campos')
+        ->set('email', 'maria.campos@proyectosuri.org')
+        ->set('phone', '8800-9902')
+        ->set('education_level', 'bachillerato_secundaria')
+        ->call('submit')
+        ->assertHasNoErrors('email')
+        ->assertSee('https://proyectosuri.org/');
+
+    Livewire::test(PublicEnrollmentPage::class)
+        ->call('exitEnrollment')
+        ->assertRedirect('https://proyectosuri.org/');
+});
+
+
 
 
 

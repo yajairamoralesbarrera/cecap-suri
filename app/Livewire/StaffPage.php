@@ -134,7 +134,7 @@ class StaffPage extends Component
             'last_name' => ['required', 'string', 'max:100'],
             'identification_type' => ['required', 'string', 'max:40'],
             'identification_number' => ['required', 'string', 'max:40', 'unique:staff_members,identification_number'],
-            'email' => ['required', 'email', 'max:255'], // OBLIGATORIO
+            'email' => ['required', 'email', 'max:255', new \App\Rules\ValidEmailDomain()], // OBLIGATORIO
             'phone' => ['required', 'string', 'max:30'],
             'hiring_regime' => ['required', 'in:planilla_laboral,servicios_profesionales'],
             'credentials_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],

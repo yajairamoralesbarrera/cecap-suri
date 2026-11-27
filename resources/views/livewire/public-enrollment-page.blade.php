@@ -177,9 +177,9 @@
                     </button>
                 @endif
                 <button type="button" wire:click="resetForm" class="cecap-btn-secondary">Nueva Preinscripción</button>
-                <button type="button" wire:click="exitEnrollment" class="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer">
+                <a href="https://proyectosuri.org/" rel="noopener noreferrer" class="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
                     Salir
-                </button>
+                </a>
             </div>
         </div>
     @else
@@ -350,7 +350,15 @@
                     </div>
                     <div>
                         <label for="pub_email" class="block text-sm font-semibold text-slate-700 mb-1">Correo electrónico (Obligatorio) *</label>
-                        <input id="pub_email" wire:model="email" type="email" required class="cecap-input" placeholder="alumna@correo.cr">
+                        <input id="pub_email"
+                               wire:model="email"
+                               type="email"
+                               required
+                               pattern="[^\s@]+@[^\s@]+\.[A-Za-z]{2,24}"
+                               title="Ingrese un correo electrónico válido con terminación correcta (ej. nombre@dominio.com, .net, .org, .cr)"
+                               class="cecap-input"
+                               placeholder="alumna@correo.com">
+                        @error('email') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
                     </div>
                     <div>
                         <label for="pub_phone" class="block text-sm font-semibold text-slate-700 mb-1">Teléfono celular / WhatsApp *</label>
@@ -431,9 +439,9 @@
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-slate-200 pt-4">
                 <p class="text-xs text-slate-500">Al enviar, se indicará su Número de Solicitud y se generará su Planilla de Inscripción PDF descargable e imprimible (enlace seguro válido por {{ $settings->online_enrollment_provisional_days }} días).</p>
                 <div class="flex flex-wrap items-center gap-2 shrink-0">
-                    <button type="button" wire:click="exitEnrollment" class="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer">
+                    <a href="https://proyectosuri.org/" rel="noopener noreferrer" class="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">
                         Salir
-                    </button>
+                    </a>
                     <button type="submit"
                             @disabled($genderBlocked || $educationBlocked)
                             wire:loading.attr="disabled"

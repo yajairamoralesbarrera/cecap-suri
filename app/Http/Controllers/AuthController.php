@@ -97,7 +97,7 @@ class AuthController extends Controller
             'second_last_name' => ['nullable', 'string', 'max:100'],
             'identification_type' => ['required', 'string', 'max:40'],
             'identification_number' => ['required', 'string', 'max:40', 'unique:users,identification_number'],
-            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+            'email' => ['required', 'email', 'max:255', new \App\Rules\ValidEmailDomain(), 'unique:users,email'],
             'phone' => ['required', 'string', 'max:30'],
             'password' => ['required', 'confirmed', PasswordRule::min(8)],
         ]);

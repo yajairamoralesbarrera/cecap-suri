@@ -10,6 +10,7 @@ use App\Models\Enrollment;
 use App\Models\InstitutionSetting;
 use App\Models\Picklist;
 use App\Models\Student;
+use App\Rules\ValidEmailDomain;
 use App\Services\AttachmentService;
 use App\Services\EnrollmentService;
 use Illuminate\Support\Facades\Auth;
@@ -238,7 +239,7 @@ class PublicEnrollmentPage extends Component
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
             'second_last_name' => ['nullable', 'string', 'max:100'],
-            'email' => ['required', 'email', 'max:255'],
+            'email' => ['required', 'email', 'max:255', new ValidEmailDomain()],
             'phone' => ['required', 'string', 'max:30'],
             'gender' => ['required', 'in:femenino'],
             'birth_date' => ['nullable', 'date'],
@@ -527,14 +528,9 @@ class PublicEnrollmentPage extends Component
 
     public function exitEnrollment(): mixed
     {
-        if (Auth::check()) {
-            return $this->redirectRoute('panel', navigate: true);
-        }
-
         $this->resetForm();
-        $this->exitedForm = true;
 
-        return null;
+        return $this->redirect('https://proyectosuri.org/');
     }
 
     public function returnToForm(): void
