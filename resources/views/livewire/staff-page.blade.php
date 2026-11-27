@@ -107,7 +107,7 @@
                             <div>
                                 <label class="block text-sm font-semibold text-slate-700 mb-1">
                                     Documento de Identificación *
-                                    <span class="block text-[11px] font-normal text-slate-500">Cédula / DIMEX / Pasaporte (PDF/Imagen máx 25MB)</span>
+                                    <span class="block text-[11px] font-normal text-slate-500">Cédula / DIMEX / Pasaporte (PDF/Imagen máx 250MB)</span>
                                 </label>
                                 <input wire:model="identification_file" type="file" required accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
                                 <div wire:loading wire:target="identification_file" class="mt-1 text-xs font-semibold text-brand-800">Subiendo documento...</div>
@@ -124,7 +124,7 @@
                                     @else
                                         <span class="text-slate-500 font-normal">(opcional)</span>
                                     @endif
-                                    <span class="block text-[11px] font-normal text-slate-500">Puede seleccionar uno o varios archivos (PDF/Imagen máx 25MB c/u)</span>
+                                    <span class="block text-[11px] font-normal text-slate-500">Puede seleccionar uno o varios archivos (PDF/Imagen máx 250MB c/u)</span>
                                 </label>
                                 <input wire:model="credentials_files" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
                                 <div wire:loading wire:target="credentials_files" class="mt-1 text-xs font-semibold text-brand-800">Subiendo atestados...</div>
@@ -142,7 +142,7 @@
                             <div>
                                 <label class="block text-sm font-semibold text-slate-700 mb-1">
                                     Contrato Existente / Ya Firmado <span class="text-slate-500 font-normal">(opcional)</span>
-                                    <span class="block text-[11px] font-normal text-slate-500">Archivo firmado o vigente (PDF/Imagen máx 25MB)</span>
+                                    <span class="block text-[11px] font-normal text-slate-500">Archivo firmado o vigente (PDF/Imagen máx 250MB)</span>
                                 </label>
                                 <input wire:model="signed_contract_file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
                                 <div wire:loading wire:target="signed_contract_file" class="mt-1 text-xs font-semibold text-brand-800">Subiendo contrato...</div>
@@ -222,6 +222,16 @@
                                     @if($st->birth_date)
                                         <div class="text-[11px] font-normal text-slate-500">Nacimiento: {{ $st->birth_date->format('d/m/Y') }} ({{ $st->birth_date->age }} años)</div>
                                     @endif
+                                    @if(auth()->user()->hasEffectivePermission('personal.manage'))
+                                        <div class="mt-2 flex flex-wrap gap-1.5">
+                                            <button type="button" wire:click="startEditStaff({{ $st->id }})" class="inline-flex min-h-7 items-center justify-center rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer">
+                                                Editar
+                                            </button>
+                                            <button type="button" wire:click="startAttachCredentials({{ $st->id }})" class="inline-flex min-h-7 items-center justify-center rounded-lg border border-brand-300 bg-brand-50 px-2.5 py-1 text-[11px] font-semibold text-brand-900 hover:bg-brand-100 cursor-pointer">
+                                                + Agregar Atestados
+                                            </button>
+                                        </div>
+                                    @endif
                                 </td>
                                 <td class="py-2.5 pr-3 text-xs space-y-1">
                                     <div>
@@ -246,26 +256,14 @@
                                     </span>
                                 </td>
                                 <td class="py-2.5 pr-3 text-xs">{{ $st->email }}<div>{{ $st->phone }}</div></td>
-                                <td class="py-2.5 text-xs space-y-1">
-                                    <div class="space-y-0.5">
-                                        @forelse($st->attachments->where('status', 'activo') as $att)
-                                            <div>
-                                                <a href="{{ route('attachments.download', $att->uuid) }}" class="text-brand-800 underline font-medium">{{ $att->document_type_label }}: {{ $att->original_name }} (v{{ $att->version }})</a>
-                                            </div>
-                                        @empty
-                                            <span class="text-slate-400">Sin adjuntos</span>
-                                        @endforelse
-                                    </div>
-                                    @if(auth()->user()->hasEffectivePermission('personal.manage'))
-                                        <div class="pt-1 flex flex-wrap gap-1.5">
-                                            <button type="button" wire:click="startEditStaff({{ $st->id }})" class="inline-flex min-h-7 items-center justify-center rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer">
-                                                Editar
-                                            </button>
-                                            <button type="button" wire:click="startAttachCredentials({{ $st->id }})" class="inline-flex min-h-7 items-center justify-center rounded-lg border border-brand-300 bg-brand-50 px-2.5 py-1 text-[11px] font-semibold text-brand-900 hover:bg-brand-100 cursor-pointer">
-                                                + Agregar Atestados
-                                            </button>
+                                <td class="py-2.5 text-xs space-y-0.5">
+                                    @forelse($st->attachments->where('status', 'activo') as $att)
+                                        <div>
+                                            <a href="{{ route('attachments.download', $att->uuid) }}" class="text-brand-800 underline font-medium">{{ $att->document_type_label }}: {{ $att->original_name }} (v{{ $att->version }})</a>
                                         </div>
-                                    @endif
+                                    @empty
+                                        <span class="text-slate-400">Sin adjuntos</span>
+                                    @endforelse
                                 </td>
                             </tr>
                             @if($editingStaffId === $st->id)
@@ -412,7 +410,7 @@
                                             </div>
                                             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                                                 <div>
-                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Atestados (puede seleccionar uno o varios — PDF/Imagen máx 25MB c/u) *</label>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Atestados (puede seleccionar uno o varios — PDF/Imagen máx 250MB c/u) *</label>
                                                     <input wire:model="extra_credentials_files" type="file" multiple required accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input bg-white">
                                                     <div wire:loading wire:target="extra_credentials_files" class="mt-1 text-xs font-semibold text-brand-800">Subiendo atestados...</div>
                                                     @if(!empty($extra_credentials_files))
@@ -515,7 +513,7 @@
                                 <textarea wire:model="contract_body" rows="3" class="cecap-input"></textarea>
                             </div>
                             <div>
-                                <label class="block text-sm font-semibold text-slate-700 mb-1">Adjuntar Copia Ya Firmada (opcional — PDF/JPG/PNG/WebP máx 25MB)</label>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Adjuntar Copia Ya Firmada (opcional — PDF/JPG/PNG/WebP máx 250MB)</label>
                                 <input wire:model="contract_pdf_file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
                                 <div wire:loading wire:target="contract_pdf_file" class="mt-1 text-xs font-semibold text-brand-800">Subiendo contrato...</div>
                                 @if($contract_pdf_file)
@@ -525,7 +523,7 @@
                         </div>
                     @else
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Archivo del Contrato Existente / Ya Firmado (PDF o Imagen máx 25MB) *</label>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Archivo del Contrato Existente / Ya Firmado (PDF o Imagen máx 250MB) *</label>
                             <input wire:model="contract_pdf_file" type="file" required accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
                             <div wire:loading wire:target="contract_pdf_file" class="mt-1 text-xs font-semibold text-brand-800">Subiendo contrato...</div>
                             @if($contract_pdf_file)
@@ -584,7 +582,7 @@
                                             </div>
                                             <div class="grid grid-cols-1 md:grid-cols-2 gap-3 items-end">
                                                 <div>
-                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Archivo de Contrato Firmado (PDF/Imagen máx 25MB) *</label>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Archivo de Contrato Firmado (PDF/Imagen máx 250MB) *</label>
                                                     <input wire:model="existing_contract_signed_file" type="file" required accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
                                                     <div wire:loading wire:target="existing_contract_signed_file" class="mt-1 text-xs font-semibold text-brand-800">Subiendo archivo...</div>
                                                     @if($existing_contract_signed_file)

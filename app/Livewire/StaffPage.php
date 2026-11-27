@@ -221,16 +221,16 @@ class StaffPage extends Component
             'specialty_2' => ['nullable', 'string', 'max:140'],
             'specialty_3' => ['nullable', 'string', 'max:140'],
             'hiring_regime' => ['required', 'in:planilla_laboral,servicios_profesionales'],
-            'identification_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
-            'credentials_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'identification_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:256000'],
+            'credentials_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:256000'],
             'credentials_files' => ['nullable', 'array', 'max:10'],
-            'credentials_files.*' => ['file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
-            'signed_contract_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'credentials_files.*' => ['file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:256000'],
+            'signed_contract_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:256000'],
         ];
 
         // Atestados Profesionales OBLIGATORIOS para Profesoras (teacher / both)
         if (in_array($this->staff_role_type, ['teacher', 'both'], true) && empty($this->credentials_files)) {
-            $rules['credentials_file'] = ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'];
+            $rules['credentials_file'] = ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:256000'];
         }
 
         $this->validate($rules, [
@@ -349,7 +349,7 @@ class StaffPage extends Component
 
         $this->validate([
             'extra_credentials_files' => ['required', 'array', 'min:1', 'max:10'],
-            'extra_credentials_files.*' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'extra_credentials_files.*' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:256000'],
             'extra_credentials_notes' => ['nullable', 'string', 'max:500'],
         ], [
             'extra_credentials_files.required' => 'Seleccione al menos un archivo de atestado (PDF o imagen).',
@@ -473,10 +473,10 @@ class StaffPage extends Component
             'edit_specialty_2' => ['nullable', 'string', 'max:140'],
             'edit_specialty_3' => ['nullable', 'string', 'max:140'],
             'edit_notes' => ['nullable', 'string', 'max:1000'],
-            'edit_identification_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'edit_identification_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:256000'],
             'edit_credentials_files' => ['nullable', 'array', 'max:10'],
-            'edit_credentials_files.*' => ['file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
-            'edit_signed_contract_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'edit_credentials_files.*' => ['file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:256000'],
+            'edit_signed_contract_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:256000'],
         ];
 
         $this->validate($rules, [
@@ -594,11 +594,11 @@ class StaffPage extends Component
             'contract_title' => ['required', 'string', 'max:180'],
             'contract_start_date' => ['required', 'date'],
             'contract_gross' => ['required', 'numeric', 'min:1'],
-            'contract_pdf_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'contract_pdf_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:256000'],
         ];
 
         if ($this->contract_mode === 'pdf_adjunto') {
-            $rules['contract_pdf_file'] = ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'];
+            $rules['contract_pdf_file'] = ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:256000'];
         }
 
         $this->validate($rules, [
@@ -670,7 +670,7 @@ class StaffPage extends Component
         }
 
         $this->validate([
-            'existing_contract_signed_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'existing_contract_signed_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:256000'],
             'existing_contract_signed_notes' => ['nullable', 'string', 'max:500'],
         ], [
             'existing_contract_signed_file.required' => 'Seleccione el archivo del contrato firmado (PDF, JPG, PNG o WebP).',

@@ -555,7 +555,7 @@ class AdmissionsPage extends Component
             'birth_date' => ['required', 'date', 'before:today'],
             'education_level' => ['required', 'string', 'max:80'],
             'course_edition_id' => ['required', 'integer', 'exists:course_editions,id'],
-            'attachment_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'attachment_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:256000'],
         ];
 
         if ($isMinor) {
@@ -937,7 +937,7 @@ class AdmissionsPage extends Component
 
         $this->validate([
             'enr_attachment_doc_type' => ['required', 'string', 'max:60'],
-            'enr_attachment_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'enr_attachment_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:256000'],
             'enr_attachment_notes' => ['nullable', 'string', 'max:500'],
         ], [
             'enr_attachment_file.required' => 'Seleccione el archivo (PDF, JPG, PNG o WebP) que desea adjuntar.',
@@ -1234,7 +1234,7 @@ class AdmissionsPage extends Component
         $this->validate([
             'reopen_reason' => ['required', 'string', 'min:5', 'max:500'],
             'reopen_attachment_doc_type' => ['nullable', 'string', 'max:60'],
-            'reopen_attachment_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'reopen_attachment_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:256000'],
         ], [
             'reopen_reason.required' => 'Debe indicar el motivo de reapertura de la solicitud para auditoría.',
             'reopen_reason.min' => 'El motivo de reapertura debe tener al menos 5 caracteres.',
@@ -1314,7 +1314,7 @@ class AdmissionsPage extends Component
 
         $this->validate([
             'student_attachment_doc_type' => ['required', 'string', 'max:60'],
-            'student_attachment_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'student_attachment_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:256000'],
             'student_attachment_notes' => ['nullable', 'string', 'max:500'],
         ], [
             'student_attachment_file.required' => 'Seleccione el archivo (PDF, JPG, PNG o WebP) que desea subir al expediente.',

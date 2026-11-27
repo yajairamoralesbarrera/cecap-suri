@@ -408,7 +408,7 @@
                                         <div class="flex flex-wrap items-center justify-between gap-2">
                                             <div>
                                                 <h3 class="text-sm sm:text-base font-bold text-amber-950">Adjuntos de Solicitud {{ $attachingEnrollment->enrollment_code }} — {{ $attachingEnrollment->student?->full_name }}</h3>
-                                                <p class="text-xs text-amber-900">Suba los documentos faltantes (PDF, JPG, PNG o WebP hasta 25 MB). El checklist y la Planilla PDF se actualizarán automáticamente.</p>
+                                                <p class="text-xs text-amber-900">Suba los documentos faltantes (PDF, JPG, PNG o WebP hasta 250 MB). El checklist y la Planilla PDF se actualizarán automáticamente.</p>
                                             </div>
                                             <button type="button" wire:click="cancelAttachEnrollment" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cerrar</button>
                                         </div>
@@ -470,7 +470,7 @@
                                                 </select>
                                             </div>
                                             <div>
-                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Archivo (PDF/Imagen máx 25 MB) *</label>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Archivo (PDF/Imagen máx 250 MB) *</label>
                                                 <input wire:model="enr_attachment_file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
                                                 <div wire:loading wire:target="enr_attachment_file" class="mt-1 text-xs font-semibold text-brand-800">Subiendo archivo... espere un momento.</div>
                                                 @if($enr_attachment_file)
@@ -556,7 +556,7 @@
                                                     </select>
                                                 </div>
                                                 <div>
-                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Archivo (PDF/Imagen máx 25 MB)</label>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Archivo (PDF/Imagen máx 250 MB)</label>
                                                     <input wire:model="reopen_attachment_file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
                                                     <div wire:loading wire:target="reopen_attachment_file" class="mt-1 text-xs font-semibold text-brand-800">Subiendo archivo...</div>
                                                     @if($reopen_attachment_file)
@@ -919,7 +919,7 @@
                 </div>
 
                 <div>
-                    <label class="block text-sm font-semibold text-slate-700 mb-1">Adjunto Privado (PDF/JPG/PNG/WebP máx 25MB)</label>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">Adjunto Privado (PDF/JPG/PNG/WebP máx 250MB)</label>
                     <div class="flex flex-col sm:flex-row gap-2">
                         <select wire:model.live="attachment_doc_type" class="cecap-input sm:w-52 shrink-0">
                             <option value="cedula_dimex">Cédula / DIMEX</option>
@@ -1131,7 +1131,7 @@
                                                 </select>
                                             </div>
                                             <div>
-                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Archivo (PDF/Imagen máx 25 MB) *</label>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Archivo (PDF/Imagen máx 250 MB) *</label>
                                                 <input wire:model="student_attachment_file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
                                                 <div wire:loading wire:target="student_attachment_file" class="mt-1 text-xs font-semibold text-brand-800">Subiendo archivo...</div>
                                                 @if($student_attachment_file)

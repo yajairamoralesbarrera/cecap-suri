@@ -36,7 +36,7 @@
                     <textarea wire:model="description" rows="2" class="cecap-input"></textarea>
                 </div>
                 <div>
-                    <label class="block text-sm font-semibold text-slate-700 mb-1">Archivo (PDF/JPG/PNG/WebP máx 25MB) *</label>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">Archivo (PDF/JPG/PNG/WebP máx 250MB) *</label>
                     <input wire:model="file" type="file" required accept=".pdf,.jpg,.jpeg,.png,.webp" class="cecap-input">
                 </div>
                 <button type="submit" class="cecap-btn-primary w-full">Subir al Repositorio Privado</button>

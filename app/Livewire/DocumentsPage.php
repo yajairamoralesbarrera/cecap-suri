@@ -42,7 +42,7 @@ class DocumentsPage extends Component
             'title' => ['required', 'string', 'max:180'],
             'category' => ['required', 'string', 'max:80'],
             'visibility' => ['required', 'in:publico,alumnas,interno,direccion'],
-            'file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:256000'],
         ]);
 
         $doc = InstitutionalDocument::create([
@@ -84,7 +84,7 @@ class DocumentsPage extends Component
         }
 
         $this->validate([
-            'new_version_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:25600'],
+            'new_version_file' => ['required', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:256000'],
         ]);
 
         $doc = InstitutionalDocument::findOrFail($this->versioningDocId);
