@@ -480,7 +480,14 @@ it('allows presencial officer to check availability first and directly enroll, w
         ->set('phone', '8800-8001')
         ->set('gender', 'femenino')
         ->call('createPresencialEnrollment')
-        ->assertHasNoErrors();
+        ->assertHasNoErrors()
+        ->assertSet('tab', 'enroll')
+        ->assertSet('course_edition_id', null)
+        ->assertSet('identification_number', '')
+        ->assertSet('first_name', '')
+        ->assertSet('last_name', '')
+        ->assertSet('email', '')
+        ->assertSet('phone', '');
 
     $wait = Enrollment::whereHas('student', fn ($q) => $q->where('identification_number', '1-8000-0001'))->firstOrFail();
     expect($wait->status)->toBe('lista_espera');

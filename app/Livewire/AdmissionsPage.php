@@ -373,6 +373,19 @@ class AdmissionsPage extends Component
         }
 
         $this->reset([
+            'editingStudentId',
+            'edit_reason',
+            'identification_number',
+            'first_name',
+            'last_name',
+            'second_last_name',
+            'email',
+            'phone',
+            'province_id',
+            'canton_id',
+            'district_id',
+            'address_detail',
+            'course_edition_id',
             'attachment_file',
             'authorize_exception',
             'exception_reason',
@@ -384,13 +397,21 @@ class AdmissionsPage extends Component
             'selectedEditionIsFull',
             'selectedEditionCapacityInfo',
         ]);
+        $this->identification_type = 'cedula_nacional';
+        $this->gender = 'femenino';
+        $this->education_level = 'bachillerato_secundaria';
+        $this->submitted_documents = ['cedula_dimex'];
+        $this->attachment_doc_type = 'cedula_dimex';
+        $this->confirm_immediately = true;
         $this->presencial_action = 'inscribir';
+        $this->resetValidation();
+
         $this->feedback = match ($enrollment->status) {
-            'lista_espera' => sprintf('Solicitud %s registrada en LISTA DE ESPERA.', $enrollment->enrollment_code),
-            'rechazada' => sprintf('Solicitud %s registrada como RECHAZADA (%s) y notificada por correo.', $enrollment->enrollment_code, $enrollment->rejection_reason_label ?: 'motivo registrado'),
-            default => sprintf('Matrícula %s registrada correctamente (%s).', $enrollment->enrollment_code, strtoupper(str_replace('_', ' ', $enrollment->status))),
+            'lista_espera' => sprintf('Solicitud %s registrada en LISTA DE ESPERA para %s. Formulario listo para una nueva inscripción.', $enrollment->enrollment_code, $student->full_name),
+            'rechazada' => sprintf('Solicitud %s registrada como RECHAZADA (%s) para %s y notificada por correo. Formulario listo para una nueva inscripción.', $enrollment->enrollment_code, $enrollment->rejection_reason_label ?: 'motivo registrado', $student->full_name),
+            default => sprintf('Matrícula %s registrada correctamente para %s (%s). Formulario listo para una nueva inscripción.', $enrollment->enrollment_code, $student->full_name, strtoupper(str_replace('_', ' ', $enrollment->status))),
         };
-        $this->tab = 'queue';
+        $this->tab = 'enroll';
     }
 
     public function updatedAttachmentFile(): void
