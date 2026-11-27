@@ -196,18 +196,6 @@
 
     {{-- TAB: RECIBOS Y REVERSOS --}}
     @if($tab === 'receipts')
-        @if($reversingReceiptId)
-            <div class="cecap-card border-rose-300 bg-rose-50/70 space-y-3">
-                <h3 class="font-bold text-rose-950">Anulación Exclusiva por Reverso Auditado</h3>
-                <p class="text-xs text-rose-800">El recibo original nunca se borra. Se generará un asiento de reverso negativo en el libro mayor append-only.</p>
-                <div class="flex flex-col sm:flex-row gap-2">
-                    <input wire:model="reversal_reason" type="text" class="cecap-input flex-1" placeholder="Motivo formal del reverso *">
-                    <button type="button" wire:click="confirmReverseReceipt" class="cecap-btn-primary">Aplicar Reverso</button>
-                    <button type="button" wire:click="cancelReverseReceipt" class="cecap-btn-secondary">Cancelar</button>
-                </div>
-            </div>
-        @endif
-
         <div class="cecap-card overflow-x-auto">
             <h2 class="text-base font-bold text-slate-900 mb-3">Recibos Emitidos (REC-YYYY-NNNNN)</h2>
             <table class="w-full text-sm text-left">
@@ -216,7 +204,7 @@
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                     @forelse($receipts as $r)
-                        <tr>
+                        <tr wire:key="receipt-row-{{ $r->id }}" class="{{ $reversingReceiptId === $r->id ? 'bg-rose-50/40' : '' }}">
                             <td class="py-2.5 pr-3 font-mono text-xs font-bold">{{ $r->receipt_number }}<div class="text-[11px] text-slate-400">{{ $r->paid_at?->format('d/m/Y H:i') }}</div></td>
                             <td class="py-2.5 pr-3 font-semibold">{{ $r->student?->full_name }}</td>
                             <td class="py-2.5 pr-3 font-bold">₡{{ number_format((float) $r->total_amount, 2) }}</td>
@@ -235,6 +223,21 @@
                                 </div>
                             </td>
                         </tr>
+                        @if($reversingReceiptId === $r->id)
+                            <tr wire:key="receipt-reverse-{{ $r->id }}">
+                                <td colspan="5" class="py-3 px-1">
+                                    <div class="rounded-2xl border-2 border-rose-300 bg-rose-50/80 p-4 space-y-3">
+                                        <h3 class="text-sm font-bold text-rose-950">Anulación Exclusiva por Reverso Auditado — {{ $r->receipt_number }}</h3>
+                                        <p class="text-xs text-rose-800">El recibo original nunca se borra. Se generará un asiento de reverso negativo en el libro mayor append-only.</p>
+                                        <div class="flex flex-col sm:flex-row gap-2">
+                                            <input wire:model="reversal_reason" type="text" class="cecap-input flex-1" placeholder="Motivo formal del reverso *">
+                                            <button type="button" wire:click="confirmReverseReceipt" class="cecap-btn-primary text-xs sm:text-sm">Aplicar Reverso</button>
+                                            <button type="button" wire:click="cancelReverseReceipt" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        @endif
                     @empty
                         <tr><td colspan="5" class="py-6 text-center text-slate-500">Sin recibos emitidos.</td></tr>
                     @endforelse

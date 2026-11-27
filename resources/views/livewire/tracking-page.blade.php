@@ -117,34 +117,6 @@
                 </form>
             @endif
 
-            @if($rectifyingGradeId)
-                <div class="cecap-card border-amber-300 bg-amber-50/70 space-y-4">
-                    <div class="flex items-center justify-between">
-                        <h3 class="font-bold text-amber-950">Rectificación Auditada de Calificación (Nueva Versión)</h3>
-                        <button type="button" wire:click="cancelRectifyGrade" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar</button>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-700 mb-1">Nueva Nota *</label>
-                            <input wire:model="rectify_score" type="number" step="0.01" min="0" max="100" class="cecap-input">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-700 mb-1">Motivo Estandarizado *</label>
-                            <select wire:model="rectify_reason_code" class="cecap-input">
-                                @foreach($rectificationReasons as $code => $label)
-                                    <option value="{{ $code }}">{{ $label }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-700 mb-1">Justificación Detallada *</label>
-                            <input wire:model="rectify_notes" type="text" class="cecap-input" placeholder="Detalle auditado de la rectificación">
-                        </div>
-                    </div>
-                    <button type="button" wire:click="submitGradeRectification" class="cecap-btn-accent">Confirmar Rectificación Versionada</button>
-                </div>
-            @endif
-
             <div class="cecap-card overflow-x-auto">
                 <h2 class="text-base font-bold text-slate-900 mb-3">Calificaciones Vigentes</h2>
                 <table class="w-full text-sm text-left">
@@ -153,7 +125,7 @@
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @forelse($recentGrades as $g)
-                            <tr>
+                            <tr wire:key="grade-row-{{ $g->id }}" class="{{ $rectifyingGradeId === $g->id ? 'bg-amber-50/40' : '' }}">
                                 <td class="py-2.5 pr-3 font-semibold">{{ $g->student?->full_name }}<div class="text-xs text-slate-500">{{ $g->enrollment?->edition?->name }}</div></td>
                                 <td class="py-2.5 pr-3">{{ $g->evaluation_name }} @if($g->subject)<span class="text-xs text-slate-500">({{ $g->subject->name }})</span>@endif</td>
                                 <td class="py-2.5 pr-3 font-bold text-brand-950">{{ number_format((float) $g->score, 2) }}</td>
@@ -164,6 +136,40 @@
                                     @endif
                                 </td>
                             </tr>
+                            @if($rectifyingGradeId === $g->id)
+                                <tr wire:key="grade-rectify-{{ $g->id }}">
+                                    <td colspan="5" class="py-3 px-1">
+                                        <div class="rounded-2xl border-2 border-amber-300 bg-amber-50/80 p-4 space-y-4">
+                                            <div class="flex items-center justify-between gap-2">
+                                                <h3 class="text-sm font-bold text-amber-950">Rectificación Auditada de Calificación (Nueva Versión)</h3>
+                                                <button type="button" wire:click="cancelRectifyGrade" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar</button>
+                                            </div>
+                                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Nueva Nota *</label>
+                                                    <input wire:model="rectify_score" type="number" step="0.01" min="0" max="100" class="cecap-input">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Motivo Estandarizado *</label>
+                                                    <select wire:model="rectify_reason_code" class="cecap-input">
+                                                        @foreach($rectificationReasons as $code => $label)
+                                                            <option value="{{ $code }}">{{ $label }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Justificación Detallada *</label>
+                                                    <input wire:model="rectify_notes" type="text" class="cecap-input" placeholder="Detalle auditado de la rectificación">
+                                                </div>
+                                            </div>
+                                            <div class="flex flex-wrap gap-2">
+                                                <button type="button" wire:click="submitGradeRectification" class="cecap-btn-accent text-xs sm:text-sm">Confirmar Rectificación Versionada</button>
+                                                <button type="button" wire:click="cancelRectifyGrade" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endif
                         @empty
                             <tr><td colspan="5" class="py-6 text-center text-slate-500">Sin calificaciones registradas.</td></tr>
                         @endforelse

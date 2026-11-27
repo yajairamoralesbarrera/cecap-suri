@@ -21,96 +21,6 @@
 
     {{-- TAB: COLA DE ADMISIONES Y MATRÍCULAS --}}
     @if($tab === 'queue')
-        @if($confirmingEnrollment)
-            <div class="cecap-card border-brand-700 bg-brand-50/50 space-y-4">
-                <div class="flex items-center justify-between gap-2">
-                    <h2 class="text-base font-bold text-brand-950">Confirmar Matrícula {{ $confirmingEnrollment->enrollment_code }} — {{ $confirmingEnrollment->student?->full_name }}</h2>
-                    <button type="button" wire:click="cancelConfirmEnrollment" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar</button>
-                </div>
-                <p class="text-sm text-slate-700">Curso: <strong>{{ $confirmingEnrollment->edition?->course?->name }}</strong> ({{ $confirmingEnrollment->edition?->name }})</p>
-
-                @php $confirmMissing = $confirmingEnrollment->missingDocumentLabels(); @endphp
-                @if(! empty($confirmMissing))
-                    <div class="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-900">
-                        <strong>Documentos faltantes actuales:</strong> {{ implode(', ', $confirmMissing) }}
-                    </div>
-                @endif
-
-                <div class="space-y-2">
-                    <div class="text-xs font-bold uppercase text-slate-600">Documentos Requeridos (Checklist del Curso)</div>
-                    <div class="flex flex-wrap gap-4 text-sm">
-                        @foreach($confirmingEnrollment->required_documents_snapshot ?? ['cedula_dimex'] as $docKey)
-                            <label class="inline-flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" wire:model="confirm_docs" value="{{ $docKey }}" class="h-4 w-4 rounded text-brand-900">
-                                <span>{{ $documentTypes[$docKey] ?? $docKey }}</span>
-                            </label>
-                        @endforeach
-                    </div>
-                </div>
-
-                @if(auth()->user()->hasEffectivePermission('admisiones.exceptions.authorize'))
-                    <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-3">
-                        <label class="inline-flex items-center gap-2 text-sm font-semibold text-amber-950 cursor-pointer">
-                            <input type="checkbox" wire:model.live="confirm_exception" class="h-4 w-4 rounded text-accent-600">
-                            <span>Autorizar excepción por documentación faltante (queda auditada)</span>
-                        </label>
-                        @if($confirm_exception)
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                <div>
-                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Motivo de la excepción *</label>
-                                    <input wire:model="confirm_exception_reason" type="text" class="cecap-input" placeholder="Ej. Título en trámite en MEP">
-                                </div>
-                                <div>
-                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Fecha compromiso de entrega *</label>
-                                    <input wire:model="confirm_exception_date" type="date" class="cecap-input">
-                                </div>
-                            </div>
-                        @endif
-                    </div>
-                @endif
-
-                <div class="flex gap-2">
-                    <button type="button" wire:click="submitConfirmation" class="cecap-btn-primary">Confirmar Matrícula y Generar Plan de Cobro</button>
-                </div>
-            </div>
-        @endif
-
-        @if($rejectingEnrollment)
-            <div class="cecap-card border-rose-400 bg-rose-50/70 space-y-4">
-                <div class="flex items-center justify-between gap-2">
-                    <h2 class="text-base font-bold text-rose-950">Rechazar Solicitud {{ $rejectingEnrollment->enrollment_code }} — {{ $rejectingEnrollment->student?->full_name }}</h2>
-                    <button type="button" wire:click="cancelRejectEnrollment" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar</button>
-                </div>
-                <p class="text-sm text-slate-700">
-                    Curso: <strong>{{ $rejectingEnrollment->edition?->course?->name }}</strong> ({{ $rejectingEnrollment->edition?->name }}) ·
-                    Se notificará por correo a <strong>{{ $rejectingEnrollment->student?->email }}</strong> y el cupo quedará libre.
-                </p>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-700 mb-1">Motivo de Rechazo (Picklist) *</label>
-                        <select wire:model="rejection_reason_code" required class="cecap-input">
-                            <option value="">-- Seleccione el motivo de rechazo --</option>
-                            @foreach($rejectionReasons as $code => $label)
-                                <option value="{{ $code }}">{{ $label }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-semibold text-slate-700 mb-1">Observaciones adicionales para la solicitante (opcional)</label>
-                        <input wire:model="rejection_notes" type="text" class="cecap-input" placeholder="Ej. Puede postular nuevamente en la edición del próximo trimestre">
-                    </div>
-                </div>
-
-                <div class="flex flex-wrap gap-2">
-                    <button type="button" wire:click="submitRejection" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800 cursor-pointer">
-                        Confirmar Rechazo y Enviar Correo
-                    </button>
-                    <button type="button" wire:click="cancelRejectEnrollment" class="cecap-btn-secondary">Cancelar</button>
-                </div>
-            </div>
-        @endif
-
         <div class="cecap-card overflow-x-auto">
             <h2 class="text-base font-bold text-slate-900 mb-3">Solicitudes y Matrículas Recientes</h2>
             <table class="w-full text-sm text-left">
@@ -126,7 +36,7 @@
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                     @forelse($enrollments as $enr)
-                        <tr>
+                        <tr wire:key="enr-row-{{ $enr->id }}" class="{{ ($confirmingEnrollmentId === $enr->id || $rejectingEnrollmentId === $enr->id) ? 'bg-slate-50/80' : '' }}">
                             <td class="py-2.5 pr-3 font-mono text-xs font-bold">{{ $enr->enrollment_code }}<div class="text-[11px] text-slate-400">{{ $enr->source }}</div></td>
                             <td class="py-2.5 pr-3 font-semibold text-slate-900">{{ $enr->student?->full_name }}<div class="text-xs text-slate-500">{{ $enr->student?->identification_number }} · {{ $enr->student?->email }}</div></td>
                             <td class="py-2.5 pr-3 text-xs">{{ $enr->edition?->course?->name }}<div class="text-slate-500">{{ $enr->edition?->name }}</div></td>
@@ -163,6 +73,124 @@
                                 </div>
                             </td>
                         </tr>
+
+                        @if($confirmingEnrollment && $confirmingEnrollment->id === $enr->id)
+                            <tr wire:key="enr-confirm-{{ $enr->id }}">
+                                <td colspan="6" class="py-3 px-1">
+                                    <div class="rounded-2xl border-2 border-brand-700 bg-brand-50/70 p-4 space-y-4">
+                                        <div class="flex flex-wrap items-center justify-between gap-2">
+                                            <h3 class="text-sm sm:text-base font-bold text-brand-950">Confirmar Matrícula {{ $confirmingEnrollment->enrollment_code }} — {{ $confirmingEnrollment->student?->full_name }}</h3>
+                                            <button type="button" wire:click="cancelConfirmEnrollment" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar</button>
+                                        </div>
+
+                                        @if($errors->any())
+                                            <div class="rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800">
+                                                <ul class="list-disc pl-4 space-y-0.5">
+                                                    @foreach($errors->all() as $error)
+                                                        <li>{{ $error }}</li>
+                                                    @endforeach
+                                                </ul>
+                                            </div>
+                                        @endif
+
+                                        @php $confirmMissing = $confirmingEnrollment->missingDocumentLabels(); @endphp
+                                        @if(! empty($confirmMissing))
+                                            <div class="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-900">
+                                                <strong>Documentos faltantes actuales:</strong> {{ implode(', ', $confirmMissing) }}
+                                            </div>
+                                        @endif
+
+                                        <div class="space-y-2">
+                                            <div class="text-xs font-bold uppercase text-slate-600">Documentos Requeridos (Checklist del Curso)</div>
+                                            <div class="flex flex-wrap gap-4 text-sm">
+                                                @foreach($confirmingEnrollment->required_documents_snapshot ?? ['cedula_dimex'] as $docKey)
+                                                    <label class="inline-flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" wire:model="confirm_docs" value="{{ $docKey }}" class="h-4 w-4 rounded text-brand-900">
+                                                        <span>{{ $documentTypes[$docKey] ?? $docKey }}</span>
+                                                    </label>
+                                                @endforeach
+                                            </div>
+                                        </div>
+
+                                        @if(auth()->user()->hasEffectivePermission('admisiones.exceptions.authorize'))
+                                            <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 space-y-3">
+                                                <label class="inline-flex items-center gap-2 text-sm font-semibold text-amber-950 cursor-pointer">
+                                                    <input type="checkbox" wire:model.live="confirm_exception" class="h-4 w-4 rounded text-accent-600">
+                                                    <span>Autorizar excepción por documentación faltante (queda auditada)</span>
+                                                </label>
+                                                @if($confirm_exception)
+                                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                        <div>
+                                                            <label class="block text-xs font-semibold text-slate-700 mb-1">Motivo de la excepción *</label>
+                                                            <input wire:model="confirm_exception_reason" type="text" class="cecap-input" placeholder="Ej. Título en trámite en MEP">
+                                                        </div>
+                                                        <div>
+                                                            <label class="block text-xs font-semibold text-slate-700 mb-1">Fecha compromiso de entrega *</label>
+                                                            <input wire:model="confirm_exception_date" type="date" class="cecap-input">
+                                                        </div>
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        @endif
+
+                                        <div class="flex flex-wrap gap-2">
+                                            <button type="button" wire:click="submitConfirmation" class="cecap-btn-primary text-xs sm:text-sm">Confirmar Matrícula y Generar Plan de Cobro</button>
+                                            <button type="button" wire:click="cancelConfirmEnrollment" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        @endif
+
+                        @if($rejectingEnrollment && $rejectingEnrollment->id === $enr->id)
+                            <tr wire:key="enr-reject-{{ $enr->id }}">
+                                <td colspan="6" class="py-3 px-1">
+                                    <div class="rounded-2xl border-2 border-rose-400 bg-rose-50/80 p-4 space-y-4">
+                                        <div class="flex flex-wrap items-center justify-between gap-2">
+                                            <h3 class="text-sm sm:text-base font-bold text-rose-950">Rechazar Solicitud {{ $rejectingEnrollment->enrollment_code }} — {{ $rejectingEnrollment->student?->full_name }}</h3>
+                                            <button type="button" wire:click="cancelRejectEnrollment" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cancelar</button>
+                                        </div>
+
+                                        @if($errors->any())
+                                            <div class="rounded-xl border border-rose-300 bg-white px-3 py-2 text-xs font-medium text-rose-800">
+                                                <ul class="list-disc pl-4 space-y-0.5">
+                                                    @foreach($errors->all() as $error)
+                                                        <li>{{ $error }}</li>
+                                                    @endforeach
+                                                </ul>
+                                            </div>
+                                        @endif
+
+                                        <p class="text-xs sm:text-sm text-slate-700">
+                                            Se notificará por correo a <strong>{{ $rejectingEnrollment->student?->email }}</strong> y el cupo de la edición quedará libre.
+                                        </p>
+
+                                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Motivo de Rechazo (Picklist) *</label>
+                                                <select wire:model="rejection_reason_code" required class="cecap-input">
+                                                    <option value="">-- Seleccione el motivo de rechazo --</option>
+                                                    @foreach($rejectionReasons as $code => $label)
+                                                        <option value="{{ $code }}">{{ $label }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-semibold text-slate-700 mb-1">Observaciones adicionales para la solicitante (opcional)</label>
+                                                <input wire:model="rejection_notes" type="text" class="cecap-input" placeholder="Ej. Puede postular nuevamente en la edición del próximo trimestre">
+                                            </div>
+                                        </div>
+
+                                        <div class="flex flex-wrap gap-2">
+                                            <button type="button" wire:click="submitRejection" class="inline-flex min-h-11 items-center justify-center rounded-xl bg-rose-700 px-4 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-rose-800 cursor-pointer">
+                                                Confirmar Rechazo y Enviar Correo
+                                            </button>
+                                            <button type="button" wire:click="cancelRejectEnrollment" class="cecap-btn-secondary text-xs sm:text-sm">Cancelar</button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        @endif
                     @empty
                         <tr><td colspan="6" class="py-6 text-center text-slate-500">Sin matrículas o preinscripciones registradas.</td></tr>
                     @endforelse

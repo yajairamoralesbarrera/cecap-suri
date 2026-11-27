@@ -207,76 +207,6 @@
                 </form>
             @endif
 
-            @if($managingCourse)
-                <div class="cecap-card border-brand-700 bg-brand-50/40 space-y-4">
-                    <div class="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                            <h2 class="text-base font-bold text-brand-950">Gestionar Materias — {{ $managingCourse->code }} · {{ $managingCourse->name }}</h2>
-                            <p class="text-xs text-slate-600">Agregue nuevas materias con horas y número de sesiones o active/inactive existentes (sin borrado físico).</p>
-                        </div>
-                        <button type="button" wire:click="closeCourseSubjects" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cerrar</button>
-                    </div>
-
-                    @if(auth()->user()->hasEffectivePermission('academico.manage'))
-                        <form wire:submit="addSubjectToCourse" class="space-y-2">
-                            <div class="hidden sm:grid sm:grid-cols-12 gap-2 px-1 text-[11px] font-bold uppercase tracking-wide text-brand-950">
-                                <div class="sm:col-span-2">Código *</div>
-                                <div class="sm:col-span-4">Nombre de la Materia *</div>
-                                <div class="sm:col-span-2">Horas (solo #) *</div>
-                                <div class="sm:col-span-2">N.° Sesiones *</div>
-                                <div class="sm:col-span-2">Acción</div>
-                            </div>
-                            <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
-                                <div class="sm:col-span-2">
-                                    <label class="block sm:hidden text-xs font-semibold text-slate-700 mb-1">Código *</label>
-                                    <input wire:model="new_sub_code" type="text" required class="cecap-input" placeholder="MAT-02">
-                                </div>
-                                <div class="sm:col-span-4">
-                                    <label class="block sm:hidden text-xs font-semibold text-slate-700 mb-1">Nombre de la Materia *</label>
-                                    <input wire:model="new_sub_name" type="text" required class="cecap-input" placeholder="Ej. Legislación CR">
-                                </div>
-                                <div class="sm:col-span-2">
-                                    <label class="block sm:hidden text-xs font-semibold text-slate-700 mb-1">Horas (solo #) *</label>
-                                    <input wire:model="new_sub_hours" type="number" min="1" step="1" required class="cecap-input">
-                                </div>
-                                <div class="sm:col-span-2">
-                                    <label class="block sm:hidden text-xs font-semibold text-slate-700 mb-1">N.° Sesiones *</label>
-                                    <input wire:model="new_sub_sessions" type="number" min="1" step="1" required class="cecap-input">
-                                </div>
-                                <div class="sm:col-span-2">
-                                    <button type="submit" class="cecap-btn-primary w-full text-xs">+ Agregar Materia</button>
-                                </div>
-                            </div>
-                        </form>
-                    @endif
-
-                    <div class="overflow-x-auto bg-white rounded-xl border border-slate-200 p-3">
-                        <table class="w-full text-xs text-left">
-                            <thead class="border-b border-slate-200 uppercase text-slate-500">
-                                <tr><th class="py-2 pr-3">Código</th><th class="py-2 pr-3">Materia</th><th class="py-2 pr-3">Horas</th><th class="py-2 pr-3">N.° Sesiones</th><th class="py-2">Estado</th></tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-100">
-                                @forelse($managingCourse->subjects as $sub)
-                                    <tr>
-                                        <td class="py-2 pr-3 font-mono font-bold">{{ $sub->code }}</td>
-                                        <td class="py-2 pr-3 font-semibold text-slate-900">{{ $sub->name }}</td>
-                                        <td class="py-2 pr-3">{{ $sub->hours }} h</td>
-                                        <td class="py-2 pr-3">{{ $sub->sessions_count }} sesiones</td>
-                                        <td class="py-2">
-                                            <button type="button" wire:click="toggleSubjectActive({{ $sub->id }})" class="cecap-badge cursor-pointer {{ $sub->is_active ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-200 text-slate-600' }}">
-                                                {{ $sub->is_active ? 'Activa' : 'Inactiva' }}
-                                            </button>
-                                        </td>
-                                    </tr>
-                                @empty
-                                    <tr><td colspan="5" class="py-4 text-center text-slate-500">Este curso aún no tiene materias registradas.</td></tr>
-                                @endforelse
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            @endif
-
             <div class="cecap-card overflow-x-auto">
                 <h2 class="text-base font-bold text-slate-900 mb-3">Cursos y Programas Registrados</h2>
                 <table class="w-full text-sm text-left">
@@ -294,7 +224,7 @@
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @forelse($courses as $c)
-                            <tr>
+                            <tr wire:key="course-row-{{ $c->id }}" class="{{ ($managingCourse && $managingCourse->id === $c->id) ? 'bg-slate-50/80' : '' }}">
                                 <td class="py-2.5 pr-3 font-mono text-xs font-bold">{{ $c->code }}</td>
                                 <td class="py-2.5 pr-3 font-semibold text-slate-900">
                                     {{ $c->name }}
@@ -324,6 +254,79 @@
                                     @endif
                                 </td>
                             </tr>
+                            @if($managingCourse && $managingCourse->id === $c->id)
+                                <tr wire:key="course-subjects-{{ $c->id }}">
+                                    <td colspan="8" class="py-3 px-1">
+                                        <div class="rounded-2xl border-2 border-brand-700 bg-brand-50/50 p-4 space-y-4">
+                                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                                <div>
+                                                    <h3 class="text-sm sm:text-base font-bold text-brand-950">Gestionar Materias — {{ $managingCourse->code }} · {{ $managingCourse->name }}</h3>
+                                                    <p class="text-xs text-slate-600">Agregue nuevas materias con horas y número de sesiones o active/inactive existentes (sin borrado físico).</p>
+                                                </div>
+                                                <button type="button" wire:click="closeCourseSubjects" class="cecap-btn-secondary !min-h-9 !px-3 text-xs">Cerrar</button>
+                                            </div>
+
+                                            @if(auth()->user()->hasEffectivePermission('academico.manage'))
+                                                <form wire:submit="addSubjectToCourse" class="space-y-2">
+                                                    <div class="hidden sm:grid sm:grid-cols-12 gap-2 px-1 text-[11px] font-bold uppercase tracking-wide text-brand-950">
+                                                        <div class="sm:col-span-2">Código *</div>
+                                                        <div class="sm:col-span-4">Nombre de la Materia *</div>
+                                                        <div class="sm:col-span-2">Horas (solo #) *</div>
+                                                        <div class="sm:col-span-2">N.° Sesiones *</div>
+                                                        <div class="sm:col-span-2">Acción</div>
+                                                    </div>
+                                                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
+                                                        <div class="sm:col-span-2">
+                                                            <label class="block sm:hidden text-xs font-semibold text-slate-700 mb-1">Código *</label>
+                                                            <input wire:model="new_sub_code" type="text" required class="cecap-input" placeholder="MAT-02">
+                                                        </div>
+                                                        <div class="sm:col-span-4">
+                                                            <label class="block sm:hidden text-xs font-semibold text-slate-700 mb-1">Nombre de la Materia *</label>
+                                                            <input wire:model="new_sub_name" type="text" required class="cecap-input" placeholder="Ej. Legislación CR">
+                                                        </div>
+                                                        <div class="sm:col-span-2">
+                                                            <label class="block sm:hidden text-xs font-semibold text-slate-700 mb-1">Horas (solo #) *</label>
+                                                            <input wire:model="new_sub_hours" type="number" min="1" step="1" required class="cecap-input">
+                                                        </div>
+                                                        <div class="sm:col-span-2">
+                                                            <label class="block sm:hidden text-xs font-semibold text-slate-700 mb-1">N.° Sesiones *</label>
+                                                            <input wire:model="new_sub_sessions" type="number" min="1" step="1" required class="cecap-input">
+                                                        </div>
+                                                        <div class="sm:col-span-2">
+                                                            <button type="submit" class="cecap-btn-primary w-full text-xs">+ Agregar Materia</button>
+                                                        </div>
+                                                    </div>
+                                                </form>
+                                            @endif
+
+                                            <div class="overflow-x-auto bg-white rounded-xl border border-slate-200 p-3">
+                                                <table class="w-full text-xs text-left">
+                                                    <thead class="border-b border-slate-200 uppercase text-slate-500">
+                                                        <tr><th class="py-2 pr-3">Código</th><th class="py-2 pr-3">Materia</th><th class="py-2 pr-3">Horas</th><th class="py-2 pr-3">N.° Sesiones</th><th class="py-2">Estado</th></tr>
+                                                    </thead>
+                                                    <tbody class="divide-y divide-slate-100">
+                                                        @forelse($managingCourse->subjects as $sub)
+                                                            <tr>
+                                                                <td class="py-2 pr-3 font-mono font-bold">{{ $sub->code }}</td>
+                                                                <td class="py-2 pr-3 font-semibold text-slate-900">{{ $sub->name }}</td>
+                                                                <td class="py-2 pr-3">{{ $sub->hours }} h</td>
+                                                                <td class="py-2 pr-3">{{ $sub->sessions_count }} sesiones</td>
+                                                                <td class="py-2">
+                                                                    <button type="button" wire:click="toggleSubjectActive({{ $sub->id }})" class="cecap-badge cursor-pointer {{ $sub->is_active ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-200 text-slate-600' }}">
+                                                                        {{ $sub->is_active ? 'Activa' : 'Inactiva' }}
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                        @empty
+                                                            <tr><td colspan="5" class="py-4 text-center text-slate-500">Este curso aún no tiene materias registradas.</td></tr>
+                                                        @endforelse
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endif
                         @empty
                             <tr><td colspan="8" class="py-6 text-center text-slate-500">Sin cursos registrados.</td></tr>
                         @endforelse
