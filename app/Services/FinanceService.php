@@ -18,15 +18,17 @@ class FinanceService
     public function generateFeePlanForEnrollment(Enrollment $enrollment, ?int $payerId = null): array
     {
         $edition = $enrollment->edition()->with('course')->firstOrFail();
+        $student = $enrollment->student()->with('sponsorPayer')->first();
+        $effectivePayerId = $payerId ?? $student?->sponsor_payer_id;
         $created = [];
         $userId = Auth::id() ?? $enrollment->created_by ?? 1;
 
-        DB::transaction(function () use ($enrollment, $edition, $payerId, $userId, &$created): void {
+        DB::transaction(function () use ($enrollment, $edition, $effectivePayerId, $userId, &$created): void {
             if ((float) $edition->enrollment_fee > 0) {
                 $charge = FeeCharge::create([
                     'enrollment_id' => $enrollment->id,
                     'student_id' => $enrollment->student_id,
-                    'payer_id' => $payerId,
+                    'payer_id' => $effectivePayerId,
                     'concept' => 'Matrícula — '.$edition->name,
                     'charge_type' => 'matricula',
                     'installment_number' => 0,
@@ -49,7 +51,7 @@ class FinanceService
                     $charge = FeeCharge::create([
                         'enrollment_id' => $enrollment->id,
                         'student_id' => $enrollment->student_id,
-                        'payer_id' => $payerId,
+                        'payer_id' => $effectivePayerId,
                         'concept' => sprintf('Mensualidad %d/%d — %s', $i, $installments, $edition->name),
                         'charge_type' => 'mensualidad',
                         'installment_number' => $i,
@@ -67,7 +69,102 @@ class FinanceService
             }
         });
 
+        if ($student && (float) $student->scholarship_percent > 0 && ! empty($created)) {
+            $sponsorLabel = $student->sponsorPayer?->full_name;
+            $scholName = $sponsorLabel ? 'Beca Admisiones — '.$sponsorLabel : 'Beca Admisiones';
+            $this->applyScholarship(
+                enrollment: $enrollment,
+                name: $scholName,
+                discountType: 'porcentaje',
+                discountValue: (float) $student->scholarship_percent,
+                payerId: $effectivePayerId,
+                reason: $student->scholarship_notes ?: 'Beca configurada en expediente de Admisiones'
+            );
+        }
+
         return $created;
+    }
+
+    public function syncStudentSponsorAndScholarship(Student $student, ?Enrollment $specificEnrollment = null, ?string $reason = null): void
+    {
+        $student->loadMissing('sponsorPayer');
+        $payerId = $student->sponsor_payer_id;
+        $percent = round((float) ($student->scholarship_percent ?? 0), 2);
+        $sponsorLabel = $student->sponsorPayer?->full_name;
+        $scholName = $sponsorLabel ? 'Beca Admisiones — '.$sponsorLabel : 'Beca Admisiones';
+
+        $enrollments = $specificEnrollment
+            ? collect([$specificEnrollment])
+            : $student->enrollments()->whereIn('status', ['confirmada', 'en_curso'])->get();
+
+        foreach ($enrollments as $enr) {
+            // Si la matrícula aún no tiene plan de cobro (ej. preinscrita), se aplicará automáticamente al confirmarse
+            if (! $enr->feeCharges()->exists()) {
+                continue;
+            }
+
+            // Actualizar pagador en cargos pendientes/parciales/exonerados
+            $enr->feeCharges()
+                ->whereIn('status', ['pendiente', 'parcial', 'exonerado'])
+                ->update(['payer_id' => $payerId]);
+
+            $existingAdmSchol = $enr->scholarships()
+                ->where('status', 'activa')
+                ->where('name', 'LIKE', 'Beca Admisiones%')
+                ->first();
+
+            if ($percent > 0) {
+                if (! $existingAdmSchol) {
+                    $this->applyScholarship(
+                        enrollment: $enr,
+                        name: $scholName,
+                        discountType: 'porcentaje',
+                        discountValue: $percent,
+                        payerId: $payerId,
+                        reason: $reason ?: ($student->scholarship_notes ?: 'Asignada en Admisiones')
+                    );
+                } else {
+                    $existingAdmSchol->update([
+                        'name' => $scholName,
+                        'payer_id' => $payerId,
+                        'discount_value' => $percent,
+                        'reason' => $reason ?: ($student->scholarship_notes ?: $existingAdmSchol->reason),
+                    ]);
+
+                    // Recalcular limpiamente desde monto bruto (nunca altera gross_amount ni duplica descuento)
+                    foreach ($enr->feeCharges()->whereIn('status', ['pendiente', 'parcial', 'exonerado'])->get() as $charge) {
+                        $gross = (float) $charge->gross_amount;
+                        $discount = round($gross * ($percent / 100), 2);
+                        $newNet = round(max(0.0, $gross - $discount), 2);
+                        $newStatus = $newNet <= (float) $charge->paid_amount
+                            ? ($newNet == 0.0 ? 'exonerado' : 'pagado')
+                            : ((float) $charge->paid_amount > 0 ? 'parcial' : 'pendiente');
+
+                        $charge->update([
+                            'scholarship_discount' => $discount,
+                            'net_amount' => $newNet,
+                            'payer_id' => $payerId,
+                            'status' => $newStatus,
+                        ]);
+                    }
+                }
+            } elseif ($existingAdmSchol) {
+                $existingAdmSchol->update(['status' => 'inactiva']);
+                foreach ($enr->feeCharges()->whereIn('status', ['pendiente', 'parcial', 'exonerado'])->get() as $charge) {
+                    $gross = (float) $charge->gross_amount;
+                    $newStatus = $gross <= (float) $charge->paid_amount
+                        ? 'pagado'
+                        : ((float) $charge->paid_amount > 0 ? 'parcial' : 'pendiente');
+
+                    $charge->update([
+                        'scholarship_discount' => 0,
+                        'net_amount' => $gross,
+                        'payer_id' => $payerId,
+                        'status' => $newStatus,
+                    ]);
+                }
+            }
+        }
     }
 
     /**

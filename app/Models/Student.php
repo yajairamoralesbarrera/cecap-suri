@@ -26,6 +26,9 @@ class Student extends Model
         'gender',
         'birth_date',
         'education_level',
+        'sponsor_payer_id',
+        'scholarship_percent',
+        'scholarship_notes',
         'province_id',
         'canton_id',
         'district_id',
@@ -47,7 +50,13 @@ class Student extends Model
     {
         return [
             'birth_date' => 'date',
+            'scholarship_percent' => 'decimal:2',
         ];
+    }
+
+    public function sponsorPayer(): BelongsTo
+    {
+        return $this->belongsTo(Payer::class, 'sponsor_payer_id');
     }
 
     public function user(): BelongsTo
@@ -172,6 +181,14 @@ class Student extends Model
 
     public function hasImasSponsor(): bool
     {
+        $sponsor = $this->relationLoaded('sponsorPayer')
+            ? $this->sponsorPayer
+            : ($this->sponsor_payer_id ? Payer::find($this->sponsor_payer_id) : null);
+
+        if ($sponsor && ($sponsor->payer_type === 'institucion_publica' || str_contains(mb_strtolower((string) $sponsor->full_name), 'imas'))) {
+            return true;
+        }
+
         $hasImasScholarship = Scholarship::query()
             ->where('status', 'activa')
             ->whereHas('enrollment', fn ($q) => $q->where('student_id', $this->id))

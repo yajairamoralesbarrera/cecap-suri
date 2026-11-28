@@ -95,6 +95,22 @@
                                 <div class="text-slate-500">Dirección Exacta</div>
                                 <div class="font-semibold text-slate-900">{{ $selected->address_detail ?: 'No registrada' }}</div>
                             </div>
+                            <div class="sm:col-span-2 lg:col-span-3 rounded-lg border border-emerald-200 bg-emerald-50/70 p-2.5">
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                    <div>
+                                        <div class="text-emerald-800">Pagador / Patrocinante</div>
+                                        <div class="font-bold text-emerald-950">{{ $selected->sponsorPayer?->full_name ?: 'Sin patrocinante (paga la alumna)' }}</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-emerald-800">% de Beca Otorgado</div>
+                                        <div class="font-bold text-emerald-950">{{ number_format((float) ($selected->scholarship_percent ?? 0), 2) }}%</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-emerald-800">Detalle / Oficio de Beca</div>
+                                        <div class="font-medium text-emerald-950">{{ $selected->scholarship_notes ?: '—' }}</div>
+                                    </div>
+                                </div>
+                            </div>
                             @if($selected->emergency_contact_name || $selected->emergency_contact_phone)
                                 <div class="sm:col-span-2 lg:col-span-3">
                                     <div class="text-slate-500">Contacto de Emergencia</div>

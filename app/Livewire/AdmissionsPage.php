@@ -7,6 +7,7 @@ use App\Models\CrCanton;
 use App\Models\CrDistrict;
 use App\Models\CrProvince;
 use App\Models\Enrollment;
+use App\Models\Payer;
 use App\Models\Picklist;
 use App\Models\RecordAttachment;
 use App\Models\Student;
@@ -16,6 +17,7 @@ use App\Rules\ValidIdentificationNumber;
 use App\Services\AttachmentService;
 use App\Services\AuditService;
 use App\Services\EnrollmentService;
+use App\Services\FinanceService;
 use App\Services\ScheduleConflictService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -69,6 +71,13 @@ class AdmissionsPage extends Component
     public ?int $district_id = null;
 
     public string $address_detail = '';
+
+    // Patrocinante / Pagador y % de beca otorgado a la alumna
+    public int|string|null $sponsor_payer_id = null;
+
+    public float|string $scholarship_percent = 0;
+
+    public string $scholarship_notes = '';
 
     // Datos del representante legal (obligatorios si la alumna es menor de 18 años)
     public string $guardian_full_name = '';
@@ -187,6 +196,12 @@ class AdmissionsPage extends Component
     public string $edit_enr_guardian_phone = '';
 
     public string $edit_enr_guardian_email = '';
+
+    public int|string|null $edit_enr_sponsor_payer_id = null;
+
+    public float|string $edit_enr_scholarship_percent = 0;
+
+    public string $edit_enr_scholarship_notes = '';
 
     public string $edit_enr_notes = '';
 
@@ -442,6 +457,9 @@ class AdmissionsPage extends Component
         $this->canton_id = $student->canton_id;
         $this->district_id = $student->district_id;
         $this->address_detail = (string) ($student->address_detail ?? '');
+        $this->sponsor_payer_id = $student->sponsor_payer_id;
+        $this->scholarship_percent = (float) ($student->scholarship_percent ?? 0);
+        $this->scholarship_notes = (string) ($student->scholarship_notes ?? '');
         $this->guardian_full_name = (string) ($student->guardian_full_name ?? '');
         $this->guardian_identification_number = (string) ($student->guardian_identification_number ?? '');
         $this->guardian_relationship = (string) ($student->guardian_relationship ?: 'Madre');
@@ -455,14 +473,16 @@ class AdmissionsPage extends Component
             'editingStudentId', 'edit_reason', 'identification_number', 'first_name',
             'last_name', 'second_last_name', 'email', 'phone', 'birth_date', 'province_id',
             'canton_id', 'district_id', 'address_detail',
+            'sponsor_payer_id', 'scholarship_notes',
             'guardian_full_name', 'guardian_identification_number', 'guardian_phone', 'guardian_email',
             'duplicateCourseBlocked', 'duplicateCourseMessage',
         ]);
+        $this->scholarship_percent = 0;
         $this->gender = 'femenino';
         $this->guardian_relationship = 'Madre';
     }
 
-    public function saveStudentOnly(): void
+    public function saveStudentOnly(FinanceService $financeService): void
     {
         abort_unless(Auth::user()->hasEffectivePermission('admisiones.manage'), 403);
 
@@ -477,6 +497,9 @@ class AdmissionsPage extends Component
             'phone' => ['required', 'string', 'max:30'],
             'gender' => ['required', 'string', 'max:30'],
             'birth_date' => ['nullable', 'date', 'before:today'],
+            'sponsor_payer_id' => ['nullable', 'integer', 'exists:payers,id'],
+            'scholarship_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'scholarship_notes' => ['nullable', 'string', 'max:255'],
         ];
 
         if ($isMinor) {
@@ -494,6 +517,8 @@ class AdmissionsPage extends Component
         $this->validate($rules, [
             'email.required' => 'El correo electrónico es obligatorio en creación y edición de expediente.',
             'edit_reason.required' => 'La edición controlada exige indicar el motivo de la modificación para auditoría.',
+            'scholarship_percent.min' => 'El porcentaje de beca debe estar entre 0% y 100%.',
+            'scholarship_percent.max' => 'El porcentaje de beca debe estar entre 0% y 100%.',
             'guardian_full_name.required' => 'Por ser menor de edad, debe indicar el nombre completo del representante legal.',
             'guardian_identification_number.required' => 'Por ser menor de edad, debe indicar la cédula o DIMEX del representante legal.',
             'guardian_relationship.required' => 'Por ser menor de edad, debe indicar el parentesco del representante legal.',
@@ -502,7 +527,15 @@ class AdmissionsPage extends Component
 
         if ($this->editingStudentId) {
             $student = Student::findOrFail($this->editingStudentId);
-            $old = $student->only(['first_name', 'last_name', 'email', 'phone', 'gender', 'birth_date', 'education_level', 'guardian_full_name', 'guardian_phone']);
+            $cleanSponsorId = filled($this->sponsor_payer_id) ? (int) $this->sponsor_payer_id : null;
+            $cleanScholarshipPercent = round((float) ($this->scholarship_percent === '' ? 0 : $this->scholarship_percent), 2);
+            $cleanScholarshipNotes = trim($this->scholarship_notes) !== '' ? trim($this->scholarship_notes) : null;
+
+            $old = $student->only([
+                'first_name', 'last_name', 'email', 'phone', 'gender', 'birth_date', 'education_level',
+                'sponsor_payer_id', 'scholarship_percent', 'scholarship_notes',
+                'guardian_full_name', 'guardian_phone',
+            ]);
             $student->update([
                 'first_name' => trim($this->first_name),
                 'last_name' => trim($this->last_name),
@@ -516,6 +549,9 @@ class AdmissionsPage extends Component
                 'canton_id' => $this->canton_id,
                 'district_id' => $this->district_id,
                 'address_detail' => $this->address_detail ?: null,
+                'sponsor_payer_id' => $cleanSponsorId,
+                'scholarship_percent' => $cleanScholarshipPercent,
+                'scholarship_notes' => $cleanScholarshipNotes,
                 'guardian_full_name' => $isMinor ? trim($this->guardian_full_name) : ($this->guardian_full_name !== '' ? trim($this->guardian_full_name) : $student->guardian_full_name),
                 'guardian_identification_number' => $isMinor ? trim($this->guardian_identification_number) : ($this->guardian_identification_number !== '' ? trim($this->guardian_identification_number) : $student->guardian_identification_number),
                 'guardian_relationship' => $isMinor ? trim($this->guardian_relationship) : ($this->guardian_relationship !== '' ? trim($this->guardian_relationship) : $student->guardian_relationship),
@@ -524,16 +560,22 @@ class AdmissionsPage extends Component
                 'updated_by' => Auth::id(),
             ]);
 
+            $financeService->syncStudentSponsorAndScholarship($student->fresh(), null, $this->edit_reason);
+
             AuditService::log(
                 event: 'student.updated_controlled',
                 module: 'admisiones',
                 auditable: $student,
                 oldValues: $old,
-                newValues: $student->only(['first_name', 'last_name', 'email', 'phone', 'gender', 'birth_date', 'education_level', 'guardian_full_name', 'guardian_phone']),
+                newValues: $student->only([
+                    'first_name', 'last_name', 'email', 'phone', 'gender', 'birth_date', 'education_level',
+                    'sponsor_payer_id', 'scholarship_percent', 'scholarship_notes',
+                    'guardian_full_name', 'guardian_phone',
+                ]),
                 reason: $this->edit_reason
             );
             $this->cancelEditStudent();
-            $this->feedback = 'Expediente actualizado bajo edición controlada y auditada.';
+            $this->feedback = 'Expediente actualizado bajo edición controlada y auditada (pagador/beca sincronizados con Finanzas).';
         }
     }
 
@@ -554,6 +596,9 @@ class AdmissionsPage extends Component
             'gender' => ['required', 'string', 'max:30'],
             'birth_date' => ['required', 'date', 'before:today'],
             'education_level' => ['required', 'string', 'max:80'],
+            'sponsor_payer_id' => ['nullable', 'integer', 'exists:payers,id'],
+            'scholarship_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'scholarship_notes' => ['nullable', 'string', 'max:255'],
             'course_edition_id' => ['required', 'integer', 'exists:course_editions,id'],
             'attachment_file' => ['nullable', 'file', 'mimes:pdf,jpg,jpeg,png,webp', 'max:256000'],
         ];
@@ -571,6 +616,8 @@ class AdmissionsPage extends Component
             'email.required' => 'El correo electrónico es obligatorio en Admisiones.',
             'birth_date.required' => 'La fecha de nacimiento es obligatoria.',
             'birth_date.before' => 'La fecha de nacimiento debe ser anterior a hoy.',
+            'scholarship_percent.min' => 'El porcentaje de beca debe estar entre 0% y 100%.',
+            'scholarship_percent.max' => 'El porcentaje de beca debe estar entre 0% y 100%.',
             'guardian_full_name.required' => 'Por ser menor de edad, debe indicar el nombre completo del representante legal.',
             'guardian_identification_number.required' => 'Por ser menor de edad, debe indicar la cédula o DIMEX del representante legal.',
             'guardian_relationship.required' => 'Por ser menor de edad, debe indicar el parentesco del representante legal.',
@@ -588,6 +635,10 @@ class AdmissionsPage extends Component
 
             return;
         }
+
+        $cleanSponsorId = filled($this->sponsor_payer_id) ? (int) $this->sponsor_payer_id : null;
+        $cleanScholarshipPercent = round((float) ($this->scholarship_percent === '' ? 0 : $this->scholarship_percent), 2);
+        $cleanScholarshipNotes = trim($this->scholarship_notes) !== '' ? trim($this->scholarship_notes) : null;
 
         $guardianData = $isMinor ? [
             'guardian_full_name' => trim($this->guardian_full_name),
@@ -615,6 +666,9 @@ class AdmissionsPage extends Component
                 'canton_id' => $this->canton_id,
                 'district_id' => $this->district_id,
                 'address_detail' => $this->address_detail ?: null,
+                'sponsor_payer_id' => $cleanSponsorId,
+                'scholarship_percent' => $cleanScholarshipPercent,
+                'scholarship_notes' => $cleanScholarshipNotes,
                 'status' => 'activo',
                 'created_by' => Auth::id(),
             ], $guardianData));
@@ -624,6 +678,9 @@ class AdmissionsPage extends Component
                 'phone' => trim($this->phone),
                 'birth_date' => $this->birth_date,
                 'education_level' => $this->education_level,
+                'sponsor_payer_id' => $cleanSponsorId,
+                'scholarship_percent' => $cleanScholarshipPercent,
+                'scholarship_notes' => $cleanScholarshipNotes,
                 'updated_by' => Auth::id(),
             ], $guardianData));
         }
@@ -681,6 +738,8 @@ class AdmissionsPage extends Component
             'canton_id',
             'district_id',
             'address_detail',
+            'sponsor_payer_id',
+            'scholarship_notes',
             'guardian_full_name',
             'guardian_identification_number',
             'guardian_phone',
@@ -702,6 +761,7 @@ class AdmissionsPage extends Component
             'selectedEditionIsFull',
             'selectedEditionCapacityInfo',
         ]);
+        $this->scholarship_percent = 0;
         $this->identification_type = 'cedula_nacional';
         $this->gender = 'femenino';
         $this->guardian_relationship = 'Madre';
@@ -1001,6 +1061,9 @@ class AdmissionsPage extends Component
         $this->edit_enr_guardian_relationship = (string) ($student?->guardian_relationship ?: 'Madre');
         $this->edit_enr_guardian_phone = (string) ($student?->guardian_phone ?? '');
         $this->edit_enr_guardian_email = (string) ($student?->guardian_email ?? '');
+        $this->edit_enr_sponsor_payer_id = $student?->sponsor_payer_id;
+        $this->edit_enr_scholarship_percent = (float) ($student?->scholarship_percent ?? 0);
+        $this->edit_enr_scholarship_notes = (string) ($student?->scholarship_notes ?? '');
         $this->edit_enr_notes = (string) ($enr->notes ?? '');
         $this->edit_enr_reason = '';
         $this->resetValidation();
@@ -1010,11 +1073,14 @@ class AdmissionsPage extends Component
     public function cancelEditEnrollment(): void
     {
         $this->editingEnrollmentId = null;
+        $this->edit_enr_sponsor_payer_id = null;
+        $this->edit_enr_scholarship_percent = 0;
+        $this->edit_enr_scholarship_notes = '';
         $this->edit_enr_reason = '';
         $this->resetValidation();
     }
 
-    public function saveEnrollmentEdit(ScheduleConflictService $scheduleConflicts): void
+    public function saveEnrollmentEdit(ScheduleConflictService $scheduleConflicts, FinanceService $financeService): void
     {
         abort_unless(Auth::user()->hasEffectivePermission('admisiones.manage'), 403);
         if (! $this->editingEnrollmentId) {
@@ -1043,6 +1109,9 @@ class AdmissionsPage extends Component
             'edit_enr_phone' => ['required', 'string', 'max:30'],
             'edit_enr_birth_date' => ['nullable', 'date', 'before:today'],
             'edit_enr_education_level' => ['required', 'string', 'max:80'],
+            'edit_enr_sponsor_payer_id' => ['nullable', 'integer', 'exists:payers,id'],
+            'edit_enr_scholarship_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'edit_enr_scholarship_notes' => ['nullable', 'string', 'max:255'],
             'edit_enr_notes' => ['nullable', 'string', 'max:1000'],
             'edit_enr_reason' => ['required', 'string', 'min:4', 'max:500'],
         ];
@@ -1057,6 +1126,8 @@ class AdmissionsPage extends Component
 
         $this->validate($rules, [
             'edit_enr_identification_type.in' => 'Seleccione un tipo de identificación válido.',
+            'edit_enr_scholarship_percent.min' => 'El porcentaje de beca debe estar entre 0% y 100%.',
+            'edit_enr_scholarship_percent.max' => 'El porcentaje de beca debe estar entre 0% y 100%.',
             'edit_enr_reason.required' => 'Indique el motivo de la edición para conservar la trazabilidad en auditoría.',
             'edit_enr_reason.min' => 'El motivo de la edición debe tener al menos 4 caracteres.',
             'edit_enr_guardian_full_name.required' => 'Por ser menor de edad, debe indicar el nombre del representante legal.',
@@ -1103,6 +1174,10 @@ class AdmissionsPage extends Component
         }
 
         $cleanReason = trim($this->edit_enr_reason);
+        $cleanSponsorId = filled($this->edit_enr_sponsor_payer_id) ? (int) $this->edit_enr_sponsor_payer_id : null;
+        $cleanScholarshipPercent = round((float) ($this->edit_enr_scholarship_percent === '' ? 0 : $this->edit_enr_scholarship_percent), 2);
+        $cleanScholarshipNotes = trim($this->edit_enr_scholarship_notes) !== '' ? trim($this->edit_enr_scholarship_notes) : null;
+
         $oldValues = [
             'course_edition_id' => $enrollment->course_edition_id,
             'notes' => $enrollment->notes,
@@ -1113,9 +1188,12 @@ class AdmissionsPage extends Component
             'student_phone' => $student->phone,
             'student_birth_date' => $student->birth_date?->toDateString(),
             'student_education_level' => $student->education_level,
+            'sponsor_payer_id' => $student->sponsor_payer_id,
+            'scholarship_percent' => $student->scholarship_percent,
+            'scholarship_notes' => $student->scholarship_notes,
         ];
 
-        DB::transaction(function () use ($enrollment, $student, $targetEdition, $editionChanged, $isMinor, $cleanReason, $oldValues): void {
+        DB::transaction(function () use ($enrollment, $student, $targetEdition, $editionChanged, $isMinor, $cleanReason, $cleanSponsorId, $cleanScholarshipPercent, $cleanScholarshipNotes, $oldValues): void {
             $studentData = [
                 'identification_type' => $this->edit_enr_identification_type,
                 'identification_number' => trim($this->edit_enr_identification_number),
@@ -1126,6 +1204,9 @@ class AdmissionsPage extends Component
                 'phone' => trim($this->edit_enr_phone),
                 'birth_date' => $this->edit_enr_birth_date !== '' ? $this->edit_enr_birth_date : $student->birth_date,
                 'education_level' => $this->edit_enr_education_level,
+                'sponsor_payer_id' => $cleanSponsorId,
+                'scholarship_percent' => $cleanScholarshipPercent,
+                'scholarship_notes' => $cleanScholarshipNotes,
                 'updated_by' => Auth::id(),
             ];
 
@@ -1168,6 +1249,8 @@ class AdmissionsPage extends Component
                 'metadata' => [
                     'edition_changed' => $editionChanged,
                     'new_edition_id' => $targetEdition->id,
+                    'sponsor_payer_id' => $cleanSponsorId,
+                    'scholarship_percent' => $cleanScholarshipPercent,
                 ],
                 'recorded_by' => Auth::id(),
                 'created_at' => now(),
@@ -1189,14 +1272,19 @@ class AdmissionsPage extends Component
                     'student_phone' => $student->phone,
                     'student_birth_date' => $student->birth_date?->toDateString(),
                     'student_education_level' => $student->education_level,
+                    'sponsor_payer_id' => $student->sponsor_payer_id,
+                    'scholarship_percent' => $student->scholarship_percent,
+                    'scholarship_notes' => $student->scholarship_notes,
                 ],
                 reason: $cleanReason
             );
         });
 
+        $financeService->syncStudentSponsorAndScholarship($student->fresh(), null, $cleanReason);
+
         $code = $enrollment->enrollment_code;
         $this->cancelEditEnrollment();
-        $this->feedback = sprintf('Solicitud %s actualizada correctamente (cambio auditado).', $code);
+        $this->feedback = sprintf('Solicitud %s actualizada correctamente (cambio auditado y pagador/beca sincronizados con Finanzas).', $code);
     }
 
     public function startReopenEnrollment(int $enrollmentId): void
@@ -1359,7 +1447,7 @@ class AdmissionsPage extends Component
             'rechazada',
         ];
 
-        $enrollmentsQuery = Enrollment::with(['student.attachments', 'edition.course'])
+        $enrollmentsQuery = Enrollment::with(['student.attachments', 'student.sponsorPayer', 'edition.course'])
             ->whereIn('status', $admissionsQueueStatuses)
             ->latest();
 
@@ -1410,12 +1498,14 @@ class AdmissionsPage extends Component
             'students' => Student::confirmedDirectory()
                 ->with([
                     'attachments',
+                    'sponsorPayer',
                     'enrollments' => fn ($q) => $q->whereIn('status', Student::CONFIRMED_ENROLLMENT_STATUSES)->with('edition.course'),
                 ])
                 ->withCount(['enrollments' => fn ($q) => $q->whereIn('status', Student::CONFIRMED_ENROLLMENT_STATUSES)])
                 ->latest()
                 ->limit(60)
                 ->get(),
+            'payers' => Payer::where('is_active', true)->orderBy('full_name')->get(),
             'editions' => CourseEdition::with('course')->whereIn('status', ['abierta', 'planificada', 'en_curso'])->orderByDesc('id')->get(),
             'selectedEdition' => $this->course_edition_id ? CourseEdition::with('course')->find($this->course_edition_id) : null,
             'applicantAge' => $applicantAge,

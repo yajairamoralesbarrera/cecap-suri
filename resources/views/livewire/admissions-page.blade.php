@@ -73,7 +73,20 @@
                         @php $enrPanelOpen = $confirmingEnrollmentId === $enr->id || $rejectingEnrollmentId === $enr->id || $attachingEnrollmentId === $enr->id || $reopeningEnrollmentId === $enr->id || $editingEnrollmentId === $enr->id; @endphp
                         <tr wire:key="enr-row-{{ $enr->id }}" class="{{ $enrPanelOpen ? 'bg-slate-50/80' : '' }} border-b-0">
                             <td class="pt-2.5 pb-1.5 pr-3 font-mono text-xs font-bold">{{ $enr->enrollment_code }}<div class="text-[11px] font-normal text-slate-400">{{ $enr->source }}</div></td>
-                            <td class="pt-2.5 pb-1.5 pr-3 font-semibold text-slate-900">{{ $enr->student?->full_name }}<div class="text-xs font-normal text-slate-500">{{ $enr->student?->identification_number }} · {{ $enr->student?->email }}</div></td>
+                            <td class="pt-2.5 pb-1.5 pr-3 font-semibold text-slate-900">
+                                {{ $enr->student?->full_name }}
+                                <div class="text-xs font-normal text-slate-500">{{ $enr->student?->identification_number }} · {{ $enr->student?->email }}</div>
+                                @if($enr->student?->sponsorPayer || (float) ($enr->student?->scholarship_percent ?? 0) > 0)
+                                    <div class="mt-1 flex flex-wrap gap-1">
+                                        @if($enr->student?->sponsorPayer)
+                                            <span class="inline-flex items-center rounded-md bg-emerald-100 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-900">Patrocinante: {{ $enr->student->sponsorPayer->full_name }}</span>
+                                        @endif
+                                        @if((float) ($enr->student?->scholarship_percent ?? 0) > 0)
+                                            <span class="inline-flex items-center rounded-md bg-indigo-100 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-900">Beca: {{ rtrim(rtrim(number_format((float) $enr->student->scholarship_percent, 2), '0'), '.') }}%</span>
+                                        @endif
+                                    </div>
+                                @endif
+                            </td>
                             <td class="pt-2.5 pb-1.5 pr-3 text-xs">{{ $enr->edition?->course?->name }}<div class="text-slate-500">{{ $enr->edition?->name }}</div></td>
                             <td class="pt-2.5 pb-1.5 pr-3">
                                 <span class="cecap-badge {{ $enr->status === 'confirmada' ? 'bg-emerald-100 text-emerald-900' : (in_array($enr->status, ['rechazada', 'reprobada'], true) ? 'bg-rose-100 text-rose-900' : ($enr->status === 'lista_espera' ? 'bg-indigo-100 text-indigo-900' : ($enr->status === 'documentacion_pendiente' ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-800'))) }}">
@@ -209,6 +222,32 @@
                                             <div class="sm:col-span-2 lg:col-span-3">
                                                 <label class="block text-xs font-semibold text-slate-700 mb-1">Observaciones de la Solicitud</label>
                                                 <input wire:model="edit_enr_notes" type="text" class="cecap-input" placeholder="Observaciones administrativas opcionales">
+                                            </div>
+                                        </div>
+
+                                        <div class="rounded-xl border border-emerald-300 bg-emerald-50/80 p-3 space-y-2.5">
+                                            <div>
+                                                <div class="text-xs font-bold text-emerald-950">Pagador / Patrocinante y % de Beca Otorgado</div>
+                                                <p class="text-[11px] text-emerald-900">Se guarda en el expediente de la alumna y se sincroniza automáticamente con <strong>Finanzas</strong> (cargos y becas) y <strong>Actividades / Talleres</strong> (ej. método de cancelación IMAS). Para crear nuevos patrocinantes use <em>Finanzas → Pagadores</em>.</p>
+                                            </div>
+                                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Pagador / Patrocinante</label>
+                                                    <select wire:model="edit_enr_sponsor_payer_id" class="cecap-input">
+                                                        <option value="">-- Ninguno / Paga la alumna --</option>
+                                                        @foreach($payers as $payer)
+                                                            <option value="{{ $payer->id }}">{{ $payer->full_name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">% de Beca Otorgado (0 a 100)</label>
+                                                    <input wire:model="edit_enr_scholarship_percent" type="number" step="0.01" min="0" max="100" class="cecap-input" placeholder="Ej. 50 o 100">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Detalle / Oficio de Beca (opcional)</label>
+                                                    <input wire:model="edit_enr_scholarship_notes" type="text" class="cecap-input" placeholder="Ej. Oficio IMAS-2026-045">
+                                                </div>
                                             </div>
                                         </div>
 
@@ -871,6 +910,35 @@
                         </div>
                     </div>
                 @endif
+
+                <div class="rounded-2xl border border-emerald-300 bg-emerald-50/70 p-4 space-y-3">
+                    <div>
+                        <div class="text-sm font-bold text-emerald-950">Pagador / Patrocinante y % de Beca Otorgado (Opcional)</div>
+                        <p class="text-xs text-emerald-900">Si la alumna cuenta con patrocinante (ej. <strong>IMAS</strong>) o porcentaje de beca, puede indicarlo desde aquí o actualizarlo luego mediante <em>Edición Controlada</em>.</p>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Pagador / Patrocinante</label>
+                            <select wire:model="sponsor_payer_id" class="cecap-input">
+                                <option value="">-- Ninguno / Paga la alumna --</option>
+                                @foreach($payers as $payer)
+                                    <option value="{{ $payer->id }}">{{ $payer->full_name }}</option>
+                                @endforeach
+                            </select>
+                            @error('sponsor_payer_id') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">% de Beca Otorgado (0 a 100)</label>
+                            <input wire:model="scholarship_percent" type="number" step="0.01" min="0" max="100" class="cecap-input" placeholder="Ej. 0, 50 o 100">
+                            @error('scholarship_percent') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-700 mb-1">Detalle / Oficio de Beca (opcional)</label>
+                            <input wire:model="scholarship_notes" type="text" class="cecap-input" placeholder="Ej. Oficio IMAS-2026-045">
+                            @error('scholarship_notes') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {{-- PASO 3: DOCUMENTACIÓN, ADJUNTO Y CONFIRMACIÓN --}}
@@ -1038,7 +1106,20 @@
                     @forelse($students as $st)
                         <tr wire:key="student-row-{{ $st->id }}" class="{{ ($editingStudentId === $st->id || $attachingStudentId === $st->id) ? 'bg-slate-50/80' : '' }}">
                             <td class="py-2.5 pr-3 font-mono text-xs font-bold">{{ $st->student_code }}</td>
-                            <td class="py-2.5 pr-3 font-semibold">{{ $st->full_name }}<div class="text-xs text-slate-500">{{ $st->identification_number }}</div></td>
+                            <td class="py-2.5 pr-3 font-semibold">
+                                {{ $st->full_name }}
+                                <div class="text-xs text-slate-500">{{ $st->identification_number }}</div>
+                                @if($st->sponsorPayer || (float) ($st->scholarship_percent ?? 0) > 0)
+                                    <div class="mt-1 flex flex-wrap gap-1">
+                                        @if($st->sponsorPayer)
+                                            <span class="inline-flex items-center rounded-md bg-emerald-100 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-900">Patrocinante: {{ $st->sponsorPayer->full_name }}</span>
+                                        @endif
+                                        @if((float) ($st->scholarship_percent ?? 0) > 0)
+                                            <span class="inline-flex items-center rounded-md bg-indigo-100 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-900">Beca: {{ rtrim(rtrim(number_format((float) $st->scholarship_percent, 2), '0'), '.') }}%</span>
+                                        @endif
+                                    </div>
+                                @endif
+                            </td>
                             <td class="py-2.5 pr-3 text-xs">{{ $st->email }}<div>{{ $st->phone }}</div></td>
                             <td class="py-2.5 pr-3 text-xs space-y-1">
                                 @forelse($st->enrollments as $stEnr)
@@ -1223,6 +1304,32 @@
                                                     <option value="">-- Seleccione --</option>
                                                     @foreach($districts as $d)<option value="{{ $d->id }}">{{ $d->name }}</option>@endforeach
                                                 </select>
+                                            </div>
+                                        </div>
+
+                                        <div class="rounded-xl border border-emerald-300 bg-emerald-50/80 p-3.5 space-y-2.5">
+                                            <div>
+                                                <div class="text-xs sm:text-sm font-bold text-emerald-950">Pagador / Patrocinante y % de Beca Otorgado</div>
+                                                <p class="text-xs text-emerald-900">Asigne el patrocinante (por ejemplo <strong>IMAS</strong>) y el porcentaje de beca otorgado (0% a 100%). Al guardar, se sincroniza automáticamente con <strong>Finanzas</strong> (sin alterar montos brutos) y con <strong>Actividades / Talleres</strong>. Para agregar otros patrocinantes utilice <em>Finanzas → Pagadores</em>.</p>
+                                            </div>
+                                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Pagador / Patrocinante</label>
+                                                    <select wire:model="sponsor_payer_id" class="cecap-input">
+                                                        <option value="">-- Ninguno / Paga la alumna --</option>
+                                                        @foreach($payers as $payer)
+                                                            <option value="{{ $payer->id }}">{{ $payer->full_name }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">% de Beca Otorgado (0 a 100)</label>
+                                                    <input wire:model="scholarship_percent" type="number" step="0.01" min="0" max="100" class="cecap-input" placeholder="Ej. 50 o 100">
+                                                </div>
+                                                <div>
+                                                    <label class="block text-xs font-semibold text-slate-700 mb-1">Detalle / Oficio de Beca (opcional)</label>
+                                                    <input wire:model="scholarship_notes" type="text" class="cecap-input" placeholder="Ej. Oficio IMAS-2026-045">
+                                                </div>
                                             </div>
                                         </div>
 
