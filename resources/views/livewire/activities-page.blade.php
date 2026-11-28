@@ -26,10 +26,25 @@
                     <div><label class="block text-xs font-semibold mb-1">Inicio *</label><input wire:model="start_time" type="time" required class="cecap-input"></div>
                     <div><label class="block text-xs font-semibold mb-1">Fin *</label><input wire:model="end_time" type="time" required class="cecap-input"></div>
                 </div>
-                <div class="grid grid-cols-3 gap-2">
+                <div class="grid grid-cols-2 gap-2">
                     <div><label class="block text-xs font-semibold mb-1">Lugar</label><input wire:model="location" type="text" class="cecap-input"></div>
                     <div><label class="block text-xs font-semibold mb-1">Cupo Máx.</label><input wire:model="max_capacity" type="number" min="1" class="cecap-input"></div>
-                    <div><label class="block text-xs font-semibold mb-1">Costo (₡ CRC)</label><input wire:model="cost" type="number" step="0.01" min="0" class="cecap-input" placeholder="0 = Gratuito"></div>
+                </div>
+                <div class="rounded-xl border border-amber-200 bg-amber-50/70 p-3 space-y-2">
+                    <label class="inline-flex items-center gap-2 text-xs font-bold text-amber-950 cursor-pointer">
+                        <input wire:model.live="has_cost" type="checkbox" class="rounded border-amber-400 text-amber-700">
+                        <span>¿Este taller / seminario / actividad tiene costo?</span>
+                    </label>
+                    @if($has_cost)
+                        <div>
+                            <label class="block text-xs font-semibold text-amber-950 mb-1">Monto del Costo (₡ CRC) *</label>
+                            <input wire:model="cost" type="number" step="0.01" min="1" required class="cecap-input bg-white" placeholder="Ej. 15000">
+                            @error('cost') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                        </div>
+                        <p class="text-[11px] text-amber-900">Las alumnas con patrocinador IMAS se registrarán automáticamente con método de cancelación <strong>IMAS</strong>.</p>
+                    @else
+                        <p class="text-[11px] text-amber-800">Actualmente marcada como <strong>Gratuita (₡0)</strong>. Marque la casilla superior si desea asignarle un costo.</p>
+                    @endif
                 </div>
                 <div class="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 space-y-1">
                     <label class="block text-xs font-semibold text-emerald-950">Equivalencia en ausencias de Habilidades Blandas</label>

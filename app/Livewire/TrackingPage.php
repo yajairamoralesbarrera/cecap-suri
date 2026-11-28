@@ -40,7 +40,9 @@ class TrackingPage extends Component
 
     public string $attendance_rectification_reason = '';
 
-    // Consulta de Asistencias (por Curso, Materia y Estudiante)
+    // Consulta de Asistencias (por Curso, Materia y Estudiante + Habilidades Blandas)
+    public string $report_mode = 'courses'; // courses | soft_skills
+
     public ?int $report_course_id = null;
 
     public ?int $report_edition_id = null;
@@ -56,6 +58,14 @@ class TrackingPage extends Component
     public string $report_date_from = '';
 
     public string $report_date_to = '';
+
+    public ?int $ss_report_week_id = null;
+
+    public ?int $ss_report_course_id = null;
+
+    public string $ss_report_search = '';
+
+    public string $ss_report_status = '';
 
     // Paso 1: Plan de Evaluaciones y Porcentajes por Cohorte / Materia
     public ?int $eval_subject_id = null;
@@ -184,6 +194,29 @@ class TrackingPage extends Component
             'report_status',
             'report_date_from',
             'report_date_to',
+        ]);
+    }
+
+    public function setReportMode(string $mode): void
+    {
+        $this->report_mode = in_array($mode, ['courses', 'soft_skills'], true) ? $mode : 'courses';
+    }
+
+    public function openSoftSkillsReport(): void
+    {
+        $this->tab = 'attendance_report';
+        $this->report_mode = 'soft_skills';
+        $this->feedback = null;
+        $this->resetValidation();
+    }
+
+    public function clearSoftSkillReportFilters(): void
+    {
+        $this->reset([
+            'ss_report_week_id',
+            'ss_report_course_id',
+            'ss_report_search',
+            'ss_report_status',
         ]);
     }
 
@@ -1070,6 +1103,76 @@ class TrackingPage extends Component
             })->values();
         }
 
+        $ssReportQuery = SoftSkillAttendance::query()
+            ->with([
+                'week',
+                'recorder',
+                'student.enrollments' => fn ($q) => $q->whereIn('status', ['confirmada', 'en_curso', 'finalizada'])->with('edition.course'),
+                'student.softSkillAttendances.week',
+                'student.workshopParticipations.workshop',
+            ])
+            ->whereHas('week', fn ($q) => $q->where('has_session', true));
+
+        if ($this->ss_report_week_id) {
+            $ssReportQuery->where('soft_skill_week_id', $this->ss_report_week_id);
+        }
+        if ($this->ss_report_status !== '') {
+            $ssReportQuery->where('status', $this->ss_report_status);
+        }
+        if ($this->ss_report_course_id) {
+            $ssCourseId = (int) $this->ss_report_course_id;
+            $ssReportQuery->whereHas('student.enrollments', function ($q) use ($ssCourseId) {
+                $q->whereIn('status', ['confirmada', 'en_curso', 'finalizada'])
+                    ->whereHas('edition', fn ($eq) => $eq->where('course_id', $ssCourseId));
+            });
+        }
+        if (trim($this->ss_report_search) !== '') {
+            $term = '%'.mb_strtolower(trim($this->ss_report_search)).'%';
+            $ssReportQuery->whereHas('student', function ($q) use ($term) {
+                $q->whereRaw("LOWER(TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '') || ' ' || COALESCE(second_last_name, ''))) LIKE ?", [$term])
+                    ->orWhereRaw('LOWER(identification_number) LIKE ?', [$term])
+                    ->orWhereRaw('LOWER(student_code) LIKE ?', [$term]);
+            });
+        }
+
+        $ssReportRecords = $ssReportQuery->latest('id')->limit(300)->get()
+            ->sortByDesc(fn (SoftSkillAttendance $r) => $r->week?->week_start_date?->toDateString() ?? '')
+            ->values();
+
+        $ssReportByStudent = $ssReportRecords
+            ->groupBy('student_id')
+            ->map(function ($group) {
+                /** @var SoftSkillAttendance $first */
+                $first = $group->first();
+                $st = $first->student;
+                $courses = $st
+                    ? $st->enrollments
+                        ->map(fn (Enrollment $enr) => trim(($enr->edition?->course?->name ?? 'Curso').($enr->edition?->name ? ' ('.$enr->edition->name.')' : '')))
+                        ->unique()
+                        ->values()
+                        ->all()
+                    : [];
+
+                return [
+                    'student' => $st,
+                    'courses' => $courses,
+                    'summary' => $st ? $st->softSkillsAttendanceSummary() : [
+                        'present' => 0, 'justified' => 0, 'gross_absences' => 0,
+                        'workshop_credits' => 0, 'net_absences' => 0, 'credited_workshops' => [],
+                    ],
+                ];
+            })
+            ->sortBy(fn ($row) => mb_strtolower((string) ($row['student']?->full_name ?? '')))
+            ->values();
+
+        $ssReportSummary = [
+            'total' => $ssReportRecords->count(),
+            'presente' => $ssReportRecords->where('status', 'presente')->count(),
+            'justificada' => $ssReportRecords->where('status', 'justificada')->count(),
+            'ausente' => $ssReportRecords->where('status', 'ausente')->count(),
+            'students_count' => $ssReportByStudent->count(),
+        ];
+
         return view('livewire.tracking-page', [
             'editions' => $editions,
             'selectedEdition' => $selectedEdition,
@@ -1091,6 +1194,9 @@ class TrackingPage extends Component
             'selectedSoftSkillWeek' => $selectedSoftSkillWeek,
             'softSkillCourses' => $softSkillCourses,
             'softSkillRoster' => $softSkillRoster,
+            'ssReportRecords' => $ssReportRecords,
+            'ssReportSummary' => $ssReportSummary,
+            'ssReportByStudent' => $ssReportByStudent,
             'rectificationReasons' => Picklist::optionsFor('grade_rectification_reason'),
             'students' => Student::orderBy('first_name')->orderBy('last_name')->limit(200)->get(),
             'softSkills' => SoftSkillRecord::with(['student', 'evaluator'])->where('is_archived', false)->latest('evaluated_on')->limit(50)->get(),

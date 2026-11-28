@@ -165,6 +165,42 @@
                         @endforelse
                     </div>
 
+                    <div class="space-y-2">
+                        @php $ssSummary = $selected->softSkillsAttendanceSummary(); @endphp
+                        <h4 class="text-sm font-bold text-slate-800">Asistencia Semanal de Habilidades Blandas</h4>
+                        <div class="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2 text-xs">
+                            <div class="flex flex-wrap gap-1.5">
+                                <span class="cecap-badge bg-emerald-100 text-emerald-900">Asistió: {{ $ssSummary['present'] }} sem.</span>
+                                @if($ssSummary['justified'] > 0)
+                                    <span class="cecap-badge bg-sky-100 text-sky-900">Justificadas: {{ $ssSummary['justified'] }}</span>
+                                @endif
+                                <span class="cecap-badge bg-slate-200 text-slate-800">Ausencias brutas: {{ $ssSummary['gross_absences'] }}</span>
+                                @if($ssSummary['workshop_credits'] > 0)
+                                    <span class="cecap-badge bg-emerald-100 text-emerald-900">Compensadas por actividades: -{{ $ssSummary['workshop_credits'] }}</span>
+                                @endif
+                                <span class="cecap-badge {{ $ssSummary['net_absences'] > 0 ? 'bg-rose-100 text-rose-800' : 'bg-brand-100 text-brand-900' }}">Ausencias Netas: {{ $ssSummary['net_absences'] }}</span>
+                            </div>
+                            @if(!empty($ssSummary['credited_workshops']))
+                                <div class="text-[11px] text-emerald-800">Actividades acreditadas: {{ implode(' · ', $ssSummary['credited_workshops']) }}</div>
+                            @endif
+                            @if($selected->softSkillAttendances->isNotEmpty())
+                                <div class="flex flex-wrap gap-1.5 pt-1 border-t border-slate-200">
+                                    @foreach($selected->softSkillAttendances->sortByDesc(fn ($a) => $a->week?->week_start_date) as $ssAtt)
+                                        <span class="inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[11px] font-medium {{ $ssAtt->status === 'presente' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : ($ssAtt->status === 'ausente' ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-sky-50 border-sky-200 text-sky-900') }}">
+                                            <span>{{ $ssAtt->week?->range_label ?? 'Semana' }}</span>
+                                            <strong>{{ $ssAtt->status_label }}</strong>
+                                            @if($ssAtt->schedule_notes)
+                                                <span class="text-slate-500">({{ $ssAtt->schedule_notes }})</span>
+                                            @endif
+                                        </span>
+                                    @endforeach
+                                </div>
+                            @else
+                                <p class="text-xs text-slate-500">Sin registros semanales de Habilidades Blandas aún.</p>
+                            @endif
+                        </div>
+                    </div>
+
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="space-y-2">
                             <h4 class="text-sm font-bold text-slate-800">Recibos de Pago</h4>

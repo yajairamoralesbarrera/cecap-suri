@@ -75,6 +75,9 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/seguimiento/asistencias/excel', [ExportController::class, 'exportAttendanceExcel'])
             ->middleware(['module.enabled:seguimiento', 'cecap.perm:seguimiento.view'])
             ->name('seguimiento.attendance.excel');
+        Route::get('/seguimiento/habilidades-blandas/excel', [ExportController::class, 'exportSoftSkillsAttendanceExcel'])
+            ->middleware(['module.enabled:seguimiento', 'cecap.perm:seguimiento.view'])
+            ->name('seguimiento.soft-skills.excel');
 
         // Adjuntos privados protegidos
         Route::get('/adjuntos/{uuid}', [AttachmentController::class, 'download'])->name('attachments.download');

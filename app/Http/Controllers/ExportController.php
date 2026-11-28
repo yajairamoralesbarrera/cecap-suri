@@ -126,6 +126,150 @@ class ExportController extends Controller
         ]);
     }
 
+    public function exportSoftSkillsAttendanceExcel(Request $request): Response
+    {
+        abort_unless($request->user()->hasEffectivePermission('seguimiento.view'), 403);
+
+        $weekId = $request->query('week_id') ? (int) $request->query('week_id') : null;
+        $courseId = $request->query('course_id') ? (int) $request->query('course_id') : null;
+        $search = trim((string) $request->query('search', ''));
+        $status = trim((string) $request->query('status', ''));
+
+        $query = \App\Models\SoftSkillAttendance::query()
+            ->with([
+                'week',
+                'recorder',
+                'student.enrollments' => fn ($q) => $q->whereIn('status', ['confirmada', 'en_curso', 'finalizada'])->with('edition.course'),
+                'student.softSkillAttendances.week',
+                'student.workshopParticipations.workshop',
+            ])
+            ->whereHas('week', fn ($q) => $q->where('has_session', true));
+
+        if ($weekId) {
+            $query->where('soft_skill_week_id', $weekId);
+        }
+        if ($status !== '') {
+            $query->where('status', $status);
+        }
+        if ($courseId) {
+            $query->whereHas('student.enrollments', function ($q) use ($courseId) {
+                $q->whereIn('status', ['confirmada', 'en_curso', 'finalizada'])
+                    ->whereHas('edition', fn ($eq) => $eq->where('course_id', $courseId));
+            });
+        }
+        if ($search !== '') {
+            $term = '%'.mb_strtolower($search).'%';
+            $query->whereHas('student', function ($q) use ($term) {
+                $q->whereRaw("LOWER(TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '') || ' ' || COALESCE(second_last_name, ''))) LIKE ?", [$term])
+                    ->orWhereRaw('LOWER(identification_number) LIKE ?', [$term])
+                    ->orWhereRaw('LOWER(student_code) LIKE ?', [$term]);
+            });
+        }
+
+        $records = $query->latest('id')->get()
+            ->sortByDesc(fn ($r) => $r->week?->week_start_date?->toDateString() ?? '')
+            ->values();
+
+        $summaryRows = [];
+        $grouped = $records->groupBy('student_id');
+        foreach ($grouped as $group) {
+            $st = $group->first()->student;
+            if (! $st) {
+                continue;
+            }
+            $sum = $st->softSkillsAttendanceSummary();
+            $courses = $st->enrollments
+                ->map(fn ($enr) => trim(($enr->edition?->course?->name ?? 'Curso').($enr->edition?->name ? ' ('.$enr->edition->name.')' : '')))
+                ->unique()
+                ->implode(' | ');
+
+            $summaryRows[] = [
+                $st->student_code,
+                $st->full_name,
+                $st->identification_number,
+                $courses ?: '—',
+                (int) $sum['present'],
+                (int) $sum['justified'],
+                (int) $sum['gross_absences'],
+                (int) $sum['workshop_credits'],
+                (int) $sum['net_absences'],
+                implode(' | ', $sum['credited_workshops']),
+            ];
+        }
+
+        $detailRows = [];
+        foreach ($records as $rec) {
+            $st = $rec->student;
+            $courses = $st
+                ? $st->enrollments
+                    ->map(fn ($enr) => $enr->edition?->course?->name ?? 'Curso')
+                    ->unique()
+                    ->implode(' | ')
+                : '—';
+
+            $detailRows[] = [
+                $rec->week?->range_label ?? '—',
+                $rec->week?->label ?? '',
+                $st?->student_code ?? '',
+                $st?->full_name ?? '',
+                $st?->identification_number ?? '',
+                $courses ?: '—',
+                $rec->status_label,
+                $rec->schedule_notes ?? '',
+                $rec->recorder?->name ?? 'Sistema',
+            ];
+        }
+
+        $binary = SimpleXlsxWriter::build([
+            [
+                'title' => 'Resumen Habilidades Blandas',
+                'headers' => [
+                    'Código Alumna',
+                    'Alumna',
+                    'Identificación',
+                    'Curso(s)',
+                    'Asistió (Sem.)',
+                    'Justificadas',
+                    'Ausencias Brutas',
+                    'Compensadas (Talleres)',
+                    'Ausencias Netas',
+                    'Talleres / Actividades Acreditados',
+                ],
+                'rows' => $summaryRows,
+            ],
+            [
+                'title' => 'Detalle por Semana',
+                'headers' => [
+                    'Semana (Desde - Hasta)',
+                    'Tema / Etiqueta',
+                    'Código Alumna',
+                    'Alumna',
+                    'Identificación',
+                    'Curso(s)',
+                    'Estado',
+                    'Horario Asistido',
+                    'Registrado por',
+                ],
+                'rows' => $detailRows,
+            ],
+        ]);
+
+        AuditService::log('seguimiento.soft_skills_excel_exported', 'seguimiento', null, null, [
+            'week_id' => $weekId,
+            'course_id' => $courseId,
+            'summary_rows' => count($summaryRows),
+            'detail_rows' => count($detailRows),
+        ]);
+
+        $filename = sprintf('cecap_habilidades_blandas_%s.xlsx', now()->format('Ymd_His'));
+
+        return response($binary, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        ]);
+    }
+
     public function exportCsv(Request $request, string $type): StreamedResponse
     {
         abort_unless($request->user()->hasEffectivePermission('direccion.exports.csv'), 403);

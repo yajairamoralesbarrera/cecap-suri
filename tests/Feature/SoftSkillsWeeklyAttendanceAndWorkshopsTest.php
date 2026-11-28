@@ -209,7 +209,7 @@ it('tracks weekly Soft Skills attendance across all enrolled students with cours
     expect($summaryBeforeWorkshop['workshop_credits'])->toBe(0);
     expect($summaryBeforeWorkshop['net_absences'])->toBe(2);
 
-    // 2. Crear Seminario con costo ₡15,000 y equivalencia = 2 ausencias en Habilidades Blandas
+    // 2. Crear Seminario con costo ₡15,000 (activando ¿Tiene costo?) y equivalencia = 2 ausencias en Habilidades Blandas
     $activities = Livewire::test(ActivitiesPage::class)
         ->set('title', 'Seminario de Auditoría y Liderazgo')
         ->set('workshop_type', 'charla')
@@ -218,6 +218,7 @@ it('tracks weekly Soft Skills attendance across all enrolled students with cours
         ->set('start_time', '09:00')
         ->set('end_time', '12:00')
         ->set('max_capacity', 40)
+        ->set('has_cost', true)
         ->set('cost', 15000)
         ->set('soft_skills_absence_credits', 2)
         ->call('createWorkshop')
@@ -263,4 +264,31 @@ it('tracks weekly Soft Skills attendance across all enrolled students with cours
     expect($summaryAfterWorkshop['workshop_credits'])->toBe(2);
     expect($summaryAfterWorkshop['net_absences'])->toBe(0);
     expect($summaryAfterWorkshop['credited_workshops'])->toContain('Seminario de Auditoría y Liderazgo (+2)');
+
+    // 4. Consulta de Asistencia de Habilidades Blandas (sub-modo en Consulta de Asistencias) + Excel (.xlsx)
+    $ssReport = Livewire::test(TrackingPage::class)
+        ->call('openSoftSkillsReport')
+        ->assertSet('tab', 'attendance_report')
+        ->assertSet('report_mode', 'soft_skills')
+        ->set('ss_report_course_id', $courseA->id);
+
+    expect($ssReport->viewData('ssReportByStudent')->count())->toBe(1);
+    expect($ssReport->viewData('ssReportRecords')->count())->toBe(2);
+
+    $xlsxResp = $this->actingAs($admin)->get(route('seguimiento.soft-skills.excel', [
+        'course_id' => $courseA->id,
+    ]));
+    $xlsxResp->assertOk()
+        ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+    $tmp = tempnam(sys_get_temp_dir(), 'ss_xlsx_');
+    file_put_contents($tmp, $xlsxResp->getContent());
+    $zip = new ZipArchive();
+    expect($zip->open($tmp))->toBeTrue();
+    $sheet1 = (string) $zip->getFromName('xl/worksheets/sheet1.xml');
+    $zip->close();
+    @unlink($tmp);
+
+    expect($sheet1)->toContain('Yajaira Morales');
+    expect($sheet1)->toContain('Seminario de Auditoría y Liderazgo (+2)');
 });

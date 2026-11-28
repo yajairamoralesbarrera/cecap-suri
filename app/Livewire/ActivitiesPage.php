@@ -36,6 +36,8 @@ class ActivitiesPage extends Component
 
     public int $soft_skills_absence_credits = 0;
 
+    public bool $has_cost = false;
+
     public float|string $cost = 0;
 
     public string $description = '';
@@ -63,6 +65,13 @@ class ActivitiesPage extends Component
     public function mount(): void
     {
         $this->event_date = now()->addDays(5)->toDateString();
+    }
+
+    public function updatedHasCost(bool $value): void
+    {
+        if (! $value) {
+            $this->cost = 0;
+        }
     }
 
     public function updatedParticipantStudentId($value): void
@@ -96,7 +105,7 @@ class ActivitiesPage extends Component
     {
         abort_unless(Auth::user()->hasEffectivePermission('actividades.manage'), 403);
 
-        $this->validate([
+        $rules = [
             'title' => ['required', 'string', 'max:180'],
             'workshop_type' => ['required', 'string', 'max:40'],
             'facilitator_name' => ['required', 'string', 'max:140'],
@@ -105,8 +114,14 @@ class ActivitiesPage extends Component
             'end_time' => ['required', 'date_format:H:i', 'after:start_time'],
             'max_capacity' => ['required', 'integer', 'min:1'],
             'soft_skills_absence_credits' => ['required', 'integer', 'min:0', 'max:20'],
-            'cost' => ['required', 'numeric', 'min:0'],
+            'cost' => $this->has_cost ? ['required', 'numeric', 'min:1'] : ['nullable', 'numeric', 'min:0'],
+        ];
+
+        $this->validate($rules, [
+            'cost.min' => 'Si la actividad tiene costo, indique un monto mayor a ₡0.',
         ]);
+
+        $finalCost = ($this->has_cost || (float) $this->cost > 0) ? round((float) $this->cost, 2) : 0.0;
 
         $workshop = Workshop::create([
             'code' => Workshop::nextCode(),
@@ -120,7 +135,7 @@ class ActivitiesPage extends Component
             'location' => $this->location ?: null,
             'max_capacity' => $this->max_capacity,
             'soft_skills_absence_credits' => $this->soft_skills_absence_credits,
-            'cost' => round((float) $this->cost, 2),
+            'cost' => $finalCost,
             'status' => 'programado',
             'created_by' => Auth::id(),
         ]);
@@ -128,6 +143,7 @@ class ActivitiesPage extends Component
         AuditService::log('activities.workshop_created', 'actividades', $workshop, null, $workshop->only(['code', 'title', 'workshop_type', 'soft_skills_absence_credits', 'cost']));
         $this->reset(['title', 'facilitator_name', 'description']);
         $this->soft_skills_absence_credits = 0;
+        $this->has_cost = false;
         $this->cost = 0;
         $this->selectWorkshop($workshop->id);
         $this->feedback = 'Taller / Actividad creado correctamente.';

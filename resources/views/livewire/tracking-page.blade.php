@@ -78,9 +78,19 @@
         </div>
     @endif
 
-    {{-- TAB: CONSULTA DE ASISTENCIAS (POR CURSO, MATERIA Y ESTUDIANTE) --}}
+    {{-- TAB: CONSULTA DE ASISTENCIAS (CURSOS/MATERIAS Y HABILIDADES BLANDAS) --}}
     @if($tab === 'attendance_report')
         <div class="space-y-6">
+            <div class="flex flex-wrap gap-2">
+                <button type="button" wire:click="setReportMode('courses')" class="{{ $report_mode === 'courses' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }} !min-h-9 !px-4 text-xs">
+                    Asistencia de Cursos y Materias
+                </button>
+                <button type="button" wire:click="setReportMode('soft_skills')" class="{{ $report_mode === 'soft_skills' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }} !min-h-9 !px-4 text-xs">
+                    Asistencia de Habilidades Blandas
+                </button>
+            </div>
+
+            @if($report_mode === 'courses')
             <div class="cecap-card space-y-4">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                     <h2 class="text-base font-bold text-brand-950">Consulta de Asistencias por Curso, Materia y Estudiante</h2>
@@ -297,6 +307,187 @@
                     </tbody>
                 </table>
             </div>
+            @endif
+
+            @if($report_mode === 'soft_skills')
+                <div class="cecap-card space-y-4">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <h2 class="text-base font-bold text-brand-950">Consulta de Asistencia de Habilidades Blandas (por Semana, Curso y Alumna)</h2>
+                        @if($ss_report_week_id || $ss_report_course_id || trim($ss_report_search) !== '' || $ss_report_status !== '')
+                            <button type="button" wire:click="clearSoftSkillReportFilters" class="cecap-btn-secondary !min-h-8 !px-3 !py-1 text-xs">Limpiar filtros</button>
+                        @endif
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Semana (Desde – Hasta)</label>
+                            <select wire:model.live="ss_report_week_id" class="cecap-input bg-white">
+                                <option value="">Todas las semanas</option>
+                                @foreach($softSkillWeeks as $wk)
+                                    <option value="{{ $wk->id }}">{{ $wk->display_title }}@if(!$wk->has_session) [SIN SESIÓN]@endif</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Curso que cursa</label>
+                            <select wire:model.live="ss_report_course_id" class="cecap-input bg-white">
+                                <option value="">Todos los cursos</option>
+                                @foreach($softSkillCourses as $c)
+                                    <option value="{{ $c->id }}">{{ $c->code }} — {{ $c->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Buscar alumna (nombre, cédula o código)</label>
+                            <input wire:model.live.debounce.300ms="ss_report_search" type="text" class="cecap-input bg-white" placeholder="Ej. Yajaira, 801720968...">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Estado</label>
+                            <select wire:model.live="ss_report_status" class="cecap-input bg-white">
+                                <option value="">Todos los estados</option>
+                                <option value="presente">Presente</option>
+                                <option value="justificada">Justificada</option>
+                                <option value="ausente">Ausente</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <div class="text-[11px] font-semibold uppercase text-slate-500">Alumnas</div>
+                            <div class="mt-1 text-xl font-bold text-slate-900">{{ $ssReportSummary['students_count'] }}</div>
+                        </div>
+                        <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                            <div class="text-[11px] font-semibold uppercase text-slate-500">Registros</div>
+                            <div class="mt-1 text-xl font-bold text-slate-900">{{ $ssReportSummary['total'] }}</div>
+                        </div>
+                        <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                            <div class="text-[11px] font-semibold uppercase text-emerald-700">Presentes</div>
+                            <div class="mt-1 text-xl font-bold text-emerald-900">{{ $ssReportSummary['presente'] }}</div>
+                        </div>
+                        <div class="rounded-xl border border-sky-200 bg-sky-50 p-3">
+                            <div class="text-[11px] font-semibold uppercase text-sky-700">Justificadas</div>
+                            <div class="mt-1 text-xl font-bold text-sky-900">{{ $ssReportSummary['justificada'] }}</div>
+                        </div>
+                        <div class="rounded-xl border border-rose-200 bg-rose-50 p-3">
+                            <div class="text-[11px] font-semibold uppercase text-rose-700">Ausentes Brutas</div>
+                            <div class="mt-1 text-xl font-bold text-rose-900">{{ $ssReportSummary['ausente'] }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Resumen por Alumna con compensación de talleres y descarga Excel --}}
+                <div class="cecap-card overflow-x-auto">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                        <h3 class="text-base font-bold text-slate-900">Resumen Habilidades Blandas por Alumna ({{ $ssReportByStudent->count() }})</h3>
+                        <a
+                            href="{{ route('seguimiento.soft-skills.excel', array_filter([
+                                'week_id' => $ss_report_week_id,
+                                'course_id' => $ss_report_course_id,
+                                'search' => trim($ss_report_search),
+                                'status' => $ss_report_status,
+                            ], fn ($v) => $v !== null && $v !== '')) }}"
+                            class="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100"
+                        >
+                            Descargar Excel (.xlsx)
+                        </a>
+                    </div>
+                    <table class="w-full text-sm text-left">
+                        <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
+                            <tr>
+                                <th class="py-2 pr-3">Alumna</th>
+                                <th class="py-2 pr-3">Curso(s)</th>
+                                <th class="py-2 pr-2 text-center">Asistió</th>
+                                <th class="py-2 pr-2 text-center">Just.</th>
+                                <th class="py-2 pr-2 text-center">Aus. Brutas</th>
+                                <th class="py-2 pr-2 text-center">Compensadas (Talleres)</th>
+                                <th class="py-2 text-right">Aus. Netas</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            @forelse($ssReportByStudent as $row)
+                                @php $s = $row['summary']; @endphp
+                                <tr>
+                                    <td class="py-2.5 pr-3 font-semibold">
+                                        {{ $row['student']?->full_name }}
+                                        <div class="text-xs font-normal text-slate-500">{{ $row['student']?->student_code }} · {{ $row['student']?->identification_number }}</div>
+                                    </td>
+                                    <td class="py-2.5 pr-3 text-xs">
+                                        <div class="flex flex-wrap gap-1">
+                                            @foreach($row['courses'] as $cLabel)
+                                                <span class="inline-flex items-center rounded-md bg-brand-50 border border-brand-200 px-1.5 py-0.5 text-[11px] font-medium text-brand-900">{{ $cLabel }}</span>
+                                            @endforeach
+                                        </div>
+                                    </td>
+                                    <td class="py-2.5 pr-2 text-center text-xs font-semibold text-emerald-700">{{ $s['present'] }}</td>
+                                    <td class="py-2.5 pr-2 text-center text-xs font-semibold text-sky-700">{{ $s['justified'] }}</td>
+                                    <td class="py-2.5 pr-2 text-center text-xs font-semibold text-slate-700">{{ $s['gross_absences'] }}</td>
+                                    <td class="py-2.5 pr-2 text-center text-xs">
+                                        @if($s['workshop_credits'] > 0)
+                                            <span class="cecap-badge bg-emerald-100 text-emerald-900">-{{ $s['workshop_credits'] }}</span>
+                                            <div class="text-[10px] text-slate-500 mt-0.5">{{ implode(', ', $s['credited_workshops']) }}</div>
+                                        @else
+                                            <span class="text-slate-400">0</span>
+                                        @endif
+                                    </td>
+                                    <td class="py-2.5 text-right">
+                                        <span class="cecap-badge {{ $s['net_absences'] > 0 ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-900' }}">
+                                            {{ $s['net_absences'] }}
+                                        </span>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="7" class="py-6 text-center text-slate-500">Sin registros de asistencia de Habilidades Blandas para los filtros seleccionados.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+
+                {{-- Detalle Semana por Semana --}}
+                <div class="cecap-card overflow-x-auto">
+                    <h3 class="text-base font-bold text-slate-900 mb-3">Detalle Semana por Semana ({{ $ssReportRecords->count() }})</h3>
+                    <table class="w-full text-sm text-left">
+                        <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
+                            <tr>
+                                <th class="py-2 pr-3">Semana (Desde – Hasta)</th>
+                                <th class="py-2 pr-3">Alumna</th>
+                                <th class="py-2 pr-3">Curso(s)</th>
+                                <th class="py-2 pr-3">Horario Asistido</th>
+                                <th class="py-2 pr-3">Estado</th>
+                                <th class="py-2">Registrado por</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            @forelse($ssReportRecords as $rec)
+                                <tr>
+                                    <td class="py-2.5 pr-3 text-xs font-semibold whitespace-nowrap">
+                                        {{ $rec->week?->range_label }}
+                                        @if($rec->week?->label)
+                                            <div class="font-normal text-slate-500">{{ $rec->week->label }}</div>
+                                        @endif
+                                    </td>
+                                    <td class="py-2.5 pr-3 text-xs font-semibold">
+                                        {{ $rec->student?->full_name }}
+                                        <div class="font-normal text-slate-500">{{ $rec->student?->student_code }}</div>
+                                    </td>
+                                    <td class="py-2.5 pr-3 text-xs text-slate-700">
+                                        {{ $rec->student?->enrollments?->map(fn ($e) => $e->edition?->course?->name)->filter()->unique()->implode(', ') ?: '—' }}
+                                    </td>
+                                    <td class="py-2.5 pr-3 text-xs text-slate-600">{{ $rec->schedule_notes ?: '—' }}</td>
+                                    <td class="py-2.5 pr-3 text-xs">
+                                        <span class="cecap-badge {{ $rec->status === 'presente' ? 'bg-emerald-100 text-emerald-900' : ($rec->status === 'ausente' ? 'bg-rose-100 text-rose-800' : 'bg-sky-100 text-sky-900') }}">
+                                            {{ $rec->status_label }}
+                                        </span>
+                                    </td>
+                                    <td class="py-2.5 text-xs text-slate-600">{{ $rec->recorder?->name ?? 'Sistema' }}</td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="6" class="py-6 text-center text-slate-500">Sin registros semanales con los filtros actuales.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            @endif
         </div>
     @endif
 
@@ -681,9 +872,14 @@
         <div class="space-y-6">
             {{-- PASO 1: SEMANAS DE HABILIDADES BLANDAS (DESDE - HASTA + SIN SESIÓN) --}}
             <div class="cecap-card space-y-4">
-                <div>
-                    <h2 class="text-base font-bold text-brand-950">Paso 1 — Semanas de Habilidades Blandas (Desde – Hasta)</h2>
-                    <p class="text-xs text-slate-500">Las alumnas pueden asistir en cualquier horario durante la semana. Si una semana no hay Habilidades Blandas, márquela como <strong>Sin sesión</strong> para que no genere ausencias.</p>
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                        <h2 class="text-base font-bold text-brand-950">Paso 1 — Semanas de Habilidades Blandas (Desde – Hasta)</h2>
+                        <p class="text-xs text-slate-500">Las alumnas pueden asistir en cualquier horario durante la semana. Si una semana no hay Habilidades Blandas, márquela como <strong>Sin sesión</strong> para que no genere ausencias.</p>
+                    </div>
+                    <button type="button" wire:click="openSoftSkillsReport" class="inline-flex min-h-9 items-center justify-center rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100 cursor-pointer">
+                        Consultar Asistencias / Excel HB
+                    </button>
                 </div>
 
                 @if($canManageSs)

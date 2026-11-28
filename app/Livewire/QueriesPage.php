@@ -67,6 +67,8 @@ class QueriesPage extends Component
                 'enrollments.edition.course', 'enrollments.gradeRecords', 'enrollments.attendanceRecords.subject',
                 'feeCharges', 'paymentReceipts.cashier',
                 'softSkills.evaluator',
+                'softSkillAttendances.week',
+                'workshopParticipations.workshop',
                 'graduations.enrollment.edition.course',
                 'attachments',
                 'lifecycleEvents',
