@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Models\AttendanceRecord;
 use App\Models\CourseEdition;
+use App\Models\CourseSubject;
 use App\Models\Enrollment;
 use App\Models\GradeRecord;
 use App\Models\Picklist;
@@ -29,9 +30,28 @@ class TrackingPage extends Component
     // Asistencia móvil versionada
     public string $session_date = '';
 
+    public ?int $attendance_subject_id = null;
+
     public array $attendance_statuses = [];
 
     public string $attendance_rectification_reason = '';
+
+    // Consulta de Asistencias (por Curso, Materia y Estudiante)
+    public ?int $report_course_id = null;
+
+    public ?int $report_edition_id = null;
+
+    public string $report_subject_id = '';
+
+    public ?int $report_student_id = null;
+
+    public string $report_student_search = '';
+
+    public string $report_status = '';
+
+    public string $report_date_from = '';
+
+    public string $report_date_to = '';
 
     // Notas y rectificación auditada
     public ?int $grade_enrollment_id = null;
@@ -79,12 +99,38 @@ class TrackingPage extends Component
 
     public function updatedSelectedEditionId(): void
     {
+        $this->attendance_subject_id = null;
         $this->loadAttendanceForDate();
     }
 
     public function updatedSessionDate(): void
     {
         $this->loadAttendanceForDate();
+    }
+
+    public function updatedAttendanceSubjectId(): void
+    {
+        $this->loadAttendanceForDate();
+    }
+
+    public function updatedReportCourseId(): void
+    {
+        $this->report_edition_id = null;
+        $this->report_subject_id = '';
+    }
+
+    public function clearAttendanceReportFilters(): void
+    {
+        $this->reset([
+            'report_course_id',
+            'report_edition_id',
+            'report_subject_id',
+            'report_student_id',
+            'report_student_search',
+            'report_status',
+            'report_date_from',
+            'report_date_to',
+        ]);
     }
 
     public function loadAttendanceForDate(): void
@@ -102,6 +148,11 @@ class TrackingPage extends Component
             $existing = AttendanceRecord::where('enrollment_id', $enr->id)
                 ->whereDate('session_date', $this->session_date)
                 ->where('is_current', true)
+                ->when(
+                    $this->attendance_subject_id,
+                    fn ($q) => $q->where('course_subject_id', $this->attendance_subject_id),
+                    fn ($q) => $q->whereNull('course_subject_id')
+                )
                 ->first();
             $this->attendance_statuses[$enr->id] = $existing?->status ?? 'presente';
         }
@@ -131,6 +182,11 @@ class TrackingPage extends Component
                 $current = AttendanceRecord::where('enrollment_id', $enr->id)
                     ->whereDate('session_date', $this->session_date)
                     ->where('is_current', true)
+                    ->when(
+                        $this->attendance_subject_id,
+                        fn ($q) => $q->where('course_subject_id', $this->attendance_subject_id),
+                        fn ($q) => $q->whereNull('course_subject_id')
+                    )
                     ->first();
 
                 if ($current && $current->status === $status) {
@@ -145,6 +201,7 @@ class TrackingPage extends Component
 
                 $record = AttendanceRecord::create([
                     'course_edition_id' => $this->selected_edition_id,
+                    'course_subject_id' => $this->attendance_subject_id ?: null,
                     'enrollment_id' => $enr->id,
                     'student_id' => $enr->student_id,
                     'session_date' => $this->session_date,
@@ -155,7 +212,11 @@ class TrackingPage extends Component
                     'recorded_by' => Auth::id(),
                 ]);
 
-                AuditService::log('tracking.attendance_recorded', 'seguimiento', $record, null, ['status' => $status, 'version' => $nextVersion]);
+                AuditService::log('tracking.attendance_recorded', 'seguimiento', $record, null, [
+                    'status' => $status,
+                    'version' => $nextVersion,
+                    'course_subject_id' => $this->attendance_subject_id ?: null,
+                ]);
             }
         });
 
@@ -339,12 +400,131 @@ class TrackingPage extends Component
                 ->get()
             : collect();
 
+        $accessibleEditionIds = $editions->pluck('id')->all();
+        $reportCourses = $editions->pluck('course')->filter()->unique('id')->sortBy('name')->values();
+        $reportEditions = $this->report_course_id
+            ? $editions->where('course_id', $this->report_course_id)->values()
+            : $editions;
+
+        $reportCourseIds = $this->report_course_id
+            ? [$this->report_course_id]
+            : $reportCourses->pluck('id')->all();
+
+        $reportSubjects = empty($reportCourseIds)
+            ? collect()
+            : CourseSubject::with('course')
+                ->whereIn('course_id', $reportCourseIds)
+                ->orderBy('course_id')
+                ->orderBy('code')
+                ->orderBy('name')
+                ->get();
+
+        $reportRecords = collect();
+        if (! empty($accessibleEditionIds)) {
+            $attQuery = AttendanceRecord::query()
+                ->with(['student', 'edition.course', 'subject', 'recorder'])
+                ->where('is_current', true)
+                ->whereIn('course_edition_id', $accessibleEditionIds);
+
+            if ($this->report_course_id) {
+                $attQuery->whereHas('edition', fn ($q) => $q->where('course_id', $this->report_course_id));
+            }
+            if ($this->report_edition_id) {
+                $attQuery->where('course_edition_id', $this->report_edition_id);
+            }
+            if ($this->report_subject_id === '__general__') {
+                $attQuery->whereNull('course_subject_id');
+            } elseif ($this->report_subject_id !== '') {
+                $attQuery->where('course_subject_id', (int) $this->report_subject_id);
+            }
+            if ($this->report_student_id) {
+                $attQuery->where('student_id', $this->report_student_id);
+            }
+            if (trim($this->report_student_search) !== '') {
+                $term = '%'.mb_strtolower(trim($this->report_student_search)).'%';
+                $attQuery->whereHas('student', function ($q) use ($term) {
+                    $q->whereRaw("LOWER(TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '') || ' ' || COALESCE(second_last_name, ''))) LIKE ?", [$term])
+                        ->orWhereRaw('LOWER(identification_number) LIKE ?', [$term])
+                        ->orWhereRaw('LOWER(student_code) LIKE ?', [$term]);
+                });
+            }
+            if ($this->report_status !== '') {
+                $attQuery->where('status', $this->report_status);
+            }
+            if ($this->report_date_from !== '') {
+                $attQuery->whereDate('session_date', '>=', $this->report_date_from);
+            }
+            if ($this->report_date_to !== '') {
+                $attQuery->whereDate('session_date', '<=', $this->report_date_to);
+            }
+
+            $reportRecords = $attQuery
+                ->orderByDesc('session_date')
+                ->orderByDesc('id')
+                ->limit(300)
+                ->get();
+        }
+
+        $totalSessions = $reportRecords->count();
+        $presentCount = $reportRecords->where('status', 'presente')->count();
+        $lateCount = $reportRecords->where('status', 'tardia')->count();
+        $excusedCount = $reportRecords->where('status', 'justificada')->count();
+        $absentCount = $reportRecords->where('status', 'ausente')->count();
+        $effectiveCount = $presentCount + $lateCount + $excusedCount;
+
+        $reportSummary = [
+            'total' => $totalSessions,
+            'presente' => $presentCount,
+            'tardia' => $lateCount,
+            'justificada' => $excusedCount,
+            'ausente' => $absentCount,
+            'percent' => $totalSessions > 0 ? round(($effectiveCount / $totalSessions) * 100, 1) : 0.0,
+        ];
+
+        $reportByStudent = $reportRecords
+            ->groupBy(fn (AttendanceRecord $r) => $r->student_id.'-'.$r->course_edition_id.'-'.($r->course_subject_id ?? 0))
+            ->map(function ($group) {
+                /** @var AttendanceRecord $first */
+                $first = $group->first();
+                $total = $group->count();
+                $p = $group->where('status', 'presente')->count();
+                $t = $group->where('status', 'tardia')->count();
+                $j = $group->where('status', 'justificada')->count();
+                $a = $group->where('status', 'ausente')->count();
+                $minPct = (float) ($first->edition?->course?->min_attendance_percent ?? 80);
+                $pct = $total > 0 ? round((($p + $t + $j) / $total) * 100, 1) : 0.0;
+
+                return [
+                    'student' => $first->student,
+                    'course_name' => $first->edition?->course?->name ?? '—',
+                    'edition_name' => $first->edition?->name ?? '—',
+                    'subject_label' => $first->subject ? ($first->subject->code.' — '.$first->subject->name) : 'General del curso',
+                    'presente' => $p,
+                    'tardia' => $t,
+                    'justificada' => $j,
+                    'ausente' => $a,
+                    'total' => $total,
+                    'percent' => $pct,
+                    'min_percent' => $minPct,
+                    'passed' => $pct >= $minPct,
+                ];
+            })
+            ->sortBy(fn ($row) => mb_strtolower((string) ($row['student']?->full_name ?? '')))
+            ->values();
+
         return view('livewire.tracking-page', [
             'editions' => $editions,
             'selectedEdition' => $selectedEdition,
             'editionEnrollments' => $editionEnrollments,
+            'reportCourses' => $reportCourses,
+            'reportEditions' => $reportEditions,
+            'reportSubjects' => $reportSubjects,
+            'reportRecords' => $reportRecords,
+            'reportSummary' => $reportSummary,
+            'reportByStudent' => $reportByStudent,
+            'attendanceStatusLabels' => AttendanceRecord::statusLabels(),
             'rectificationReasons' => Picklist::optionsFor('grade_rectification_reason'),
-            'students' => Student::orderBy('first_name')->limit(100)->get(),
+            'students' => Student::orderBy('first_name')->orderBy('last_name')->limit(200)->get(),
             'softSkills' => SoftSkillRecord::with(['student', 'evaluator'])->where('is_archived', false)->latest('evaluated_on')->limit(50)->get(),
             'recentGrades' => GradeRecord::with(['student', 'enrollment.edition', 'subject'])->where('is_current', true)->latest()->limit(40)->get(),
         ]);

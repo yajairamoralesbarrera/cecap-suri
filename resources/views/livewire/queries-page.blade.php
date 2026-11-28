@@ -130,17 +130,35 @@
                     <div class="space-y-2">
                         <h4 class="text-sm font-bold text-slate-800">Matrículas y Rendimiento</h4>
                         @forelse($selected->enrollments as $enr)
-                            <div class="rounded-xl border border-slate-200 p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
-                                <div>
-                                    <div class="font-bold text-slate-900">{{ $enr->enrollment_code }} — {{ $enr->edition?->course?->name }}</div>
-                                    <div class="text-slate-600">Estado: {{ strtoupper($enr->status) }} · Nota: {{ number_format($enr->calculateFinalGrade(), 1) }} · Asistencia: {{ number_format($enr->calculateAttendancePercent(), 0) }}%</div>
-                                    @if($enr->reenrollment_authorized)
-                                        <div class="text-[11px] font-semibold text-emerald-800">Re-inscripción autorizada: {{ $enr->reenrollment_reason }}</div>
-                                    @elseif(filled($enr->reenrollment_reason))
-                                        <div class="text-[11px] font-semibold text-amber-800">Pendiente autorización: {{ $enr->reenrollment_reason }}</div>
-                                    @endif
+                            <div class="rounded-xl border border-slate-200 p-3 space-y-2 text-xs">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <div>
+                                        <div class="font-bold text-slate-900">{{ $enr->enrollment_code }} — {{ $enr->edition?->course?->name }}</div>
+                                        <div class="text-slate-600">Estado: {{ strtoupper($enr->status) }} · Nota: {{ number_format($enr->calculateFinalGrade(), 1) }} · Asistencia: {{ number_format($enr->calculateAttendancePercent(), 0) }}%</div>
+                                        @if($enr->reenrollment_authorized)
+                                            <div class="text-[11px] font-semibold text-emerald-800">Re-inscripción autorizada: {{ $enr->reenrollment_reason }}</div>
+                                        @elseif(filled($enr->reenrollment_reason))
+                                            <div class="text-[11px] font-semibold text-amber-800">Pendiente autorización: {{ $enr->reenrollment_reason }}</div>
+                                        @endif
+                                    </div>
+                                    <button type="button" data-pdf-modal-url="{{ route('pdf.planilla', $enr) }}" data-pdf-modal-title="Planilla {{ $enr->enrollment_code }}" class="cecap-btn-primary !min-h-9 !px-3 text-xs">Planilla PDF</button>
                                 </div>
-                                <button type="button" data-pdf-modal-url="{{ route('pdf.planilla', $enr) }}" data-pdf-modal-title="Planilla {{ $enr->enrollment_code }}" class="cecap-btn-primary !min-h-9 !px-3 text-xs">Planilla PDF</button>
+                                @if($enr->attendanceRecords->isNotEmpty())
+                                    <div class="border-t border-slate-100 pt-2">
+                                        <div class="text-[11px] font-semibold text-slate-500 mb-1">Registro de Asistencia ({{ $enr->attendanceRecords->count() }} sesiones):</div>
+                                        <div class="flex flex-wrap gap-1.5">
+                                            @foreach($enr->attendanceRecords->sortByDesc('session_date')->take(12) as $attRec)
+                                                <span class="inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[11px] font-medium {{ $attRec->status === 'presente' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : ($attRec->status === 'ausente' ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-amber-50 border-amber-200 text-amber-900') }}">
+                                                    <span>{{ $attRec->session_date?->format('d/m/Y') }}</span>
+                                                    @if($attRec->subject)
+                                                        <span class="text-slate-500">({{ $attRec->subject->name }})</span>
+                                                    @endif
+                                                    <strong>{{ $attRec->status_label }}</strong>
+                                                </span>
+                                            @endforeach
+                                        </div>
+                                    </div>
+                                @endif
                             </div>
                         @empty
                             <p class="text-xs text-slate-500">Sin matrículas.</p>

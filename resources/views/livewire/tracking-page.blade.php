@@ -10,6 +10,7 @@
 
     <div class="flex flex-wrap gap-2">
         <button type="button" wire:click="setTab('attendance')" class="{{ $tab === 'attendance' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Asistencia Móvil Versionada</button>
+        <button type="button" wire:click="setTab('attendance_report')" class="{{ $tab === 'attendance_report' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Consulta de Asistencias</button>
         <button type="button" wire:click="setTab('grades')" class="{{ $tab === 'grades' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Calificaciones y Rectificación</button>
         <button type="button" wire:click="setTab('soft_skills')" class="{{ $tab === 'soft_skills' ? 'cecap-btn-primary' : 'cecap-btn-secondary' }}">Habilidades Blandas Permanentes</button>
     </div>
@@ -17,13 +18,22 @@
     {{-- TAB: ASISTENCIA --}}
     @if($tab === 'attendance')
         <div class="cecap-card space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                     <label class="block text-sm font-semibold text-slate-700 mb-1">Cohorte / Grupo</label>
                     <select wire:model.live="selected_edition_id" class="cecap-input">
                         <option value="">-- Seleccione cohorte --</option>
                         @foreach($editions as $ed)
                             <option value="{{ $ed->id }}">{{ $ed->course?->name }} — {{ $ed->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">Materia (si aplica)</label>
+                    <select wire:model.live="attendance_subject_id" class="cecap-input">
+                        <option value="">-- General del curso --</option>
+                        @foreach($selectedEdition?->course?->subjects ?? [] as $sub)
+                            <option value="{{ $sub->id }}">{{ $sub->code }} — {{ $sub->name }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -65,6 +75,211 @@
                     <button type="button" wire:click="saveAttendance" class="cecap-btn-primary">Guardar Asistencia Versionada</button>
                 @endif
             @endif
+        </div>
+    @endif
+
+    {{-- TAB: CONSULTA DE ASISTENCIAS (POR CURSO, MATERIA Y ESTUDIANTE) --}}
+    @if($tab === 'attendance_report')
+        <div class="space-y-6">
+            <div class="cecap-card space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <h2 class="text-base font-bold text-brand-950">Consulta de Asistencias por Curso, Materia y Estudiante</h2>
+                    @if($report_course_id || $report_edition_id || $report_subject_id !== '' || $report_student_id || trim($report_student_search) !== '' || $report_status !== '' || $report_date_from !== '' || $report_date_to !== '')
+                        <button type="button" wire:click="clearAttendanceReportFilters" class="cecap-btn-secondary !min-h-8 !px-3 !py-1 text-xs">Limpiar filtros</button>
+                    @endif
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Curso</label>
+                        <select wire:model.live="report_course_id" class="cecap-input bg-white">
+                            <option value="">Todos los cursos</option>
+                            @foreach($reportCourses as $course)
+                                <option value="{{ $course->id }}">{{ $course->code }} — {{ $course->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Materia</label>
+                        <select wire:model.live="report_subject_id" class="cecap-input bg-white">
+                            <option value="">Todas las materias</option>
+                            <option value="__general__">General del curso (sin materia)</option>
+                            @foreach($reportSubjects as $sub)
+                                <option value="{{ $sub->id }}">
+                                    {{ $sub->code }} — {{ $sub->name }}@if(!$report_course_id && $sub->course) ({{ $sub->course->name }})@endif
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Cohorte / Edición</label>
+                        <select wire:model.live="report_edition_id" class="cecap-input bg-white">
+                            <option value="">Todas las cohortes</option>
+                            @foreach($reportEditions as $ed)
+                                <option value="{{ $ed->id }}">{{ $ed->course?->name }} — {{ $ed->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Estudiante (seleccionar)</label>
+                        <select wire:model.live="report_student_id" class="cecap-input bg-white">
+                            <option value="">Todas las estudiantes</option>
+                            @foreach($students as $st)
+                                <option value="{{ $st->id }}">{{ $st->full_name }} ({{ $st->student_code }})</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Buscar estudiante (nombre, cédula o código)</label>
+                        <input wire:model.live.debounce.300ms="report_student_search" type="text" class="cecap-input bg-white" placeholder="Ej. María, 1-1234-5678, ALU-2026...">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Estado</label>
+                        <select wire:model.live="report_status" class="cecap-input bg-white">
+                            <option value="">Todos los estados</option>
+                            @foreach($attendanceStatusLabels as $code => $label)
+                                <option value="{{ $code }}">{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Desde</label>
+                            <input wire:model.live="report_date_from" type="date" class="cecap-input bg-white">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Hasta</label>
+                            <input wire:model.live="report_date_to" type="date" class="cecap-input bg-white">
+                        </div>
+                    </div>
+                </div>
+
+                {{-- KPIs del resultado filtrado --}}
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <div class="text-[11px] font-semibold uppercase text-slate-500">Sesiones</div>
+                        <div class="mt-1 text-xl font-bold text-slate-900">{{ $reportSummary['total'] }}</div>
+                    </div>
+                    <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                        <div class="text-[11px] font-semibold uppercase text-emerald-700">Presentes</div>
+                        <div class="mt-1 text-xl font-bold text-emerald-900">{{ $reportSummary['presente'] }}</div>
+                    </div>
+                    <div class="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                        <div class="text-[11px] font-semibold uppercase text-amber-800">Tardías</div>
+                        <div class="mt-1 text-xl font-bold text-amber-950">{{ $reportSummary['tardia'] }}</div>
+                    </div>
+                    <div class="rounded-xl border border-sky-200 bg-sky-50 p-3">
+                        <div class="text-[11px] font-semibold uppercase text-sky-700">Justificadas</div>
+                        <div class="mt-1 text-xl font-bold text-sky-900">{{ $reportSummary['justificada'] }}</div>
+                    </div>
+                    <div class="rounded-xl border border-rose-200 bg-rose-50 p-3">
+                        <div class="text-[11px] font-semibold uppercase text-rose-700">Ausentes</div>
+                        <div class="mt-1 text-xl font-bold text-rose-900">{{ $reportSummary['ausente'] }}</div>
+                    </div>
+                    <div class="rounded-xl border border-brand-200 bg-brand-50 p-3">
+                        <div class="text-[11px] font-semibold uppercase text-brand-800">% Asistencia</div>
+                        <div class="mt-1 text-xl font-bold text-brand-950">{{ number_format($reportSummary['percent'], 1) }}%</div>
+                    </div>
+                </div>
+            </div>
+
+            {{-- Resumen agrupado por Estudiante / Curso / Materia --}}
+            <div class="cecap-card overflow-x-auto">
+                <h3 class="text-base font-bold text-slate-900 mb-3">Resumen por Estudiante, Curso y Materia ({{ $reportByStudent->count() }})</h3>
+                <table class="w-full text-sm text-left">
+                    <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
+                        <tr>
+                            <th class="py-2 pr-3">Estudiante</th>
+                            <th class="py-2 pr-3">Curso / Cohorte</th>
+                            <th class="py-2 pr-3">Materia</th>
+                            <th class="py-2 pr-2 text-center">Pres.</th>
+                            <th class="py-2 pr-2 text-center">Tard.</th>
+                            <th class="py-2 pr-2 text-center">Just.</th>
+                            <th class="py-2 pr-2 text-center">Aus.</th>
+                            <th class="py-2 pr-2 text-center">Total</th>
+                            <th class="py-2 text-right">% Asist.</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @forelse($reportByStudent as $row)
+                            <tr>
+                                <td class="py-2.5 pr-3 font-semibold">
+                                    {{ $row['student']?->full_name }}
+                                    <div class="text-xs font-normal text-slate-500">{{ $row['student']?->student_code }} · {{ $row['student']?->identification_number }}</div>
+                                </td>
+                                <td class="py-2.5 pr-3 text-xs">
+                                    <div class="font-semibold text-slate-900">{{ $row['course_name'] }}</div>
+                                    <div class="text-slate-500">{{ $row['edition_name'] }}</div>
+                                </td>
+                                <td class="py-2.5 pr-3 text-xs text-slate-700">{{ $row['subject_label'] }}</td>
+                                <td class="py-2.5 pr-2 text-center text-xs font-semibold text-emerald-700">{{ $row['presente'] }}</td>
+                                <td class="py-2.5 pr-2 text-center text-xs font-semibold text-amber-800">{{ $row['tardia'] }}</td>
+                                <td class="py-2.5 pr-2 text-center text-xs font-semibold text-sky-700">{{ $row['justificada'] }}</td>
+                                <td class="py-2.5 pr-2 text-center text-xs font-semibold text-rose-700">{{ $row['ausente'] }}</td>
+                                <td class="py-2.5 pr-2 text-center text-xs font-bold text-slate-800">{{ $row['total'] }}</td>
+                                <td class="py-2.5 text-right">
+                                    <span class="cecap-badge {{ $row['passed'] ? 'bg-emerald-100 text-emerald-900' : 'bg-rose-100 text-rose-800' }}">
+                                        {{ number_format($row['percent'], 1) }}%
+                                    </span>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="9" class="py-6 text-center text-slate-500">No hay registros de asistencia para los filtros seleccionados.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+
+            {{-- Detalle fecha por fecha --}}
+            <div class="cecap-card overflow-x-auto">
+                <h3 class="text-base font-bold text-slate-900 mb-3">Detalle de Asistencias Fecha por Fecha ({{ $reportRecords->count() }})</h3>
+                <table class="w-full text-sm text-left">
+                    <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
+                        <tr>
+                            <th class="py-2 pr-3">Fecha</th>
+                            <th class="py-2 pr-3">Estudiante</th>
+                            <th class="py-2 pr-3">Curso / Cohorte</th>
+                            <th class="py-2 pr-3">Materia</th>
+                            <th class="py-2 pr-3">Estado</th>
+                            <th class="py-2">Registrado por / Rectificación</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @forelse($reportRecords as $rec)
+                            <tr>
+                                <td class="py-2.5 pr-3 font-mono text-xs font-semibold whitespace-nowrap">{{ $rec->session_date?->format('d/m/Y') }}</td>
+                                <td class="py-2.5 pr-3 text-xs font-semibold">
+                                    {{ $rec->student?->full_name }}
+                                    <div class="font-normal text-slate-500">{{ $rec->student?->student_code }}</div>
+                                </td>
+                                <td class="py-2.5 pr-3 text-xs">
+                                    <div class="font-semibold text-slate-900">{{ $rec->edition?->course?->name }}</div>
+                                    <div class="text-slate-500">{{ $rec->edition?->name }}</div>
+                                </td>
+                                <td class="py-2.5 pr-3 text-xs text-slate-700">
+                                    {{ $rec->subject ? ($rec->subject->code.' — '.$rec->subject->name) : 'General del curso' }}
+                                </td>
+                                <td class="py-2.5 pr-3 text-xs">
+                                    <span class="cecap-badge {{ $rec->status === 'presente' ? 'bg-emerald-100 text-emerald-900' : ($rec->status === 'ausente' ? 'bg-rose-100 text-rose-800' : ($rec->status === 'tardia' ? 'bg-amber-100 text-amber-900' : 'bg-sky-100 text-sky-900')) }}">
+                                        {{ $rec->status_label }}
+                                    </span>
+                                    @if($rec->version > 1)
+                                        <span class="ml-1 text-[11px] font-semibold text-slate-500">v{{ $rec->version }}</span>
+                                    @endif
+                                </td>
+                                <td class="py-2.5 text-xs text-slate-600">
+                                    {{ $rec->recorder?->name ?? 'Sistema' }}
+                                    @if($rec->rectification_reason)
+                                        <div class="text-[11px] text-amber-800">Motivo: {{ $rec->rectification_reason }}</div>
+                                    @endif
+                                </td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="6" class="py-6 text-center text-slate-500">Sin sesiones registradas con esos filtros.</td></tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
         </div>
     @endif
 

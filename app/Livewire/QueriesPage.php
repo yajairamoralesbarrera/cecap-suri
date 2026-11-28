@@ -64,7 +64,7 @@ class QueriesPage extends Component
         $selected = $this->selected_student_id
             ? Student::with([
                 'province', 'canton', 'district',
-                'enrollments.edition.course', 'enrollments.gradeRecords', 'enrollments.attendanceRecords',
+                'enrollments.edition.course', 'enrollments.gradeRecords', 'enrollments.attendanceRecords.subject',
                 'feeCharges', 'paymentReceipts.cashier',
                 'softSkills.evaluator',
                 'graduations.enrollment.edition.course',

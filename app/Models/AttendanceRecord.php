@@ -12,6 +12,7 @@ class AttendanceRecord extends Model
 
     protected $fillable = [
         'course_edition_id',
+        'course_subject_id',
         'enrollment_id',
         'student_id',
         'session_date',
@@ -29,6 +30,31 @@ class AttendanceRecord extends Model
             'session_date' => 'date',
             'is_current' => 'boolean',
         ];
+    }
+
+    public static function statusLabels(): array
+    {
+        return [
+            'presente' => 'Presente',
+            'tardia' => 'Tardía',
+            'justificada' => 'Justificada',
+            'ausente' => 'Ausente',
+        ];
+    }
+
+    public function getStatusLabelAttribute(): string
+    {
+        return self::statusLabels()[$this->status] ?? ucfirst((string) $this->status);
+    }
+
+    public function edition(): BelongsTo
+    {
+        return $this->belongsTo(CourseEdition::class, 'course_edition_id');
+    }
+
+    public function subject(): BelongsTo
+    {
+        return $this->belongsTo(CourseSubject::class, 'course_subject_id');
     }
 
     public function enrollment(): BelongsTo
