@@ -185,7 +185,24 @@
 
             {{-- Resumen agrupado por Estudiante / Curso / Materia --}}
             <div class="cecap-card overflow-x-auto">
-                <h3 class="text-base font-bold text-slate-900 mb-3">Resumen por Estudiante, Curso y Materia ({{ $reportByStudent->count() }})</h3>
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                    <h3 class="text-base font-bold text-slate-900">Resumen por Estudiante, Curso y Materia ({{ $reportByStudent->count() }})</h3>
+                    <a
+                        href="{{ route('seguimiento.attendance.excel', array_filter([
+                            'course_id' => $report_course_id,
+                            'edition_id' => $report_edition_id,
+                            'subject_id' => $report_subject_id,
+                            'student_id' => $report_student_id,
+                            'student_search' => trim($report_student_search),
+                            'status' => $report_status,
+                            'date_from' => $report_date_from,
+                            'date_to' => $report_date_to,
+                        ], fn ($v) => $v !== null && $v !== '')) }}"
+                        class="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-900 hover:bg-emerald-100"
+                    >
+                        Descargar Excel (.xlsx)
+                    </a>
+                </div>
                 <table class="w-full text-sm text-left">
                     <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
                         <tr>

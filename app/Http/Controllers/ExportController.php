@@ -7,12 +7,125 @@ use App\Models\Enrollment;
 use App\Models\PaymentReceipt;
 use App\Models\StaffPayment;
 use App\Models\Student;
+use App\Services\AttendanceReportService;
 use App\Services\AuditService;
+use App\Services\SimpleXlsxWriter;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ExportController extends Controller
 {
+    public function exportAttendanceExcel(Request $request, AttendanceReportService $reportService): Response
+    {
+        abort_unless($request->user()->hasEffectivePermission('seguimiento.view'), 403);
+
+        $editions = $reportService->accessibleEditionsFor($request->user());
+        $filters = [
+            'course_id' => $request->query('course_id'),
+            'edition_id' => $request->query('edition_id'),
+            'subject_id' => $request->query('subject_id', ''),
+            'student_id' => $request->query('student_id'),
+            'student_search' => $request->query('student_search', ''),
+            'status' => $request->query('status', ''),
+            'date_from' => $request->query('date_from', ''),
+            'date_to' => $request->query('date_to', ''),
+        ];
+
+        $result = $reportService->query($editions->pluck('id')->all(), $filters);
+
+        $summaryRows = [];
+        foreach ($result['byStudent'] as $row) {
+            $summaryRows[] = [
+                $row['student']?->student_code ?? '',
+                $row['student']?->full_name ?? '',
+                $row['student']?->identification_number ?? '',
+                $row['course_name'],
+                $row['edition_name'],
+                $row['subject_label'],
+                (int) $row['presente'],
+                (int) $row['tardia'],
+                (int) $row['justificada'],
+                (int) $row['ausente'],
+                (int) $row['total'],
+                (float) $row['percent'],
+                (float) $row['min_percent'],
+                $row['passed'] ? 'Cumple' : 'Bajo mínimo',
+            ];
+        }
+
+        $detailRows = [];
+        foreach ($result['records'] as $rec) {
+            $detailRows[] = [
+                $rec->session_date?->format('d/m/Y') ?? '',
+                $rec->student?->student_code ?? '',
+                $rec->student?->full_name ?? '',
+                $rec->student?->identification_number ?? '',
+                $rec->edition?->course?->name ?? '—',
+                $rec->edition?->name ?? '—',
+                $rec->subject ? ($rec->subject->code.' — '.$rec->subject->name) : 'General del curso',
+                $rec->status_label,
+                'v'.$rec->version,
+                $rec->recorder?->name ?? 'Sistema',
+                $rec->rectification_reason ?? '',
+            ];
+        }
+
+        $binary = SimpleXlsxWriter::build([
+            [
+                'title' => 'Resumen Asistencia',
+                'headers' => [
+                    'Código Alumna',
+                    'Estudiante',
+                    'Identificación',
+                    'Curso',
+                    'Cohorte / Edición',
+                    'Materia',
+                    'Presentes',
+                    'Tardías',
+                    'Justificadas',
+                    'Ausentes',
+                    'Total Sesiones',
+                    '% Asistencia',
+                    'Mínimo (%)',
+                    'Condición',
+                ],
+                'rows' => $summaryRows,
+            ],
+            [
+                'title' => 'Detalle por Fecha',
+                'headers' => [
+                    'Fecha',
+                    'Código Alumna',
+                    'Estudiante',
+                    'Identificación',
+                    'Curso',
+                    'Cohorte / Edición',
+                    'Materia',
+                    'Estado',
+                    'Versión',
+                    'Registrado por',
+                    'Motivo Rectificación',
+                ],
+                'rows' => $detailRows,
+            ],
+        ]);
+
+        AuditService::log('seguimiento.attendance_excel_exported', 'seguimiento', null, null, [
+            'filters' => array_filter($filters, fn ($v) => $v !== null && $v !== ''),
+            'summary_rows' => count($summaryRows),
+            'detail_rows' => count($detailRows),
+        ]);
+
+        $filename = sprintf('cecap_asistencias_%s.xlsx', now()->format('Ymd_His'));
+
+        return response($binary, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        ]);
+    }
+
     public function exportCsv(Request $request, string $type): StreamedResponse
     {
         abort_unless($request->user()->hasEffectivePermission('direccion.exports.csv'), 403);

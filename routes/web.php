@@ -70,8 +70,11 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/consultas', QueriesPage::class)->middleware(['module.enabled:consultas', 'cecap.perm:consultas.view'])->name('consultas');
         Route::get('/direccion', DirectionPage::class)->middleware(['module.enabled:direccion', 'cecap.perm:direccion.view'])->name('direccion');
 
-        // Exportaciones CSV UTF-8 BOM
+        // Exportaciones CSV UTF-8 BOM y Excel (.xlsx)
         Route::get('/direccion/exportar/{type}', [ExportController::class, 'exportCsv'])->name('direccion.export');
+        Route::get('/seguimiento/asistencias/excel', [ExportController::class, 'exportAttendanceExcel'])
+            ->middleware(['module.enabled:seguimiento', 'cecap.perm:seguimiento.view'])
+            ->name('seguimiento.attendance.excel');
 
         // Adjuntos privados protegidos
         Route::get('/adjuntos/{uuid}', [AttachmentController::class, 'download'])->name('attachments.download');

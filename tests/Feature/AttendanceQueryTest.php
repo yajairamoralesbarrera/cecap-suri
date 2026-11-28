@@ -196,4 +196,28 @@ it('records attendance per subject and queries attendance by course, subject, an
         ->assertSee('10/03/2026')
         ->assertSee('Masas Fermentadas')
         ->assertSee('Costos y Recetas');
+
+    // 5. Descarga Excel (.xlsx) del Resumen por Estudiante, Curso y Materia respetando filtros
+    $excelResponse = $this->actingAs($admin)->get(route('seguimiento.attendance.excel', [
+        'course_id' => $courseA->id,
+        'subject_id' => (string) $subjectMasas->id,
+    ]));
+
+    $excelResponse->assertOk()
+        ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+    $tmpXlsx = tempnam(sys_get_temp_dir(), 'test_xlsx_');
+    file_put_contents($tmpXlsx, $excelResponse->getContent());
+    $zip = new ZipArchive();
+    expect($zip->open($tmpXlsx))->toBeTrue();
+    $sheet1 = (string) $zip->getFromName('xl/worksheets/sheet1.xml');
+    $sheet2 = (string) $zip->getFromName('xl/worksheets/sheet2.xml');
+    $zip->close();
+    @unlink($tmpXlsx);
+
+    expect($sheet1)->toContain('Ana Ramírez');
+    expect($sheet1)->toContain('Lucía Vargas');
+    expect($sheet1)->toContain('Masas Fermentadas');
+    expect($sheet1)->not->toContain('Costos y Recetas');
+    expect($sheet2)->toContain('10/03/2026');
 });

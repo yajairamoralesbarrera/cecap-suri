@@ -98,12 +98,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Bypass nativo para PDFs y descargas documentales
+  // Bypass nativo para PDFs y descargas documentales (Excel / CSV)
   const accept = req.headers.get('accept') || '';
   if (
     accept.includes('application/pdf') ||
     url.pathname.endsWith('.pdf') ||
+    url.pathname.endsWith('.xlsx') ||
     url.pathname.startsWith('/pdf/') ||
+    url.pathname.includes('/excel') ||
     url.pathname.includes('/planilla/') ||
     url.searchParams.get('vista') === 'pdf'
   ) {
