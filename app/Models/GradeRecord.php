@@ -14,6 +14,7 @@ class GradeRecord extends Model
         'enrollment_id',
         'student_id',
         'course_subject_id',
+        'edition_evaluation_id',
         'evaluation_name',
         'score',
         'weight_percent',
@@ -47,6 +48,11 @@ class GradeRecord extends Model
     public function subject(): BelongsTo
     {
         return $this->belongsTo(CourseSubject::class, 'course_subject_id');
+    }
+
+    public function evaluation(): BelongsTo
+    {
+        return $this->belongsTo(EditionEvaluation::class, 'edition_evaluation_id');
     }
 
     public function previousGrade(): BelongsTo

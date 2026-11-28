@@ -286,52 +286,284 @@
     {{-- TAB: CALIFICACIONES Y RECTIFICACIÓN --}}
     @if($tab === 'grades')
         <div class="space-y-6">
-            @if(auth()->user()->hasEffectivePermission('seguimiento.grades.manage'))
-                <form wire:submit="recordGrade" class="cecap-card space-y-4">
-                    <h2 class="text-base font-bold text-brand-950">Registrar Calificación</h2>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Cohorte</label>
-                            <select wire:model.live="selected_edition_id" class="cecap-input">
-                                <option value="">-- Seleccione --</option>
-                                @foreach($editions as $ed)<option value="{{ $ed->id }}">{{ $ed->name }}</option>@endforeach
-                            </select>
+            {{-- Selector de Cohorte --}}
+            <div class="cecap-card space-y-3">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-1">1. Seleccione la Cohorte / Grupo *</label>
+                        <select wire:model.live="selected_edition_id" class="cecap-input">
+                            <option value="">-- Seleccione cohorte --</option>
+                            @foreach($editions as $ed)
+                                <option value="{{ $ed->id }}">{{ $ed->course?->name }} — {{ $ed->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    @if($selectedEdition)
+                        <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                            <div><strong class="text-slate-900">{{ $selectedEdition->course?->name }}</strong> · {{ $selectedEdition->name }}</div>
+                            <div>Alumnas inscritas: <strong>{{ $editionEnrollments->count() }}</strong> · Nota mínima: <strong>{{ number_format((float) ($selectedEdition->course?->min_passing_grade ?? 70), 0) }}</strong></div>
                         </div>
-                        <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Matrícula / Alumna *</label>
-                            <select wire:model="grade_enrollment_id" required class="cecap-input">
-                                <option value="">-- Seleccione --</option>
-                                @foreach($editionEnrollments as $enr)
-                                    <option value="{{ $enr->id }}">{{ $enr->student?->full_name }} ({{ $enr->enrollment_code }})</option>
-                                @endforeach
-                            </select>
+                    @endif
+                </div>
+            </div>
+
+            @if($selected_edition_id)
+                {{-- PASO 1: DEFINIR EVALUACIONES Y PORCENTAJES --}}
+                @if(auth()->user()->hasEffectivePermission('seguimiento.grades.manage'))
+                    <div class="cecap-card space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                                <h2 class="text-base font-bold text-brand-950">Paso 1 — Plan de Evaluaciones y Porcentajes</h2>
+                                <p class="text-xs text-slate-500">Defina primero las evaluaciones y el porcentaje de cada una (hasta 100%). Luego seleccione una evaluación para calificar a todas las alumnas.</p>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2 text-xs">
+                                <span class="cecap-badge {{ abs($scopeWeightUsed - 100) < 0.01 ? 'bg-emerald-100 text-emerald-900' : 'bg-brand-100 text-brand-900' }}">
+                                    Configurado: {{ number_format($scopeWeightUsed, 2) }}% / 100%
+                                </span>
+                                @if($scopeWeightRemaining > 0)
+                                    <span class="cecap-badge bg-amber-100 text-amber-900">Disponible: {{ number_format($scopeWeightRemaining, 2) }}%</span>
+                                @endif
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Materia (si aplica)</label>
-                            <select wire:model="grade_subject_id" class="cecap-input">
-                                <option value="">-- General del curso --</option>
-                                @foreach($selectedEdition?->course?->subjects ?? [] as $sub)
-                                    <option value="{{ $sub->id }}">{{ $sub->code }} — {{ $sub->name }}</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Evaluación *</label>
-                            <input wire:model="grade_evaluation_name" type="text" required class="cecap-input">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Nota (0 - 100) *</label>
-                            <input wire:model="grade_score" type="number" step="0.01" min="0" max="100" required class="cecap-input">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Peso % *</label>
-                            <input wire:model="grade_weight" type="number" step="0.01" min="1" max="100" required class="cecap-input">
+
+                        <form wire:submit="createEvaluation" class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                            <div class="md:col-span-3">
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Materia (si aplica)</label>
+                                <select wire:model.live="eval_subject_id" class="cecap-input bg-white">
+                                    <option value="">-- General del curso --</option>
+                                    @foreach($selectedEdition?->course?->subjects ?? [] as $sub)
+                                        <option value="{{ $sub->id }}">{{ $sub->code }} — {{ $sub->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="md:col-span-4">
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Nombre de la Evaluación *</label>
+                                <input wire:model="eval_name" type="text" required class="cecap-input bg-white" placeholder="Ej. Examen Parcial 1, Proyecto Práctico">
+                                @error('eval_name') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Porcentaje (%) *</label>
+                                <input wire:model="eval_weight" type="number" step="0.5" min="0.5" max="100" required class="cecap-input bg-white">
+                                @error('eval_weight') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                            </div>
+                            <div class="md:col-span-3">
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Fecha (opcional)</label>
+                                <input wire:model="eval_due_date" type="date" class="cecap-input bg-white">
+                            </div>
+                            <div class="md:col-span-12 flex justify-end">
+                                <button type="submit" class="cecap-btn-primary !min-h-9 !px-4 text-xs">+ Agregar Evaluación</button>
+                            </div>
+                        </form>
+
+                        {{-- Tabla de evaluaciones configuradas --}}
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm text-left">
+                                <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
+                                    <tr>
+                                        <th class="py-2 pr-3">Evaluación</th>
+                                        <th class="py-2 pr-3">Materia</th>
+                                        <th class="py-2 pr-3">Porcentaje</th>
+                                        <th class="py-2 pr-3">Calificadas</th>
+                                        <th class="py-2">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    @forelse($editionEvaluations as $ev)
+                                        @php
+                                            $gradedCount = $ev->gradeRecords->count();
+                                            $totalRoster = $editionEnrollments->count();
+                                            $isSelected = $selected_evaluation_id === $ev->id;
+                                        @endphp
+                                        <tr wire:key="eval-row-{{ $ev->id }}" class="{{ $isSelected ? 'bg-brand-50/70' : ($ev->is_active ? '' : 'opacity-60 bg-slate-50') }}">
+                                            <td class="py-2.5 pr-3 font-semibold text-slate-900">
+                                                {{ $ev->name }}
+                                                @if($ev->due_date)
+                                                    <div class="text-[11px] font-normal text-slate-500">Fecha: {{ $ev->due_date->format('d/m/Y') }}</div>
+                                                @endif
+                                                @if(! $ev->is_active)
+                                                    <span class="cecap-badge bg-slate-200 text-slate-700 mt-1">Inactiva</span>
+                                                @endif
+                                            </td>
+                                            <td class="py-2.5 pr-3 text-xs text-slate-700">
+                                                {{ $ev->subject ? ($ev->subject->code.' — '.$ev->subject->name) : 'General del curso' }}
+                                            </td>
+                                            <td class="py-2.5 pr-3 font-bold text-brand-900">{{ number_format((float) $ev->weight_percent, 2) }}%</td>
+                                            <td class="py-2.5 pr-3 text-xs">
+                                                <span class="cecap-badge {{ $totalRoster > 0 && $gradedCount >= $totalRoster ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-100 text-slate-700' }}">
+                                                    {{ $gradedCount }} / {{ $totalRoster }} alumnas
+                                                </span>
+                                            </td>
+                                            <td class="py-2.5">
+                                                <div class="flex flex-wrap gap-1.5">
+                                                    @if($ev->is_active)
+                                                        <button type="button" wire:click="selectEvaluation({{ $ev->id }})" class="{{ $isSelected ? 'cecap-btn-primary' : 'cecap-btn-secondary' }} !min-h-8 !px-3 !py-1 text-xs">
+                                                            {{ $isSelected ? 'Cargando Notas ✓' : 'Cargar Notas' }}
+                                                        </button>
+                                                    @endif
+                                                    <button type="button" wire:click="toggleEvaluationActive({{ $ev->id }})" class="inline-flex min-h-8 items-center justify-center rounded-xl border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer">
+                                                        {{ $ev->is_active ? 'Inactivar' : 'Reactivar' }}
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    @empty
+                                        <tr><td colspan="5" class="py-4 text-center text-xs text-slate-500">Aún no hay evaluaciones configuradas para esta cohorte. Agregue la primera arriba.</td></tr>
+                                    @endforelse
+                                </tbody>
+                            </table>
                         </div>
                     </div>
-                    <button type="submit" class="cecap-btn-primary">Guardar Calificación</button>
-                </form>
 
-                @if($selected_edition_id && $editionEnrollments->isNotEmpty())
+                    {{-- PASO 2: CARGAR NOTAS PARA TODAS LAS ALUMNAS DE LA EVALUACIÓN SELECCIONADA --}}
+                    <div class="cecap-card space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                                <h2 class="text-base font-bold text-brand-950">Paso 2 — Carga de Notas por Evaluación (Todas las Alumnas)</h2>
+                                <p class="text-xs text-slate-500">Seleccione una evaluación para listar a todas las alumnas inscritas y registrar sus calificaciones en un solo paso.</p>
+                            </div>
+                            <div class="w-full md:w-80">
+                                <select wire:model.live="selected_evaluation_id" class="cecap-input">
+                                    <option value="">-- Seleccione evaluación --</option>
+                                    @foreach($activeEvaluations as $ev)
+                                        <option value="{{ $ev->id }}">
+                                            {{ $ev->name }} ({{ number_format((float) $ev->weight_percent, 2) }}%)@if($ev->subject) — {{ $ev->subject->name }}@endif
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+
+                        @if($selectedEvaluation)
+                            <div class="rounded-xl border border-brand-200 bg-brand-50/60 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+                                <div>
+                                    <span class="font-bold text-brand-950">{{ $selectedEvaluation->name }}</span>
+                                    · Peso: <strong>{{ number_format((float) $selectedEvaluation->weight_percent, 2) }}%</strong>
+                                    · Materia: <strong>{{ $selectedEvaluation->subject ? ($selectedEvaluation->subject->code.' — '.$selectedEvaluation->subject->name) : 'General del curso' }}</strong>
+                                </div>
+                                <div class="font-semibold text-brand-900">
+                                    {{ $evaluationGradesByEnrollment->count() }} de {{ $editionEnrollments->count() }} alumnas calificadas
+                                </div>
+                            </div>
+
+                            @if($editionEnrollments->isNotEmpty())
+                                <form wire:submit="saveEvaluationGrades" class="space-y-4">
+                                    <div class="overflow-x-auto">
+                                        <table class="w-full text-sm text-left">
+                                            <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
+                                                <tr>
+                                                    <th class="py-2 pr-3">Alumna / Matrícula</th>
+                                                    <th class="py-2 pr-3">Nota Final Acumulada</th>
+                                                    <th class="py-2 pr-3">Estado en esta Evaluación</th>
+                                                    <th class="py-2">Nota (0 - 100)</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-slate-100">
+                                                @foreach($editionEnrollments as $enr)
+                                                    @php $savedGrade = $evaluationGradesByEnrollment->get($enr->id); @endphp
+                                                    <tr wire:key="roster-grade-{{ $selectedEvaluation->id }}-{{ $enr->id }}" class="{{ ($savedGrade && $rectifyingGradeId === $savedGrade->id) ? 'bg-amber-50/50' : '' }}">
+                                                        <td class="py-2.5 pr-3 font-semibold text-slate-900">
+                                                            {{ $enr->student?->full_name }}
+                                                            <div class="text-xs font-normal text-slate-500">{{ $enr->enrollment_code }} · {{ $enr->student?->identification_number }}</div>
+                                                        </td>
+                                                        <td class="py-2.5 pr-3 text-xs">
+                                                            <strong class="text-slate-900">{{ number_format($enr->calculateFinalGrade(), 1) }}</strong>
+                                                            <div class="text-slate-500">Asist: {{ number_format($enr->calculateAttendancePercent(), 0) }}%</div>
+                                                        </td>
+                                                        <td class="py-2.5 pr-3 text-xs">
+                                                            @if($savedGrade)
+                                                                <span class="cecap-badge bg-emerald-100 text-emerald-900">Guardada (v{{ $savedGrade->version }})</span>
+                                                            @else
+                                                                <span class="cecap-badge bg-amber-100 text-amber-900">Pendiente</span>
+                                                            @endif
+                                                        </td>
+                                                        <td class="py-2.5">
+                                                            @if($savedGrade)
+                                                                <div class="flex flex-wrap items-center gap-2">
+                                                                    <span class="text-base font-bold text-brand-950">{{ number_format((float) $savedGrade->score, 2) }}</span>
+                                                                    @if(auth()->user()->hasEffectivePermission('seguimiento.grades.rectify'))
+                                                                        <button type="button" wire:click="startRectifyGrade({{ $savedGrade->id }})" class="cecap-btn-secondary !min-h-8 !px-2.5 !py-1 text-xs">Rectificar</button>
+                                                                    @endif
+                                                                </div>
+                                                            @else
+                                                                <div class="max-w-[140px]">
+                                                                    <input
+                                                                        wire:model="evaluation_scores.{{ $enr->id }}"
+                                                                        type="number"
+                                                                        step="0.01"
+                                                                        min="0"
+                                                                        max="100"
+                                                                        placeholder="0 - 100"
+                                                                        class="cecap-input !min-h-9 !py-1.5 text-sm"
+                                                                    >
+                                                                    @error('evaluation_scores.'.$enr->id)
+                                                                        <div class="mt-1 text-[11px] font-semibold text-rose-700">{{ $message }}</div>
+                                                                    @enderror
+                                                                </div>
+                                                            @endif
+                                                        </td>
+                                                    </tr>
+                                                    @if($savedGrade && $rectifyingGradeId === $savedGrade->id)
+                                                        <tr wire:key="roster-rectify-{{ $savedGrade->id }}">
+                                                            <td colspan="4" class="py-3 px-1">
+                                                                <div class="rounded-2xl border-2 border-amber-300 bg-amber-50/80 p-4 space-y-3">
+                                                                    <div class="flex items-center justify-between gap-2">
+                                                                        <h3 class="text-sm font-bold text-amber-950">Rectificación Auditada — {{ $enr->student?->full_name }} ({{ $selectedEvaluation->name }})</h3>
+                                                                        <button type="button" wire:click="cancelRectifyGrade" class="cecap-btn-secondary !min-h-8 !px-3 text-xs">Cancelar</button>
+                                                                    </div>
+                                                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                                        <div>
+                                                                            <label class="block text-xs font-semibold text-slate-700 mb-1">Nueva Nota (0 - 100) *</label>
+                                                                            <input wire:model="rectify_score" type="number" step="0.01" min="0" max="100" class="cecap-input bg-white">
+                                                                        </div>
+                                                                        <div>
+                                                                            <label class="block text-xs font-semibold text-slate-700 mb-1">Motivo Estandarizado *</label>
+                                                                            <select wire:model="rectify_reason_code" class="cecap-input bg-white">
+                                                                                @foreach($rectificationReasons as $code => $label)
+                                                                                    <option value="{{ $code }}">{{ $label }}</option>
+                                                                                @endforeach
+                                                                            </select>
+                                                                        </div>
+                                                                        <div>
+                                                                            <label class="block text-xs font-semibold text-slate-700 mb-1">Justificación Detallada *</label>
+                                                                            <input wire:model="rectify_notes" type="text" class="cecap-input bg-white" placeholder="Detalle auditado de la rectificación">
+                                                                        </div>
+                                                                    </div>
+                                                                    <div class="flex flex-wrap gap-2">
+                                                                        <button type="button" wire:click="submitGradeRectification" class="cecap-btn-accent text-xs">Confirmar Rectificación Versionada</button>
+                                                                        <button type="button" wire:click="cancelRectifyGrade" class="cecap-btn-secondary text-xs">Cancelar</button>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    @endif
+                                                @endforeach
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    @if($evaluationGradesByEnrollment->count() < $editionEnrollments->count())
+                                        <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                                            <span class="text-xs text-slate-500">Puede dejar en blanco las alumnas que aún no han realizado la evaluación y completarlas después.</span>
+                                            <button type="submit" class="cecap-btn-primary">Guardar Notas de "{{ $selectedEvaluation->name }}"</button>
+                                        </div>
+                                    @endif
+                                </form>
+                            @else
+                                <p class="text-sm text-slate-500 py-4 text-center">No hay alumnas confirmadas o en curso en esta cohorte.</p>
+                            @endif
+                        @else
+                            <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50/70 p-4 text-center text-xs text-slate-600">
+                                @if($activeEvaluations->isEmpty())
+                                    Primero cree al menos una evaluación en el <strong>Paso 1</strong> arriba para habilitar la carga de notas.
+                                @else
+                                    Haga clic en <strong>Cargar Notas</strong> en una evaluación del Paso 1 o selecciónela en el desplegable superior para ver a todas las alumnas del curso.
+                                @endif
+                            </div>
+                        @endif
+                    </div>
+                @endif
+
+                @if($editionEnrollments->isNotEmpty() && auth()->user()->hasEffectivePermission('seguimiento.grades.manage'))
                     <div class="cecap-card space-y-2.5">
                         <h2 class="text-sm font-bold text-slate-900">Estado Académico del Grupo (Aprobación / Reprobación)</h2>
                         <div class="divide-y divide-slate-100">
@@ -361,16 +593,17 @@
             @endif
 
             <div class="cecap-card overflow-x-auto">
-                <h2 class="text-base font-bold text-slate-900 mb-3">Calificaciones Vigentes</h2>
+                <h2 class="text-base font-bold text-slate-900 mb-3">Calificaciones Vigentes @if($selectedEdition) — {{ $selectedEdition->name }} @endif</h2>
                 <table class="w-full text-sm text-left">
                     <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
-                        <tr><th class="py-2 pr-3">Alumna</th><th class="py-2 pr-3">Evaluación</th><th class="py-2 pr-3">Nota</th><th class="py-2 pr-3">Versión</th><th class="py-2">Acción</th></tr>
+                        <tr><th class="py-2 pr-3">Alumna</th><th class="py-2 pr-3">Evaluación</th><th class="py-2 pr-3">Peso</th><th class="py-2 pr-3">Nota</th><th class="py-2 pr-3">Versión</th><th class="py-2">Acción</th></tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
                         @forelse($recentGrades as $g)
                             <tr wire:key="grade-row-{{ $g->id }}" class="{{ $rectifyingGradeId === $g->id ? 'bg-amber-50/40' : '' }}">
                                 <td class="py-2.5 pr-3 font-semibold">{{ $g->student?->full_name }}<div class="text-xs text-slate-500">{{ $g->enrollment?->edition?->name }}</div></td>
                                 <td class="py-2.5 pr-3">{{ $g->evaluation_name }} @if($g->subject)<span class="text-xs text-slate-500">({{ $g->subject->name }})</span>@endif</td>
+                                <td class="py-2.5 pr-3 text-xs font-semibold text-slate-600">{{ number_format((float) $g->weight_percent, 0) }}%</td>
                                 <td class="py-2.5 pr-3 font-bold text-brand-950">{{ number_format((float) $g->score, 2) }}</td>
                                 <td class="py-2.5 pr-3 text-xs">v{{ $g->version }} @if($g->rectification_reason_code)<span class="text-amber-700">({{ $g->rectification_reason_code }})</span>@endif</td>
                                 <td class="py-2.5">
@@ -379,9 +612,9 @@
                                     @endif
                                 </td>
                             </tr>
-                            @if($rectifyingGradeId === $g->id)
+                            @if($rectifyingGradeId === $g->id && (! $selectedEvaluation || (int) $g->edition_evaluation_id !== (int) $selectedEvaluation->id))
                                 <tr wire:key="grade-rectify-{{ $g->id }}">
-                                    <td colspan="5" class="py-3 px-1">
+                                    <td colspan="6" class="py-3 px-1">
                                         <div class="rounded-2xl border-2 border-amber-300 bg-amber-50/80 p-4 space-y-4">
                                             <div class="flex items-center justify-between gap-2">
                                                 <h3 class="text-sm font-bold text-amber-950">Rectificación Auditada de Calificación (Nueva Versión)</h3>
@@ -414,7 +647,7 @@
                                 </tr>
                             @endif
                         @empty
-                            <tr><td colspan="5" class="py-6 text-center text-slate-500">Sin calificaciones registradas.</td></tr>
+                            <tr><td colspan="6" class="py-6 text-center text-slate-500">Sin calificaciones registradas.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
