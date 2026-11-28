@@ -18,13 +18,20 @@ class WorkshopParticipant extends Model
         'email',
         'phone',
         'attended',
+        'amount_charged',
+        'payment_method',
+        'payment_status',
+        'payment_reference',
         'notes',
         'recorded_by',
     ];
 
     protected function casts(): array
     {
-        return ['attended' => 'boolean'];
+        return [
+            'attended' => 'boolean',
+            'amount_charged' => 'decimal:2',
+        ];
     }
 
     public function workshop(): BelongsTo

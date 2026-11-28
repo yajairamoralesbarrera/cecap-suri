@@ -21,13 +21,19 @@ class Workshop extends Model
         'end_time',
         'location',
         'max_capacity',
+        'soft_skills_absence_credits',
+        'cost',
         'status',
         'created_by',
     ];
 
     protected function casts(): array
     {
-        return ['event_date' => 'date'];
+        return [
+            'event_date' => 'date',
+            'soft_skills_absence_credits' => 'integer',
+            'cost' => 'decimal:2',
+        ];
     }
 
     public function participants(): HasMany

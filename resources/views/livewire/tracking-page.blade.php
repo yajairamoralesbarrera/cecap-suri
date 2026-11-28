@@ -674,71 +674,320 @@
 
     {{-- TAB: HABILIDADES BLANDAS --}}
     @if($tab === 'soft_skills')
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            @if(auth()->user()->hasEffectivePermission('seguimiento.soft_skills.manage'))
-                <form wire:submit="recordSoftSkill" class="cecap-card space-y-4">
-                    <h2 class="text-base font-bold text-brand-950">Registrar Habilidad Blanda Permanente</h2>
+        @php
+            $canManageSs = auth()->user()->hasEffectivePermission('seguimiento.soft_skills.manage')
+                || auth()->user()->hasEffectivePermission('seguimiento.attendance.manage');
+        @endphp
+        <div class="space-y-6">
+            {{-- PASO 1: SEMANAS DE HABILIDADES BLANDAS (DESDE - HASTA + SIN SESIÓN) --}}
+            <div class="cecap-card space-y-4">
+                <div>
+                    <h2 class="text-base font-bold text-brand-950">Paso 1 — Semanas de Habilidades Blandas (Desde – Hasta)</h2>
+                    <p class="text-xs text-slate-500">Las alumnas pueden asistir en cualquier horario durante la semana. Si una semana no hay Habilidades Blandas, márquela como <strong>Sin sesión</strong> para que no genere ausencias.</p>
+                </div>
+
+                @if($canManageSs)
+                    <form wire:submit="createSoftSkillWeek" class="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-3">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Semana Desde *</label>
+                                <input wire:model="ss_week_start" type="date" required class="cecap-input bg-white">
+                                @error('ss_week_start') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Semana Hasta *</label>
+                                <input wire:model="ss_week_end" type="date" required class="cecap-input bg-white">
+                                @error('ss_week_end') <div class="mt-1 text-xs font-semibold text-rose-700">{{ $message }}</div> @enderror
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="block text-xs font-semibold text-slate-700 mb-1">Tema / Etiqueta (opcional)</label>
+                                <input wire:model="ss_week_label" type="text" class="cecap-input bg-white" placeholder="Ej. Semana 3 — Liderazgo y Autoestima">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
+                            <label class="inline-flex items-center gap-2 text-xs font-semibold text-amber-950 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 cursor-pointer">
+                                <input wire:model.live="ss_week_no_session" type="checkbox" class="rounded border-amber-400 text-amber-700">
+                                <span>Esta semana NO hay Habilidades Blandas</span>
+                            </label>
+                            <div class="md:col-span-2">
+                                @if($ss_week_no_session)
+                                    <input wire:model="ss_week_no_session_reason" type="text" class="cecap-input bg-white" placeholder="Motivo (ej. Semana Santa, feriado, actividad institucional)">
+                                @endif
+                            </div>
+                        </div>
+                        <div class="flex justify-end">
+                            <button type="submit" class="cecap-btn-primary !min-h-9 !px-4 text-xs">+ Registrar Semana</button>
+                        </div>
+                    </form>
+                @endif
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
+                            <tr>
+                                <th class="py-2 pr-3">Semana (Desde – Hasta)</th>
+                                <th class="py-2 pr-3">Estado</th>
+                                <th class="py-2 pr-3">Registros</th>
+                                <th class="py-2">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            @forelse($softSkillWeeks as $wk)
+                                @php $isWkSelected = $selected_ss_week_id === $wk->id; @endphp
+                                <tr wire:key="ss-week-{{ $wk->id }}" class="{{ $isWkSelected ? 'bg-brand-50/70' : '' }}">
+                                    <td class="py-2.5 pr-3 font-semibold text-slate-900">
+                                        {{ $wk->display_title }}
+                                        @if(! $wk->has_session && $wk->no_session_reason)
+                                            <div class="text-xs font-normal text-amber-800">Motivo: {{ $wk->no_session_reason }}</div>
+                                        @endif
+                                    </td>
+                                    <td class="py-2.5 pr-3 text-xs">
+                                        @if($wk->has_session)
+                                            <span class="cecap-badge bg-emerald-100 text-emerald-900">Con Sesión</span>
+                                        @else
+                                            <span class="cecap-badge bg-amber-100 text-amber-950">Sin Habilidades Blandas</span>
+                                        @endif
+                                    </td>
+                                    <td class="py-2.5 pr-3 text-xs text-slate-600">{{ $wk->attendances_count }} alumna(s)</td>
+                                    <td class="py-2.5">
+                                        <div class="flex flex-wrap gap-1.5">
+                                            <button type="button" wire:click="selectSoftSkillWeek({{ $wk->id }})" class="{{ $isWkSelected ? 'cecap-btn-primary' : 'cecap-btn-secondary' }} !min-h-8 !px-3 !py-1 text-xs">
+                                                {{ $isWkSelected ? 'Seleccionada ✓' : 'Pasar Asistencia' }}
+                                            </button>
+                                            @if($canManageSs)
+                                                <button type="button" wire:click="toggleSoftSkillWeekHasSession({{ $wk->id }})" class="inline-flex min-h-8 items-center justify-center rounded-xl border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-950 hover:bg-amber-100 cursor-pointer">
+                                                    {{ $wk->has_session ? 'Marcar Sin Sesión' : 'Habilitar Sesión' }}
+                                                </button>
+                                            @endif
+                                        </div>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="4" class="py-4 text-center text-xs text-slate-500">Aún no hay semanas creadas. Registre la primera semana (Desde – Hasta) arriba.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {{-- PASO 2: LISTADO COMPLETO DE TODAS LAS ALUMNAS INSCRITAS + FILTROS + COMPENSACIÓN POR TALLERES --}}
+            <div class="cecap-card space-y-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-1">Alumna *</label>
-                        <select wire:model="skill_student_id" required class="cecap-input">
-                            <option value="">-- Seleccione --</option>
-                            @foreach($students as $st)<option value="{{ $st->id }}">{{ $st->full_name }} ({{ $st->identification_number }})</option>@endforeach
+                        <h2 class="text-base font-bold text-brand-950">Paso 2 — Asistencia Semanal de Habilidades Blandas (Todas las Alumnas Inscritas)</h2>
+                        <p class="text-xs text-slate-500">Se listan todas las alumnas inscritas junto con el curso o los cursos que cursan y las ausencias compensadas por talleres/seminarios.</p>
+                    </div>
+                    <div class="w-full md:w-80">
+                        <select wire:model.live="selected_ss_week_id" class="cecap-input">
+                            <option value="">-- Seleccione semana --</option>
+                            @foreach($softSkillWeeks as $wk)
+                                <option value="{{ $wk->id }}">
+                                    {{ $wk->display_title }}@if(!$wk->has_session) [SIN SESIÓN]@endif
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                </div>
+
+                @if($selectedSoftSkillWeek && ! $selectedSoftSkillWeek->has_session)
+                    <div class="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+                        <strong>Semana sin Habilidades Blandas:</strong> {{ $selectedSoftSkillWeek->display_title }}
+                        @if($selectedSoftSkillWeek->no_session_reason) — {{ $selectedSoftSkillWeek->no_session_reason }}. @endif
+                        Esta semana <strong>no suma ausencias</strong> a ninguna alumna.
+                    </div>
+                @endif
+
+                {{-- Filtros del listado de alumnas --}}
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                    <div class="md:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Buscar alumna (nombre, cédula o código)</label>
+                        <input wire:model.live.debounce.300ms="ss_search" type="text" class="cecap-input bg-white" placeholder="Ej. Yajaira, 801720968, ALU-2026...">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Filtrar por Curso</label>
+                        <select wire:model.live="ss_filter_course_id" class="cecap-input bg-white">
+                            <option value="">Todos los cursos</option>
+                            @foreach($softSkillCourses as $c)
+                                <option value="{{ $c->id }}">{{ $c->code }} — {{ $c->name }}</option>
+                            @endforeach
                         </select>
                     </div>
                     <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-1">Habilidad Blanda *</label>
-                        <input wire:model="skill_name" type="text" required class="cecap-input">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1">Estado en la semana</label>
+                        <select wire:model.live="ss_filter_status" class="cecap-input bg-white">
+                            <option value="">Todos los estados</option>
+                            <option value="presente">Presente</option>
+                            <option value="justificada">Justificada</option>
+                            <option value="ausente">Ausente</option>
+                            <option value="sin_registrar">Sin registrar</option>
+                        </select>
                     </div>
-                    <div class="grid grid-cols-2 gap-2">
+                    @if(trim($ss_search) !== '' || $ss_filter_course_id || $ss_filter_status !== '')
+                        <div class="md:col-span-4 flex items-center justify-between text-xs">
+                            <span class="text-slate-500">Mostrando {{ $softSkillRoster->count() }} alumna(s)</span>
+                            <button type="button" wire:click="clearSoftSkillFilters" class="cecap-btn-secondary !min-h-8 !px-3 !py-1 text-xs">Limpiar filtros</button>
+                        </div>
+                    @endif
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
+                            <tr>
+                                <th class="py-2 pr-3">Alumna</th>
+                                <th class="py-2 pr-3">Curso(s) que cursa</th>
+                                <th class="py-2 pr-3">Balance HB (Talleres / Ausencias)</th>
+                                <th class="py-2">Asistencia de la Semana (cualquier horario)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            @forelse($softSkillRoster as $item)
+                                @php
+                                    /** @var \App\Models\Student $st */
+                                    $st = $item['student'];
+                                    $sum = $item['summary'];
+                                    $curSsStatus = $ss_statuses[$st->id] ?? null;
+                                @endphp
+                                <tr wire:key="ss-roster-{{ $st->id }}">
+                                    <td class="py-3 pr-3 font-semibold text-slate-900">
+                                        {{ $st->full_name }}
+                                        <div class="text-xs font-normal text-slate-500">{{ $st->student_code }} · {{ $st->identification_number }}</div>
+                                    </td>
+                                    <td class="py-3 pr-3 text-xs">
+                                        <div class="flex flex-wrap gap-1">
+                                            @foreach($item['courses'] as $cLabel)
+                                                <span class="inline-flex items-center rounded-md bg-brand-50 border border-brand-200 px-2 py-0.5 text-[11px] font-semibold text-brand-900">{{ $cLabel }}</span>
+                                            @endforeach
+                                        </div>
+                                    </td>
+                                    <td class="py-3 pr-3 text-xs space-y-1">
+                                        <div class="flex flex-wrap gap-1">
+                                            <span class="cecap-badge bg-emerald-100 text-emerald-900">Asistió: {{ $sum['present'] }}</span>
+                                            @if($sum['justified'] > 0)
+                                                <span class="cecap-badge bg-sky-100 text-sky-900">Just: {{ $sum['justified'] }}</span>
+                                            @endif
+                                            <span class="cecap-badge {{ $sum['net_absences'] > 0 ? 'bg-rose-100 text-rose-800' : 'bg-slate-100 text-slate-700' }}">
+                                                Aus. Netas: {{ $sum['net_absences'] }}
+                                            </span>
+                                        </div>
+                                        @if($sum['workshop_credits'] > 0)
+                                            <div class="text-[11px] font-semibold text-emerald-800">
+                                                Compensado por actividades: -{{ $sum['workshop_credits'] }} (brutas: {{ $sum['gross_absences'] }})
+                                                <span class="block font-normal text-slate-500">{{ implode(' · ', $sum['credited_workshops']) }}</span>
+                                            </div>
+                                        @endif
+                                    </td>
+                                    <td class="py-3">
+                                        @if($selectedSoftSkillWeek && $selectedSoftSkillWeek->has_session)
+                                            <div class="space-y-1.5">
+                                                <div class="flex flex-wrap gap-1">
+                                                    @foreach(['presente' => 'Presente', 'justificada' => 'Justificada', 'ausente' => 'Ausente'] as $code => $label)
+                                                        <button
+                                                            type="button"
+                                                            wire:click="setSoftSkillStatus({{ $st->id }}, '{{ $code }}')"
+                                                            class="min-h-8 rounded-lg px-2.5 py-1 text-xs font-semibold border transition cursor-pointer {{ $curSsStatus === $code ? ($code === 'ausente' ? 'bg-rose-700 text-white border-rose-700' : ($code === 'justificada' ? 'bg-sky-700 text-white border-sky-700' : 'bg-brand-900 text-white border-brand-900')) : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50' }}"
+                                                        >
+                                                            {{ $label }}
+                                                        </button>
+                                                    @endforeach
+                                                </div>
+                                                <input
+                                                    wire:model="ss_schedule_notes.{{ $st->id }}"
+                                                    type="text"
+                                                    class="cecap-input !min-h-8 !py-1 text-xs"
+                                                    placeholder="Horario asistido (opc., ej. Mar Mañana)"
+                                                >
+                                            </div>
+                                        @elseif($selectedSoftSkillWeek && ! $selectedSoftSkillWeek->has_session)
+                                            <span class="text-xs font-semibold text-amber-800">Sin sesión esta semana</span>
+                                        @else
+                                            <span class="text-xs text-slate-400">Seleccione una semana arriba</span>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="4" class="py-6 text-center text-slate-500">No hay alumnas inscritas que coincidan con el filtro.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+
+                @if($canManageSs && $selectedSoftSkillWeek && $selectedSoftSkillWeek->has_session && $softSkillRoster->isNotEmpty())
+                    <div class="flex justify-end pt-2 border-t border-slate-100">
+                        <button type="button" wire:click="saveSoftSkillAttendance" class="cecap-btn-primary">
+                            Guardar Asistencia Semanal ({{ $selectedSoftSkillWeek->range_label }})
+                        </button>
+                    </div>
+                @endif
+            </div>
+
+            {{-- EVALUACIÓN CUALITATIVA DE HABILIDADES BLANDAS PERMANENTES (CONSTANCIA PDF) --}}
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                @if(auth()->user()->hasEffectivePermission('seguimiento.soft_skills.manage'))
+                    <form wire:submit="recordSoftSkill" class="cecap-card space-y-4">
+                        <h2 class="text-base font-bold text-brand-950">Evaluación Cualitativa (Constancia PDF)</h2>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Nivel *</label>
-                            <select wire:model="skill_level" class="cecap-input">
-                                <option value="en_desarrollo">En desarrollo</option>
-                                <option value="competente">Competente</option>
-                                <option value="destacado">Destacado</option>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Alumna *</label>
+                            <select wire:model="skill_student_id" required class="cecap-input">
+                                <option value="">-- Seleccione --</option>
+                                @foreach($students as $st)<option value="{{ $st->id }}">{{ $st->full_name }} ({{ $st->identification_number }})</option>@endforeach
                             </select>
                         </div>
                         <div>
-                            <label class="block text-sm font-semibold text-slate-700 mb-1">Puntaje (1-100)</label>
-                            <input wire:model="skill_score" type="number" min="1" max="100" class="cecap-input">
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Habilidad Blanda *</label>
+                            <input wire:model="skill_name" type="text" required class="cecap-input">
                         </div>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-semibold text-slate-700 mb-1">Observaciones</label>
-                        <textarea wire:model="skill_observations" rows="2" class="cecap-input"></textarea>
-                    </div>
-                    <button type="submit" class="cecap-btn-primary w-full">Guardar Evaluación</button>
-                </form>
-            @endif
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Nivel *</label>
+                                <select wire:model="skill_level" class="cecap-input">
+                                    <option value="en_desarrollo">En desarrollo</option>
+                                    <option value="competente">Competente</option>
+                                    <option value="destacado">Destacado</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Puntaje (1-100)</label>
+                                <input wire:model="skill_score" type="number" min="1" max="100" class="cecap-input">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-1">Observaciones</label>
+                            <textarea wire:model="skill_observations" rows="2" class="cecap-input"></textarea>
+                        </div>
+                        <button type="submit" class="cecap-btn-primary w-full">Guardar Evaluación</button>
+                    </form>
+                @endif
 
-            <div class="cecap-card lg:col-span-2 overflow-x-auto">
-                <h2 class="text-base font-bold text-slate-900 mb-3">Historial Permanente de Habilidades Blandas</h2>
-                <table class="w-full text-sm text-left">
-                    <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
-                        <tr><th class="py-2 pr-3">Alumna</th><th class="py-2 pr-3">Habilidad</th><th class="py-2 pr-3">Nivel</th><th class="py-2">Constancia</th></tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100">
-                        @forelse($softSkills as $sk)
-                            <tr>
-                                <td class="py-2.5 pr-3 font-semibold">{{ $sk->student?->full_name }}</td>
-                                <td class="py-2.5 pr-3">{{ $sk->skill_name }}<div class="text-xs text-slate-500">{{ $sk->evaluated_on?->format('d/m/Y') }}</div></td>
-                                <td class="py-2.5 pr-3"><span class="cecap-badge bg-brand-100 text-brand-900">{{ ucfirst(str_replace('_', ' ', $sk->level)) }}</span></td>
-                                <td class="py-2.5">
-                                    @if($sk->student)
-                                        <button type="button"
-                                                data-pdf-modal-url="{{ route('pdf.habilidades', $sk->student) }}"
-                                                data-pdf-modal-title="Constancia Habilidades Blandas"
-                                                class="cecap-btn-secondary !min-h-9 !px-3 text-xs">
-                                            Constancia PDF
-                                        </button>
-                                    @endif
-                                </td>
-                            </tr>
-                        @empty
-                            <tr><td colspan="4" class="py-6 text-center text-slate-500">Sin evaluaciones registradas.</td></tr>
-                        @endforelse
-                    </tbody>
-                </table>
+                <div class="cecap-card lg:col-span-2 overflow-x-auto">
+                    <h2 class="text-base font-bold text-slate-900 mb-3">Historial Permanente de Habilidades Blandas</h2>
+                    <table class="w-full text-sm text-left">
+                        <thead class="border-b border-slate-200 text-xs uppercase text-slate-500">
+                            <tr><th class="py-2 pr-3">Alumna</th><th class="py-2 pr-3">Habilidad</th><th class="py-2 pr-3">Nivel</th><th class="py-2">Constancia</th></tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100">
+                            @forelse($softSkills as $sk)
+                                <tr>
+                                    <td class="py-2.5 pr-3 font-semibold">{{ $sk->student?->full_name }}</td>
+                                    <td class="py-2.5 pr-3">{{ $sk->skill_name }}<div class="text-xs text-slate-500">{{ $sk->evaluated_on?->format('d/m/Y') }}</div></td>
+                                    <td class="py-2.5 pr-3"><span class="cecap-badge bg-brand-100 text-brand-900">{{ ucfirst(str_replace('_', ' ', $sk->level)) }}</span></td>
+                                    <td class="py-2.5">
+                                        @if($sk->student)
+                                            <button type="button"
+                                                    data-pdf-modal-url="{{ route('pdf.habilidades', $sk->student) }}"
+                                                    data-pdf-modal-title="Constancia Habilidades Blandas"
+                                                    class="cecap-btn-secondary !min-h-9 !px-3 text-xs">
+                                                Constancia PDF
+                                            </button>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr><td colspan="4" class="py-6 text-center text-slate-500">Sin evaluaciones registradas.</td></tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     @endif

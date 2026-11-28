@@ -91,6 +91,7 @@ class CostaRicaCatalogSeeder extends Seeder
                 ['transferencia', 'Transferencia Bancaria'],
                 ['tarjeta', 'Tarjeta Débito / Crédito'],
                 ['deposito', 'Depósito Bancario'],
+                ['imas', 'IMAS (Patrocinador)'],
             ],
             'grade_rectification_reason' => [
                 ['error_digitacion', 'Error de digitación en acta/sistema'],

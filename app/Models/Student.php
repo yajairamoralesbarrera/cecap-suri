@@ -114,6 +114,102 @@ class Student extends Model
         ])));
     }
 
+    public function softSkillAttendances(): HasMany
+    {
+        return $this->hasMany(SoftSkillAttendance::class);
+    }
+
+    public function workshopParticipations(): HasMany
+    {
+        return $this->hasMany(WorkshopParticipant::class);
+    }
+
+    /**
+     * Resumen semanal de Habilidades Blandas considerando semanas sin sesión (no cuentan)
+     * y equivalencias de talleres/seminarios/actividades asistidos.
+     *
+     * @return array{present: int, justified: int, gross_absences: int, workshop_credits: int, net_absences: int, credited_workshops: list<string>}
+     */
+    public function softSkillsAttendanceSummary(): array
+    {
+        $records = $this->relationLoaded('softSkillAttendances')
+            ? $this->softSkillAttendances
+            : $this->softSkillAttendances()->with('week')->get();
+
+        // Solo cuentan semanas que SÍ tuvieron sesión de Habilidades Blandas
+        $validRecords = $records->filter(fn (SoftSkillAttendance $r) => $r->week === null || $r->week->has_session);
+
+        $present = $validRecords->where('status', 'presente')->count();
+        $justified = $validRecords->where('status', 'justificada')->count();
+        $grossAbsences = $validRecords->where('status', 'ausente')->count();
+
+        $participations = $this->relationLoaded('workshopParticipations')
+            ? $this->workshopParticipations
+            : $this->workshopParticipations()->with('workshop')->get();
+
+        $workshopCredits = 0;
+        $creditedWorkshops = [];
+        foreach ($participations as $p) {
+            if (! $p->attended || ! $p->workshop) {
+                continue;
+            }
+            $credits = (int) $p->workshop->soft_skills_absence_credits;
+            if ($credits > 0) {
+                $workshopCredits += $credits;
+                $creditedWorkshops[] = sprintf('%s (+%d)', $p->workshop->title, $credits);
+            }
+        }
+
+        return [
+            'present' => $present,
+            'justified' => $justified,
+            'gross_absences' => $grossAbsences,
+            'workshop_credits' => $workshopCredits,
+            'net_absences' => max(0, $grossAbsences - $workshopCredits),
+            'credited_workshops' => $creditedWorkshops,
+        ];
+    }
+
+    public function hasImasSponsor(): bool
+    {
+        $hasImasScholarship = Scholarship::query()
+            ->where('status', 'activa')
+            ->whereHas('enrollment', fn ($q) => $q->where('student_id', $this->id))
+            ->where(function ($q) {
+                $q->whereRaw('LOWER(name) LIKE ?', ['%imas%'])
+                    ->orWhereHas('payer', function ($pq) {
+                        $pq->whereRaw('LOWER(full_name) LIKE ?', ['%imas%'])
+                            ->orWhere('payer_type', 'institucion_publica');
+                    });
+            })
+            ->exists();
+
+        if ($hasImasScholarship) {
+            return true;
+        }
+
+        $hasImasCharge = $this->feeCharges()
+            ->whereHas('payer', function ($pq) {
+                $pq->whereRaw('LOWER(full_name) LIKE ?', ['%imas%'])
+                    ->orWhere('payer_type', 'institucion_publica');
+            })
+            ->exists();
+
+        if ($hasImasCharge) {
+            return true;
+        }
+
+        return $this->paymentReceipts()
+            ->where(function ($q) {
+                $q->where('payment_method', 'imas')
+                    ->orWhereHas('payer', function ($pq) {
+                        $pq->whereRaw('LOWER(full_name) LIKE ?', ['%imas%'])
+                            ->orWhere('payer_type', 'institucion_publica');
+                    });
+            })
+            ->exists();
+    }
+
     public function getTotalPendingBalanceAttribute(): float
     {
         return (float) $this->feeCharges()

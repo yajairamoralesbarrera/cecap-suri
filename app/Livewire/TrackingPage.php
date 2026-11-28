@@ -3,13 +3,16 @@
 namespace App\Livewire;
 
 use App\Models\AttendanceRecord;
+use App\Models\Course;
 use App\Models\CourseEdition;
 use App\Models\CourseSubject;
 use App\Models\EditionEvaluation;
 use App\Models\Enrollment;
 use App\Models\GradeRecord;
 use App\Models\Picklist;
+use App\Models\SoftSkillAttendance;
 use App\Models\SoftSkillRecord;
+use App\Models\SoftSkillWeek;
 use App\Models\Student;
 use App\Services\AuditService;
 use Illuminate\Support\Facades\Auth;
@@ -87,7 +90,30 @@ class TrackingPage extends Component
 
     public string $rectify_notes = '';
 
-    // Habilidades Blandas permanentes
+    // Habilidades Blandas: Asistencia Semanal (cualquier horario)
+    public string $ss_week_start = '';
+
+    public string $ss_week_end = '';
+
+    public string $ss_week_label = '';
+
+    public bool $ss_week_no_session = false;
+
+    public string $ss_week_no_session_reason = '';
+
+    public ?int $selected_ss_week_id = null;
+
+    public string $ss_search = '';
+
+    public ?int $ss_filter_course_id = null;
+
+    public string $ss_filter_status = '';
+
+    public array $ss_statuses = [];
+
+    public array $ss_schedule_notes = [];
+
+    // Habilidades Blandas permanentes (Evaluación cualitativa / Constancia PDF)
     public ?int $skill_student_id = null;
 
     public ?int $skill_enrollment_id = null;
@@ -103,6 +129,8 @@ class TrackingPage extends Component
     public function mount(): void
     {
         $this->session_date = now()->toDateString();
+        $this->ss_week_start = now()->startOfWeek()->toDateString();
+        $this->ss_week_end = now()->endOfWeek()->toDateString();
     }
 
     public function setTab(string $tab): void
@@ -110,6 +138,13 @@ class TrackingPage extends Component
         $this->tab = $tab;
         $this->feedback = null;
         $this->resetValidation();
+
+        if ($tab === 'soft_skills' && ! $this->selected_ss_week_id) {
+            $latestWeek = SoftSkillWeek::orderByDesc('week_start_date')->orderByDesc('id')->first();
+            if ($latestWeek) {
+                $this->selectSoftSkillWeek($latestWeek->id);
+            }
+        }
     }
 
     public function updatedSelectedEditionId(): void
@@ -601,6 +636,181 @@ class TrackingPage extends Component
         $this->feedback = 'Calificación rectificada bajo nueva versión auditada (historial íntegro preservado).';
     }
 
+    private function canManageSoftSkillsAttendance(): bool
+    {
+        $user = Auth::user();
+
+        return $user->hasEffectivePermission('seguimiento.soft_skills.manage')
+            || $user->hasEffectivePermission('seguimiento.attendance.manage');
+    }
+
+    public function createSoftSkillWeek(): void
+    {
+        abort_unless($this->canManageSoftSkillsAttendance(), 403);
+        $this->resetValidation();
+
+        $this->validate([
+            'ss_week_start' => ['required', 'date'],
+            'ss_week_end' => ['required', 'date', 'after_or_equal:ss_week_start'],
+            'ss_week_label' => ['nullable', 'string', 'max:140'],
+            'ss_week_no_session_reason' => ['nullable', 'string', 'max:255'],
+        ], [
+            'ss_week_start.required' => 'Indique la fecha Desde de la semana.',
+            'ss_week_end.required' => 'Indique la fecha Hasta de la semana.',
+            'ss_week_end.after_or_equal' => 'La fecha Hasta debe ser igual o posterior a la fecha Desde.',
+        ]);
+
+        $hasSession = ! $this->ss_week_no_session;
+
+        $week = SoftSkillWeek::create([
+            'week_start_date' => $this->ss_week_start,
+            'week_end_date' => $this->ss_week_end,
+            'label' => trim($this->ss_week_label) !== '' ? trim($this->ss_week_label) : null,
+            'has_session' => $hasSession,
+            'no_session_reason' => ! $hasSession
+                ? (trim($this->ss_week_no_session_reason) !== '' ? trim($this->ss_week_no_session_reason) : 'Sin sesión de Habilidades Blandas esta semana')
+                : null,
+            'created_by' => Auth::id(),
+        ]);
+
+        AuditService::log('tracking.soft_skill_week_created', 'seguimiento', $week, null, $week->only([
+            'week_start_date', 'week_end_date', 'label', 'has_session', 'no_session_reason',
+        ]));
+
+        $this->ss_week_label = '';
+        $this->ss_week_no_session = false;
+        $this->ss_week_no_session_reason = '';
+        $this->selectSoftSkillWeek($week->id);
+
+        $this->feedback = $hasSession
+            ? sprintf('Semana %s creada. Ya puede pasar asistencia a todas las alumnas inscritas.', $week->range_label)
+            : sprintf('Semana %s marcada SIN Habilidades Blandas (no generará ausencias).', $week->range_label);
+    }
+
+    public function toggleSoftSkillWeekHasSession(int $weekId): void
+    {
+        abort_unless($this->canManageSoftSkillsAttendance(), 403);
+        $week = SoftSkillWeek::findOrFail($weekId);
+        $next = ! $week->has_session;
+
+        $week->update([
+            'has_session' => $next,
+            'no_session_reason' => $next ? null : ($week->no_session_reason ?: 'Semana marcada sin Habilidades Blandas'),
+        ]);
+
+        AuditService::log('tracking.soft_skill_week_toggled', 'seguimiento', $week, ['has_session' => ! $next], ['has_session' => $next]);
+        $this->feedback = $next
+            ? sprintf('Semana %s habilitada para pase de asistencia de Habilidades Blandas.', $week->range_label)
+            : sprintf('Semana %s marcada SIN Habilidades Blandas (no cuenta como ausencia para ninguna alumna).', $week->range_label);
+    }
+
+    public function selectSoftSkillWeek(?int $weekId): void
+    {
+        $this->selected_ss_week_id = $weekId;
+        $this->resetValidation();
+        $this->loadSoftSkillWeekAttendance();
+    }
+
+    public function updatedSelectedSsWeekId(): void
+    {
+        $this->resetValidation();
+        $this->loadSoftSkillWeekAttendance();
+    }
+
+    public function loadSoftSkillWeekAttendance(): void
+    {
+        $this->ss_statuses = [];
+        $this->ss_schedule_notes = [];
+
+        if (! $this->selected_ss_week_id) {
+            return;
+        }
+
+        $records = SoftSkillAttendance::where('soft_skill_week_id', $this->selected_ss_week_id)->get();
+        foreach ($records as $rec) {
+            $this->ss_statuses[$rec->student_id] = $rec->status;
+            $this->ss_schedule_notes[$rec->student_id] = (string) ($rec->schedule_notes ?? '');
+        }
+    }
+
+    public function setSoftSkillStatus(int $studentId, string $status): void
+    {
+        if (! in_array($status, ['presente', 'justificada', 'ausente'], true)) {
+            return;
+        }
+
+        $this->ss_statuses[$studentId] = $status;
+    }
+
+    public function clearSoftSkillFilters(): void
+    {
+        $this->reset(['ss_search', 'ss_filter_course_id', 'ss_filter_status']);
+    }
+
+    public function saveSoftSkillAttendance(): void
+    {
+        abort_unless($this->canManageSoftSkillsAttendance(), 403);
+        $this->resetValidation();
+
+        if (! $this->selected_ss_week_id) {
+            $this->addError('selected_ss_week_id', 'Seleccione o cree primero una semana (Desde - Hasta) de Habilidades Blandas.');
+
+            return;
+        }
+
+        $week = SoftSkillWeek::findOrFail($this->selected_ss_week_id);
+        if (! $week->has_session) {
+            $this->addError('selected_ss_week_id', 'Esta semana está marcada SIN Habilidades Blandas. Habilítela primero si desea registrar asistencia.');
+
+            return;
+        }
+
+        $savedCount = 0;
+        DB::transaction(function () use ($week, &$savedCount): void {
+            foreach ($this->ss_statuses as $studentId => $status) {
+                if (! in_array($status, ['presente', 'justificada', 'ausente'], true)) {
+                    continue;
+                }
+
+                $sid = (int) $studentId;
+                $scheduleNote = trim((string) ($this->ss_schedule_notes[$sid] ?? ''));
+
+                $record = SoftSkillAttendance::updateOrCreate(
+                    [
+                        'soft_skill_week_id' => $week->id,
+                        'student_id' => $sid,
+                    ],
+                    [
+                        'status' => $status,
+                        'schedule_notes' => $scheduleNote !== '' ? $scheduleNote : null,
+                        'recorded_by' => Auth::id(),
+                    ]
+                );
+
+                AuditService::log('tracking.soft_skill_attendance_saved', 'seguimiento', $record, null, [
+                    'soft_skill_week_id' => $week->id,
+                    'student_id' => $sid,
+                    'status' => $status,
+                    'schedule_notes' => $scheduleNote !== '' ? $scheduleNote : null,
+                ]);
+                $savedCount++;
+            }
+        });
+
+        if ($savedCount === 0) {
+            $this->addError('selected_ss_week_id', 'Marque al menos una alumna como Presente, Justificada o Ausente antes de guardar.');
+
+            return;
+        }
+
+        $this->loadSoftSkillWeekAttendance();
+        $this->feedback = sprintf(
+            'Asistencia semanal de Habilidades Blandas guardada para %d alumna(s) (%s).',
+            $savedCount,
+            $week->range_label
+        );
+    }
+
     public function recordSoftSkill(): void
     {
         abort_unless(Auth::user()->hasEffectivePermission('seguimiento.soft_skills.manage'), 403);
@@ -796,6 +1006,70 @@ class TrackingPage extends Component
             $recentGradesQuery->whereHas('enrollment', fn ($q) => $q->where('course_edition_id', $this->selected_edition_id));
         }
 
+        $softSkillWeeks = SoftSkillWeek::withCount('attendances')
+            ->orderByDesc('week_start_date')
+            ->orderByDesc('id')
+            ->get();
+
+        $selectedSoftSkillWeek = $this->selected_ss_week_id
+            ? $softSkillWeeks->firstWhere('id', $this->selected_ss_week_id)
+            : null;
+
+        $softSkillCourses = Course::orderBy('name')->get();
+
+        $enrolledStudentsQuery = Student::query()
+            ->whereHas('enrollments', fn ($q) => $q->whereIn('status', ['confirmada', 'en_curso', 'finalizada']))
+            ->with([
+                'enrollments' => fn ($q) => $q->whereIn('status', ['confirmada', 'en_curso', 'finalizada'])->with('edition.course'),
+                'softSkillAttendances.week',
+                'workshopParticipations.workshop',
+            ])
+            ->orderBy('first_name')
+            ->orderBy('last_name');
+
+        if (trim($this->ss_search) !== '') {
+            $term = '%'.mb_strtolower(trim($this->ss_search)).'%';
+            $enrolledStudentsQuery->where(function ($q) use ($term) {
+                $q->whereRaw("LOWER(TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '') || ' ' || COALESCE(second_last_name, ''))) LIKE ?", [$term])
+                    ->orWhereRaw('LOWER(identification_number) LIKE ?', [$term])
+                    ->orWhereRaw('LOWER(student_code) LIKE ?', [$term]);
+            });
+        }
+
+        if ($this->ss_filter_course_id) {
+            $courseFilterId = (int) $this->ss_filter_course_id;
+            $enrolledStudentsQuery->whereHas('enrollments', function ($q) use ($courseFilterId) {
+                $q->whereIn('status', ['confirmada', 'en_curso', 'finalizada'])
+                    ->whereHas('edition', fn ($eq) => $eq->where('course_id', $courseFilterId));
+            });
+        }
+
+        $softSkillRoster = $enrolledStudentsQuery->get()->map(function (Student $st) {
+            $courses = $st->enrollments
+                ->map(fn (Enrollment $enr) => trim(($enr->edition?->course?->name ?? 'Curso').($enr->edition?->name ? ' ('.$enr->edition->name.')' : '')))
+                ->unique()
+                ->values()
+                ->all();
+
+            return [
+                'student' => $st,
+                'courses' => $courses,
+                'summary' => $st->softSkillsAttendanceSummary(),
+            ];
+        });
+
+        if ($this->ss_filter_status !== '') {
+            $filterSt = $this->ss_filter_status;
+            $softSkillRoster = $softSkillRoster->filter(function ($item) use ($filterSt) {
+                $sid = $item['student']->id;
+                $currentStatus = $this->ss_statuses[$sid] ?? null;
+
+                return $filterSt === 'sin_registrar'
+                    ? $currentStatus === null
+                    : $currentStatus === $filterSt;
+            })->values();
+        }
+
         return view('livewire.tracking-page', [
             'editions' => $editions,
             'selectedEdition' => $selectedEdition,
@@ -813,6 +1087,10 @@ class TrackingPage extends Component
             'reportSummary' => $reportSummary,
             'reportByStudent' => $reportByStudent,
             'attendanceStatusLabels' => AttendanceRecord::statusLabels(),
+            'softSkillWeeks' => $softSkillWeeks,
+            'selectedSoftSkillWeek' => $selectedSoftSkillWeek,
+            'softSkillCourses' => $softSkillCourses,
+            'softSkillRoster' => $softSkillRoster,
             'rectificationReasons' => Picklist::optionsFor('grade_rectification_reason'),
             'students' => Student::orderBy('first_name')->orderBy('last_name')->limit(200)->get(),
             'softSkills' => SoftSkillRecord::with(['student', 'evaluator'])->where('is_archived', false)->latest('evaluated_on')->limit(50)->get(),
